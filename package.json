@@ -1,0 +1,15 @@
+{
+  "name": "planazo",
+  "private": true,
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "dev:api": "turbo dev --filter=api",
+    "dev:mobile": "turbo dev --filter=mobile"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.0"
+  },
+  "packageManager": "pnpm@9.15.1"
+}
