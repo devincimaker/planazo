@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "39c24636-0b8b-4ffb-b3a4-f5f40eb32ac2"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.devinci.planazo",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    }
+  }
+}

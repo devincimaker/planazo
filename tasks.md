@@ -8,6 +8,7 @@ To-Do:
 [ ] Add images to users
 [ ] Implement the admin functionality. Right now there isn't anything done.
 [ ] You should be able to create an event from the home, and select in which group you want it to go.
+[ ] Launch it for Android
 
 Doing:
 
@@ -16,3 +17,5 @@ Done:
 [x] Show flexible plans as "Confirmed" when any date has minimum people available
 [x] The upcoming plans section doesn't show up anything.
 [x] The "need your response" section doesn't show anything.
+[x] When a person leaves a group, all their confirmations for assistance should be removed.
+[x] Should be able to mark an event as "not going" in the flexible date category too. So that it stops showing up in my "Need your response section"
