@@ -41,6 +41,8 @@ function InitialLayout() {
           .then(({ data }) => {
             if (data) setProfile(data);
           });
+      } else {
+        setProfile(null);
       }
     });
 

@@ -1,11 +1,13 @@
 import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, Modal } from 'react-native';
 import { useState } from 'react';
+import { useRouter } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
 import { useAuthStore } from '../../../stores/authStore';
 import { COLORS } from '../../../constants/colors';
 
 export default function ProfileScreen() {
+  const router = useRouter();
   const { profile, setProfile, logout } = useAuthStore();
   const queryClient = useQueryClient();
   const [showEditModal, setShowEditModal] = useState(false);
@@ -46,6 +48,7 @@ export default function ProfileScreen() {
             await supabase.auth.signOut();
             queryClient.clear();
             logout();
+            router.replace('/(auth)/login');
           },
         },
       ]
