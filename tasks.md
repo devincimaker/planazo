@@ -6,9 +6,11 @@ To-Do:
 [ ] The upcoming plans section doesn't show up anything.
 [ ] The "need your response" section doesn't show anything.
 [ ] Add push notifications (Would be great to have this in the starter)
-[ ] Should be
+[ ] Add images to groups
+[ ] Add images to users
 
 Doing:
-[ ] Make the date picker a calendar selector, much more friendly. Like on airbnb for example.
 
 Done:
+[x] Make the date picker a calendar selector, much more friendly. Like on airbnb for example.
+[x] Show flexible plans as "Confirmed" when any date has minimum people available

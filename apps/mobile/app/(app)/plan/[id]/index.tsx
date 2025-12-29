@@ -142,8 +142,27 @@ export default function PlanDetailScreen() {
   });
 
   const yesCount = rsvps?.filter((r) => r.response === 'yes').length ?? 0;
-  const isConfirmed = plan && yesCount >= plan.min_people;
+
+  // For fixed plans: check RSVP count
+  // For flexible plans: check if any date option has enough people
+  const isFixedConfirmed = plan?.plan_type === 'fixed' && yesCount >= (plan?.min_people || 2);
+  const isFlexibleConfirmed = plan?.plan_type === 'flexible' && dateOptions?.some((option) => {
+    const count = availabilities?.filter((a) => a.date_option_id === option.id).length || 0;
+    return count >= (plan?.min_people || 2);
+  });
+  const isConfirmed = isFixedConfirmed || isFlexibleConfirmed;
   const isCancelled = plan?.status === 'cancelled';
+
+  // Find the best date for flexible plans (most availability that meets minimum)
+  const bestFlexibleDate = plan?.plan_type === 'flexible' && dateOptions
+    ? dateOptions
+        .map((option) => ({
+          option,
+          count: availabilities?.filter((a) => a.date_option_id === option.id).length || 0,
+        }))
+        .filter((d) => d.count >= (plan?.min_people || 2))
+        .sort((a, b) => b.count - a.count)[0]
+    : null;
 
   const getStatusBadge = () => {
     if (isCancelled) return { text: 'Cancelled', color: COLORS.error };

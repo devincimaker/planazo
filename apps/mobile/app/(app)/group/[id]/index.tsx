@@ -45,23 +45,42 @@ export default function GroupDetailScreen() {
   const { data: plans, isLoading: plansLoading } = useQuery({
     queryKey: ['group-plans', id],
     queryFn: async () => {
-      // Fetch plans with RSVP counts
+      // Fetch plans with RSVP counts and date availabilities
       const { data, error } = await supabase
         .from('plans')
         .select(`
           *,
-          rsvps(response)
+          rsvps(response),
+          plan_date_options(id, date, date_availability(id, user_id))
         `)
         .eq('group_id', id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      // Calculate yes_count for each plan
-      return (data || []).map((plan: any) => ({
-        ...plan,
-        yes_count: plan.rsvps?.filter((r: any) => r.response === 'yes').length || 0,
-      })) as (Plan & { yes_count: number })[];
+      // Calculate confirmed status for each plan
+      return (data || []).map((plan: any) => {
+        const yesCount = plan.rsvps?.filter((r: any) => r.response === 'yes').length || 0;
+
+        // For flexible plans, check if any date has enough people
+        let flexibleConfirmed = false;
+        let bestDateCount = 0;
+        if (plan.plan_type === 'flexible' && plan.plan_date_options) {
+          plan.plan_date_options.forEach((opt: any) => {
+            const count = opt.date_availability?.length || 0;
+            if (count > bestDateCount) bestDateCount = count;
+            if (count >= plan.min_people) flexibleConfirmed = true;
+          });
+        }
+
+        return {
+          ...plan,
+          yes_count: plan.plan_type === 'fixed' ? yesCount : bestDateCount,
+          is_confirmed: plan.plan_type === 'fixed'
+            ? yesCount >= plan.min_people
+            : flexibleConfirmed,
+        };
+      }) as (Plan & { yes_count: number; is_confirmed: boolean })[];
     },
     enabled: !!id,
   });
@@ -94,8 +113,8 @@ export default function GroupDetailScreen() {
   }
 
   // Split plans: confirmed (min reached but still open), open (not yet confirmed), cancelled
-  const confirmedPlans = plans?.filter((p) => p.status === 'open' && p.yes_count >= p.min_people) || [];
-  const openPlans = plans?.filter((p) => p.status === 'open' && p.yes_count < p.min_people) || [];
+  const confirmedPlans = plans?.filter((p) => p.status === 'open' && p.is_confirmed) || [];
+  const openPlans = plans?.filter((p) => p.status === 'open' && !p.is_confirmed) || [];
   const cancelledPlans = plans?.filter((p) => p.status === 'cancelled') || [];
 
   return (
