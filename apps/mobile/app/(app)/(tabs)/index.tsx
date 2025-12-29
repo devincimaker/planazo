@@ -77,7 +77,10 @@ export default function HomeScreen() {
       const userRsvp = plan.rsvps?.find((r: any) => r.user_id === user?.id);
       return !userRsvp || userRsvp.response === null;
     } else {
-      // No availability marked by user
+      // For flexible: check if user declined OR has availability
+      const userRsvp = plan.rsvps?.find((r: any) => r.user_id === user?.id);
+      if (userRsvp?.response === 'no') return false; // Declined
+
       const hasAvailability = plan.plan_date_options?.some((opt: any) =>
         opt.date_availability?.some((a: any) => a.user_id === user?.id)
       );

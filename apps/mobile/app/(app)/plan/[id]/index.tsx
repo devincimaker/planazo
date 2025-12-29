@@ -45,7 +45,7 @@ export default function PlanDetailScreen() {
       if (error) throw error;
       return data as RsvpWithProfile[];
     },
-    enabled: !!id && plan?.plan_type === 'fixed',
+    enabled: !!id,
   });
 
   const { data: dateOptions } = useQuery({
@@ -124,6 +124,14 @@ export default function PlanDetailScreen() {
           .eq('id', existing.id);
         if (error) throw error;
       } else {
+        // Also remove any "no" RSVP if they're now marking availability
+        await supabase
+          .from('rsvps')
+          .delete()
+          .eq('plan_id', id)
+          .eq('user_id', user?.id)
+          .eq('response', 'no');
+
         const { error } = await supabase.from('date_availability').insert({
           plan_id: id,
           user_id: user?.id,
@@ -135,13 +143,68 @@ export default function PlanDetailScreen() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['plan-availabilities', id] });
+      queryClient.invalidateQueries({ queryKey: ['plan-rsvps', id] });
+      queryClient.invalidateQueries({ queryKey: ['home-plans'] });
     },
     onError: (error) => {
       Alert.alert('Error', error.message);
     },
   });
 
+  // Decline flexible plan entirely
+  const declineFlexiblePlan = useMutation({
+    mutationFn: async () => {
+      // Upsert RSVP with 'no' response
+      const { error } = await supabase
+        .from('rsvps')
+        .upsert({
+          plan_id: id,
+          user_id: user?.id,
+          response: 'no',
+        }, { onConflict: 'plan_id,user_id' });
+      if (error) throw error;
+
+      // Remove any date availabilities
+      if (dateOptions && dateOptions.length > 0) {
+        const { error: availError } = await supabase
+          .from('date_availability')
+          .delete()
+          .eq('user_id', user?.id)
+          .in('date_option_id', dateOptions.map(o => o.id));
+        if (availError) throw availError;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['plan-rsvps', id] });
+      queryClient.invalidateQueries({ queryKey: ['plan-availabilities', id] });
+      queryClient.invalidateQueries({ queryKey: ['home-plans'] });
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error.message);
+    },
+  });
+
+  // Undo decline for flexible plan
+  const undoDeclineFlexiblePlan = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from('rsvps')
+        .delete()
+        .eq('plan_id', id)
+        .eq('user_id', user?.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['plan-rsvps', id] });
+      queryClient.invalidateQueries({ queryKey: ['home-plans'] });
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error.message);
+    },
+  });
+
   const yesCount = rsvps?.filter((r) => r.response === 'yes').length ?? 0;
+  const userDeclinedFlexible = plan?.plan_type === 'flexible' && rsvps?.find(r => r.user_id === user?.id)?.response === 'no';
 
   // For fixed plans: check RSVP count
   // For flexible plans: check if any date option has enough people
@@ -421,8 +484,22 @@ export default function PlanDetailScreen() {
           </View>
         )}
 
+        {/* Flexible Plan - Declined State */}
+        {plan.plan_type === 'flexible' && userDeclinedFlexible && !isCancelled && (
+          <View style={styles.declinedBanner}>
+            <Text style={styles.declinedText}>You've declined this plan</Text>
+            <TouchableOpacity
+              style={styles.undoButton}
+              onPress={() => undoDeclineFlexiblePlan.mutate()}
+              disabled={undoDeclineFlexiblePlan.isPending}
+            >
+              <Text style={styles.undoButtonText}>Undo</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Flexible Plan Date Options - Calendar View */}
-        {plan.plan_type === 'flexible' && dateOptions && (
+        {plan.plan_type === 'flexible' && dateOptions && !userDeclinedFlexible && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Select Your Available Dates</Text>
             <Text style={styles.hint}>Tap highlighted dates to mark yourself available</Text>
@@ -518,6 +595,19 @@ export default function PlanDetailScreen() {
                 );
               })}
             </View>
+
+            {/* Can't make it button */}
+            {!isCancelled && (
+              <TouchableOpacity
+                style={styles.declineButton}
+                onPress={() => declineFlexiblePlan.mutate()}
+                disabled={declineFlexiblePlan.isPending}
+              >
+                <Text style={styles.declineButtonText}>
+                  {declineFlexiblePlan.isPending ? 'Declining...' : "Can't make it"}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
       </ScrollView>
@@ -835,5 +925,47 @@ const styles = StyleSheet.create({
   },
   dateDetailCountReady: {
     color: COLORS.success,
+  },
+  // Decline styles
+  declinedBanner: {
+    backgroundColor: COLORS.error + '15',
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  declinedText: {
+    fontSize: 14,
+    color: COLORS.error,
+    fontWeight: '500',
+  },
+  undoButton: {
+    backgroundColor: COLORS.white,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.error,
+  },
+  undoButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.error,
+  },
+  declineButton: {
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.error,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  declineButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.error,
   },
 });
