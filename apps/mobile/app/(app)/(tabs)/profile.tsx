@@ -1,7 +1,10 @@
-import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, Modal, Image, ActivityIndicator } from 'react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import { decode } from 'base64-arraybuffer';
 import { supabase } from '../../../lib/supabase';
 import { useAuthStore } from '../../../stores/authStore';
 import { COLORS } from '../../../constants/colors';
@@ -12,12 +15,21 @@ export default function ProfileScreen() {
   const queryClient = useQueryClient();
   const [showEditModal, setShowEditModal] = useState(false);
   const [displayName, setDisplayName] = useState(profile?.display_name || '');
+  const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url || '');
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
   const updateProfile = useMutation({
     mutationFn: async () => {
+      const updates: { display_name: string; avatar_url?: string } = {
+        display_name: displayName.trim(),
+      };
+      if (avatarUrl !== profile?.avatar_url) {
+        updates.avatar_url = avatarUrl || null;
+      }
+
       const { data, error } = await supabase
         .from('profiles')
-        .update({ display_name: displayName.trim() })
+        .update(updates)
         .eq('id', profile?.id)
         .select()
         .single();
@@ -34,6 +46,58 @@ export default function ProfileScreen() {
       Alert.alert('Error', error.message);
     },
   });
+
+  async function pickImage() {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permissionResult.granted) {
+      Alert.alert('Permission Required', 'Please allow access to your photo library to set a profile picture.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      await uploadImage(result.assets[0].uri);
+    }
+  }
+
+  async function uploadImage(uri: string) {
+    if (!profile?.id) return;
+
+    setIsUploadingAvatar(true);
+    try {
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: 'base64',
+      });
+
+      const filePath = `${profile.id}/avatar.jpg`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, decode(base64), {
+          upsert: true,
+          contentType: 'image/jpeg',
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      const urlWithCacheBust = `${publicUrl}?t=${Date.now()}`;
+      setAvatarUrl(urlWithCacheBust);
+    } catch (error: any) {
+      Alert.alert('Upload Error', error.message || 'Failed to upload image');
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  }
 
   async function handleLogout() {
     Alert.alert(
@@ -55,20 +119,46 @@ export default function ProfileScreen() {
     );
   }
 
+  const renderAvatar = (size: number, showEdit: boolean = false) => {
+    const avatarSource = showEdit ? avatarUrl : profile?.avatar_url;
+
+    if (avatarSource) {
+      return (
+        <Image
+          source={{ uri: avatarSource }}
+          style={[
+            styles.avatarImage,
+            { width: size, height: size, borderRadius: size / 2 },
+          ]}
+        />
+      );
+    }
+
+    return (
+      <View
+        style={[
+          styles.avatar,
+          { width: size, height: size, borderRadius: size / 2 },
+        ]}
+      >
+        <Text style={[styles.avatarText, { fontSize: size * 0.4 }]}>
+          {profile?.display_name?.[0]?.toUpperCase() || '?'}
+        </Text>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.profileCard}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {profile?.display_name?.[0]?.toUpperCase() || '?'}
-          </Text>
-        </View>
+        {renderAvatar(80)}
         <Text style={styles.name}>{profile?.display_name}</Text>
         <Text style={styles.email}>{profile?.email}</Text>
         <TouchableOpacity
           style={styles.editButton}
           onPress={() => {
             setDisplayName(profile?.display_name || '');
+            setAvatarUrl(profile?.avatar_url || '');
             setShowEditModal(true);
           }}
         >
@@ -95,6 +185,27 @@ export default function ProfileScreen() {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Edit Profile</Text>
 
+            {/* Avatar Picker */}
+            <View style={styles.avatarPickerContainer}>
+              <TouchableOpacity
+                style={styles.avatarPicker}
+                onPress={pickImage}
+                disabled={isUploadingAvatar}
+              >
+                {isUploadingAvatar ? (
+                  <View style={[styles.avatar, { width: 100, height: 100, borderRadius: 50 }]}>
+                    <ActivityIndicator color={COLORS.white} />
+                  </View>
+                ) : (
+                  renderAvatar(100, true)
+                )}
+                <View style={styles.avatarEditBadge}>
+                  <Text style={styles.avatarEditBadgeText}>📷</Text>
+                </View>
+              </TouchableOpacity>
+              <Text style={styles.avatarHint}>Tap to change photo</Text>
+            </View>
+
             <Text style={styles.label}>Display Name</Text>
             <TextInput
               style={styles.input}
@@ -111,9 +222,9 @@ export default function ProfileScreen() {
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.submitButton, !displayName.trim() && styles.submitButtonDisabled]}
+                style={[styles.submitButton, (!displayName.trim() || isUploadingAvatar) && styles.submitButtonDisabled]}
                 onPress={() => updateProfile.mutate()}
-                disabled={!displayName.trim() || updateProfile.isPending}
+                disabled={!displayName.trim() || updateProfile.isPending || isUploadingAvatar}
               >
                 <Text style={styles.submitButtonText}>
                   {updateProfile.isPending ? 'Saving...' : 'Save'}
@@ -147,6 +258,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 16,
+  },
+  avatarImage: {
     marginBottom: 16,
   },
   avatarText: {
@@ -243,6 +357,34 @@ const styles = StyleSheet.create({
     color: COLORS.gray[900],
     marginBottom: 24,
     textAlign: 'center',
+  },
+  avatarPickerContainer: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  avatarPicker: {
+    position: 'relative',
+  },
+  avatarEditBadge: {
+    position: 'absolute',
+    bottom: 16,
+    right: 0,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.gray[200],
+  },
+  avatarEditBadgeText: {
+    fontSize: 16,
+  },
+  avatarHint: {
+    fontSize: 12,
+    color: COLORS.gray[500],
+    marginTop: 8,
   },
   label: {
     fontSize: 14,

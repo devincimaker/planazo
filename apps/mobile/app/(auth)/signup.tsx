@@ -9,8 +9,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
 import { Link, useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import { decode } from 'base64-arraybuffer';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
 import { COLORS } from '../../constants/colors';
@@ -22,7 +27,57 @@ export default function SignupScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  async function pickImage() {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permissionResult.granted) {
+      Alert.alert('Permission Required', 'Please allow access to your photo library to set a profile picture.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setAvatarUri(result.assets[0].uri);
+    }
+  }
+
+  async function uploadAvatar(userId: string): Promise<string | null> {
+    if (!avatarUri) return null;
+
+    try {
+      const base64 = await FileSystem.readAsStringAsync(avatarUri, {
+        encoding: 'base64',
+      });
+
+      const filePath = `${userId}/avatar.jpg`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, decode(base64), {
+          upsert: true,
+          contentType: 'image/jpeg',
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      return publicUrl;
+    } catch (error) {
+      console.error('Avatar upload error:', error);
+      return null;
+    }
+  }
 
   async function handleSignup() {
     if (!displayName || !email || !password || !confirmPassword) {
@@ -60,6 +115,20 @@ export default function SignupScreen() {
     // If session exists (email confirmation disabled), go to app
     if (data.session) {
       setSession(data.session);
+
+      // Upload avatar if selected
+      let avatarUrl: string | null = null;
+      if (avatarUri && data.session.user) {
+        avatarUrl = await uploadAvatar(data.session.user.id);
+
+        // Update profile with avatar URL
+        if (avatarUrl) {
+          await supabase
+            .from('profiles')
+            .update({ avatar_url: avatarUrl })
+            .eq('id', data.session.user.id);
+        }
+      }
 
       // Fetch profile (created by trigger)
       if (data.session.user) {
@@ -102,6 +171,23 @@ export default function SignupScreen() {
         </View>
 
         <View style={styles.form}>
+          {/* Avatar Picker */}
+          <View style={styles.avatarPickerContainer}>
+            <TouchableOpacity style={styles.avatarPicker} onPress={pickImage}>
+              {avatarUri ? (
+                <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  <Text style={styles.avatarPlaceholderText}>📷</Text>
+                </View>
+              )}
+              <View style={styles.avatarEditBadge}>
+                <Text style={styles.avatarEditBadgeText}>+</Text>
+              </View>
+            </TouchableOpacity>
+            <Text style={styles.avatarHint}>Add a photo (optional)</Text>
+          </View>
+
           <Text style={styles.label}>Display Name</Text>
           <TextInput
             style={styles.input}
@@ -151,9 +237,11 @@ export default function SignupScreen() {
             onPress={handleSignup}
             disabled={loading}
           >
-            <Text style={styles.buttonText}>
-              {loading ? 'Creating account...' : 'Create Account'}
-            </Text>
+            {loading ? (
+              <ActivityIndicator color={COLORS.white} />
+            ) : (
+              <Text style={styles.buttonText}>Create Account</Text>
+            )}
           </TouchableOpacity>
 
           <View style={styles.footer}>
@@ -182,7 +270,7 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 24,
   },
   title: {
     fontSize: 32,
@@ -197,6 +285,55 @@ const styles = StyleSheet.create({
   },
   form: {
     width: '100%',
+  },
+  avatarPickerContainer: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  avatarPicker: {
+    position: 'relative',
+  },
+  avatarImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+  },
+  avatarPlaceholder: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: COLORS.gray[100],
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.gray[200],
+    borderStyle: 'dashed',
+  },
+  avatarPlaceholderText: {
+    fontSize: 32,
+  },
+  avatarEditBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.white,
+  },
+  avatarEditBadgeText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.white,
+  },
+  avatarHint: {
+    fontSize: 12,
+    color: COLORS.gray[500],
+    marginTop: 8,
   },
   label: {
     fontSize: 14,
