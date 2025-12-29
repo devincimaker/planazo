@@ -7,11 +7,10 @@ import {
   TextInput,
   TouchableOpacity,
   Alert,
-  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { Calendar, DateData } from 'react-native-calendars';
 import { supabase } from '../../../lib/supabase';
 import { useAuthStore } from '../../../stores/authStore';
 import { COLORS } from '../../../constants/colors';
@@ -29,11 +28,30 @@ export default function CreatePlanScreen() {
   const [location, setLocation] = useState('');
   const [minPeople, setMinPeople] = useState('2');
   const [maxPeople, setMaxPeople] = useState('');
-  const [eventDate, setEventDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [flexibleDates, setFlexibleDates] = useState<Date[]>([]);
-  const [tempDate, setTempDate] = useState(new Date());
-  const [showFlexibleDatePicker, setShowFlexibleDatePicker] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [flexibleDates, setFlexibleDates] = useState<string[]>([]);
+
+  // Get today's date in YYYY-MM-DD format
+  const today = new Date().toISOString().split('T')[0];
+
+  // Calendar theme matching app colors
+  const calendarTheme = {
+    backgroundColor: COLORS.white,
+    calendarBackground: COLORS.white,
+    textSectionTitleColor: COLORS.gray[500],
+    selectedDayBackgroundColor: COLORS.primary,
+    selectedDayTextColor: COLORS.white,
+    todayTextColor: COLORS.primary,
+    dayTextColor: COLORS.gray[900],
+    textDisabledColor: COLORS.gray[300],
+    dotColor: COLORS.primary,
+    selectedDotColor: COLORS.white,
+    arrowColor: COLORS.primary,
+    monthTextColor: COLORS.gray[900],
+    textDayFontWeight: '500' as const,
+    textMonthFontWeight: '600' as const,
+    textDayHeaderFontWeight: '500' as const,
+  };
 
   const createPlan = useMutation({
     mutationFn: async () => {
@@ -47,7 +65,7 @@ export default function CreatePlanScreen() {
           description: description.trim() || null,
           location: location.trim() || null,
           plan_type: planType,
-          event_date: planType === 'fixed' ? eventDate.toISOString() : null,
+          event_date: planType === 'fixed' && selectedDate ? new Date(selectedDate).toISOString() : null,
           min_people: parseInt(minPeople) || 2,
           max_people: maxPeople ? parseInt(maxPeople) : null,
           status: 'open',
@@ -59,9 +77,9 @@ export default function CreatePlanScreen() {
 
       // For flexible plans, add date options
       if (planType === 'flexible' && flexibleDates.length > 0) {
-        const dateOptions = flexibleDates.map((date) => ({
+        const dateOptions = flexibleDates.map((dateStr) => ({
           plan_id: plan.id,
-          date: date.toISOString(),
+          date: new Date(dateStr).toISOString(),
         }));
 
         const { error: datesError } = await supabase
@@ -86,24 +104,35 @@ export default function CreatePlanScreen() {
     },
   });
 
-  function addFlexibleDate() {
-    if (flexibleDates.some((d) => d.toDateString() === tempDate.toDateString())) {
-      Alert.alert('Date already added');
-      return;
+  function toggleFlexibleDate(dateString: string) {
+    if (flexibleDates.includes(dateString)) {
+      setFlexibleDates(flexibleDates.filter((d) => d !== dateString));
+    } else {
+      setFlexibleDates([...flexibleDates, dateString].sort());
     }
-    setFlexibleDates([...flexibleDates, tempDate]);
-    setShowFlexibleDatePicker(false);
-    setTempDate(new Date());
   }
 
-  function removeFlexibleDate(index: number) {
-    setFlexibleDates(flexibleDates.filter((_, i) => i !== index));
+  function removeFlexibleDate(dateString: string) {
+    setFlexibleDates(flexibleDates.filter((d) => d !== dateString));
   }
+
+  // Build marked dates for calendar
+  const getMarkedDates = () => {
+    if (planType === 'fixed') {
+      return selectedDate ? { [selectedDate]: { selected: true } } : {};
+    } else {
+      const marked: Record<string, any> = {};
+      flexibleDates.forEach((date) => {
+        marked[date] = { selected: true, selectedColor: COLORS.primary };
+      });
+      return marked;
+    }
+  };
 
   const isValid =
     title.trim() &&
     parseInt(minPeople) >= 2 &&
-    (planType === 'fixed' || flexibleDates.length > 0);
+    (planType === 'fixed' ? selectedDate : flexibleDates.length > 0);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -173,94 +202,69 @@ export default function CreatePlanScreen() {
         />
       </View>
 
-      {/* Date Selection */}
-      {planType === 'fixed' ? (
-        <View style={styles.section}>
-          <Text style={styles.label}>Date *</Text>
-          <TouchableOpacity
-            style={styles.dateButton}
-            onPress={() => setShowDatePicker(true)}
-          >
-            <Text style={styles.dateButtonText}>
-              {eventDate.toLocaleDateString('en-US', {
+      {/* Date Selection - Calendar */}
+      <View style={styles.section}>
+        <Text style={styles.label}>
+          {planType === 'fixed' ? 'Select Date *' : 'Select Available Dates *'}
+        </Text>
+        {planType === 'flexible' && (
+          <Text style={styles.hint}>Tap multiple dates when this plan could happen</Text>
+        )}
+
+        <View style={styles.calendarContainer}>
+          <Calendar
+            theme={calendarTheme}
+            minDate={today}
+            markedDates={getMarkedDates()}
+            onDayPress={(day: DateData) => {
+              if (planType === 'fixed') {
+                setSelectedDate(day.dateString);
+              } else {
+                toggleFlexibleDate(day.dateString);
+              }
+            }}
+            enableSwipeMonths
+          />
+        </View>
+
+        {/* Show selected dates for flexible plans */}
+        {planType === 'flexible' && flexibleDates.length > 0 && (
+          <View style={styles.selectedDatesContainer}>
+            <Text style={styles.selectedDatesLabel}>
+              Selected dates ({flexibleDates.length}):
+            </Text>
+            <View style={styles.dateList}>
+              {flexibleDates.map((dateStr) => (
+                <View key={dateStr} style={styles.dateChip}>
+                  <Text style={styles.dateChipText}>
+                    {new Date(dateStr).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                    })}
+                  </Text>
+                  <TouchableOpacity onPress={() => removeFlexibleDate(dateStr)}>
+                    <Text style={styles.dateChipRemove}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Show selected date for fixed plans */}
+        {planType === 'fixed' && selectedDate && (
+          <View style={styles.selectedDateDisplay}>
+            <Text style={styles.selectedDateText}>
+              {new Date(selectedDate).toLocaleDateString('en-US', {
                 weekday: 'long',
                 year: 'numeric',
                 month: 'long',
                 day: 'numeric',
               })}
             </Text>
-          </TouchableOpacity>
-          {showDatePicker && (
-            <DateTimePicker
-              value={eventDate}
-              mode="date"
-              minimumDate={new Date()}
-              onChange={(event, date) => {
-                setShowDatePicker(Platform.OS === 'ios');
-                if (date) setEventDate(date);
-              }}
-            />
-          )}
-        </View>
-      ) : (
-        <View style={styles.section}>
-          <Text style={styles.label}>Available Dates *</Text>
-          <Text style={styles.hint}>Add dates when this plan could happen</Text>
-
-          {flexibleDates.length > 0 && (
-            <View style={styles.dateList}>
-              {flexibleDates.map((date, index) => (
-                <View key={index} style={styles.dateChip}>
-                  <Text style={styles.dateChipText}>
-                    {date.toLocaleDateString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                    })}
-                  </Text>
-                  <TouchableOpacity onPress={() => removeFlexibleDate(index)}>
-                    <Text style={styles.dateChipRemove}>✕</Text>
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
-          )}
-
-          <TouchableOpacity
-            style={styles.addDateButton}
-            onPress={() => setShowFlexibleDatePicker(true)}
-          >
-            <Text style={styles.addDateButtonText}>+ Add Date</Text>
-          </TouchableOpacity>
-
-          {showFlexibleDatePicker && (
-            <>
-              <DateTimePicker
-                value={tempDate}
-                mode="date"
-                minimumDate={new Date()}
-                onChange={(event, date) => {
-                  if (Platform.OS !== 'ios') {
-                    setShowFlexibleDatePicker(false);
-                    if (date && event.type === 'set') {
-                      setTempDate(date);
-                      if (!flexibleDates.some((d) => d.toDateString() === date.toDateString())) {
-                        setFlexibleDates([...flexibleDates, date]);
-                      }
-                    }
-                  } else if (date) {
-                    setTempDate(date);
-                  }
-                }}
-              />
-              {Platform.OS === 'ios' && (
-                <TouchableOpacity style={styles.confirmDateButton} onPress={addFlexibleDate}>
-                  <Text style={styles.confirmDateButtonText}>Add This Date</Text>
-                </TouchableOpacity>
-              )}
-            </>
-          )}
-        </View>
-      )}
+          </View>
+        )}
+      </View>
 
       {/* People Count */}
       <View style={styles.row}>
@@ -371,22 +375,25 @@ const styles = StyleSheet.create({
     color: COLORS.gray[500],
     textAlign: 'center',
   },
-  dateButton: {
+  calendarContainer: {
     backgroundColor: COLORS.white,
+    borderRadius: 12,
+    overflow: 'hidden',
     borderWidth: 1,
     borderColor: COLORS.gray[200],
-    borderRadius: 12,
-    padding: 16,
   },
-  dateButtonText: {
-    fontSize: 16,
-    color: COLORS.gray[900],
+  selectedDatesContainer: {
+    marginTop: 16,
+  },
+  selectedDatesLabel: {
+    fontSize: 12,
+    color: COLORS.gray[500],
+    marginBottom: 8,
   },
   dateList: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 12,
   },
   dateChip: {
     flexDirection: 'row',
@@ -407,31 +414,18 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     opacity: 0.8,
   },
-  addDateButton: {
-    backgroundColor: COLORS.white,
-    borderWidth: 2,
-    borderColor: COLORS.primary,
-    borderStyle: 'dashed',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-  },
-  addDateButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.primary,
-  },
-  confirmDateButton: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 8,
+  selectedDateDisplay: {
+    marginTop: 16,
+    backgroundColor: COLORS.primary + '15',
     padding: 12,
-    alignItems: 'center',
-    marginTop: 12,
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.primary,
   },
-  confirmDateButtonText: {
+  selectedDateText: {
     fontSize: 14,
+    color: COLORS.primary,
     fontWeight: '600',
-    color: COLORS.white,
   },
   row: {
     flexDirection: 'row',

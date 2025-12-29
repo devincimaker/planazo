@@ -13,7 +13,6 @@ export default function AppLayout() {
       <Stack.Screen name="group/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="plan/create" options={{ title: 'Create Plan', presentation: 'modal' }} />
       <Stack.Screen name="plan/[id]" options={{ headerShown: false }} />
-      <Stack.Screen name="join/[code]" options={{ title: 'Join Group', presentation: 'modal' }} />
     </Stack>
   );
 }

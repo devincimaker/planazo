@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Calendar, DateData } from 'react-native-calendars';
 import { supabase } from '../../../../lib/supabase';
 import { useAuthStore } from '../../../../stores/authStore';
 import { COLORS } from '../../../../constants/colors';
@@ -100,6 +101,10 @@ export default function PlanDetailScreen() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['plan-rsvps', id] });
+      // Also refresh group plans list so confirmed status updates there
+      if (plan?.group_id) {
+        queryClient.invalidateQueries({ queryKey: ['group-plans', plan.group_id] });
+      }
     },
     onError: (error) => {
       Alert.alert('Error', error.message);
@@ -137,16 +142,116 @@ export default function PlanDetailScreen() {
   });
 
   const yesCount = rsvps?.filter((r) => r.response === 'yes').length ?? 0;
-  const isLocked = plan?.status === 'locked';
+  const isConfirmed = plan && yesCount >= plan.min_people;
   const isCancelled = plan?.status === 'cancelled';
 
   const getStatusBadge = () => {
-    if (isLocked) return { text: 'Happening!', color: COLORS.success };
     if (isCancelled) return { text: 'Cancelled', color: COLORS.error };
+    if (isConfirmed) return { text: 'Confirmed!', color: COLORS.success };
     return { text: 'Open', color: COLORS.primary };
   };
 
   const status = getStatusBadge();
+
+  // Calendar theme
+  const calendarTheme = {
+    backgroundColor: COLORS.white,
+    calendarBackground: COLORS.white,
+    textSectionTitleColor: COLORS.gray[500],
+    todayTextColor: COLORS.gray[900],
+    dayTextColor: COLORS.gray[300],
+    textDisabledColor: COLORS.gray[200],
+    arrowColor: COLORS.primary,
+    monthTextColor: COLORS.gray[900],
+    textDayFontWeight: '500' as const,
+    textMonthFontWeight: '600' as const,
+    textDayHeaderFontWeight: '500' as const,
+  };
+
+  // Build marked dates for flexible plan calendar
+  const getFlexibleMarkedDates = () => {
+    if (!dateOptions || !plan) return {};
+
+    const marked: Record<string, any> = {};
+    const dateOptionMap = new Map<string, PlanDateOption>();
+
+    // Map date strings to date options
+    dateOptions.forEach((option) => {
+      const dateStr = option.date.split('T')[0];
+      dateOptionMap.set(dateStr, option);
+    });
+
+    dateOptions.forEach((option) => {
+      const dateStr = option.date.split('T')[0];
+      const optionAvailabilities = availabilities?.filter(
+        (a) => a.date_option_id === option.id
+      ) || [];
+      const count = optionAvailabilities.length;
+      const userAvailable = optionAvailabilities.some((a) => a.user_id === user?.id);
+      const meetsMinimum = count >= plan.min_people;
+
+      // Color based on availability count
+      let dotColor = COLORS.gray[300];
+      let selectedColor = COLORS.gray[100];
+
+      if (count > 0) {
+        const ratio = Math.min(count / plan.min_people, 1);
+        if (meetsMinimum) {
+          selectedColor = COLORS.success;
+          dotColor = COLORS.success;
+        } else if (ratio >= 0.5) {
+          selectedColor = COLORS.warning;
+          dotColor = COLORS.warning;
+        } else {
+          selectedColor = COLORS.primary + '40';
+          dotColor = COLORS.primary;
+        }
+      }
+
+      marked[dateStr] = {
+        selected: true,
+        selectedColor: userAvailable ? COLORS.primary : selectedColor,
+        selectedTextColor: userAvailable ? COLORS.white : COLORS.gray[900],
+        marked: count > 0,
+        dotColor: dotColor,
+        customStyles: {
+          container: {
+            borderWidth: userAvailable ? 0 : 2,
+            borderColor: count > 0 ? dotColor : COLORS.gray[300],
+          },
+        },
+      };
+    });
+
+    return marked;
+  };
+
+  // Handle calendar day press for flexible plans
+  const handleFlexibleDayPress = (day: DateData) => {
+    if (isCancelled) return;
+
+    const dateOption = dateOptions?.find((opt) => opt.date.split('T')[0] === day.dateString);
+    if (dateOption) {
+      toggleAvailability.mutate(dateOption.id);
+    }
+  };
+
+  // Get availability info for a date
+  const getDateAvailabilityInfo = (dateStr: string) => {
+    const dateOption = dateOptions?.find((opt) => opt.date.split('T')[0] === dateStr);
+    if (!dateOption) return null;
+
+    const optionAvailabilities = availabilities?.filter(
+      (a) => a.date_option_id === dateOption.id
+    ) || [];
+
+    return {
+      count: optionAvailabilities.length,
+      users: optionAvailabilities.map((a) => a.profile),
+      meetsMinimum: optionAvailabilities.length >= (plan?.min_people || 2),
+      userAvailable: optionAvailabilities.some((a) => a.user_id === user?.id),
+    };
+  };
 
   if (isLoading || !plan) {
     return (
@@ -229,8 +334,8 @@ export default function PlanDetailScreen() {
           </Text>
         </View>
 
-        {/* Fixed Plan RSVP */}
-        {plan.plan_type === 'fixed' && !isLocked && !isCancelled && (
+        {/* Fixed Plan RSVP - still allow RSVPs even when confirmed */}
+        {plan.plan_type === 'fixed' && !isCancelled && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Your Response</Text>
             <View style={styles.rsvpButtons}>
@@ -297,62 +402,99 @@ export default function PlanDetailScreen() {
           </View>
         )}
 
-        {/* Flexible Plan Date Options */}
+        {/* Flexible Plan Date Options - Calendar View */}
         {plan.plan_type === 'flexible' && dateOptions && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Select Your Available Dates</Text>
-            <Text style={styles.hint}>Tap dates when you're available</Text>
-            <View style={styles.dateOptionList}>
+            <Text style={styles.hint}>Tap highlighted dates to mark yourself available</Text>
+
+            {/* Legend */}
+            <View style={styles.calendarLegend}>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: COLORS.primary }]} />
+                <Text style={styles.legendText}>You're available</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: COLORS.success }]} />
+                <Text style={styles.legendText}>Min reached</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: COLORS.warning }]} />
+                <Text style={styles.legendText}>Almost there</Text>
+              </View>
+            </View>
+
+            {/* Calendar */}
+            <View style={styles.calendarContainer}>
+              <Calendar
+                theme={calendarTheme}
+                markedDates={getFlexibleMarkedDates()}
+                onDayPress={handleFlexibleDayPress}
+                enableSwipeMonths
+                disableAllTouchEventsForDisabledDays
+              />
+            </View>
+
+            {/* Date Details List */}
+            <View style={styles.dateDetailsList}>
+              <Text style={styles.dateDetailsTitle}>Date Details</Text>
               {dateOptions.map((option) => {
-                const optionAvailabilities = availabilities?.filter(
-                  (a) => a.date_option_id === option.id
-                ) || [];
-                const userAvailable = optionAvailabilities.some(
-                  (a) => a.user_id === user?.id
-                );
-                const count = optionAvailabilities.length;
-                const meetsMinimum = count >= plan.min_people;
+                const dateStr = option.date.split('T')[0];
+                const info = getDateAvailabilityInfo(dateStr);
+                if (!info) return null;
 
                 return (
                   <TouchableOpacity
                     key={option.id}
                     style={[
-                      styles.dateOption,
-                      userAvailable && styles.dateOptionSelected,
-                      meetsMinimum && styles.dateOptionReady,
+                      styles.dateDetailItem,
+                      info.userAvailable && styles.dateDetailItemSelected,
+                      info.meetsMinimum && styles.dateDetailItemReady,
                     ]}
-                    onPress={() => !isLocked && !isCancelled && toggleAvailability.mutate(option.id)}
-                    disabled={isLocked || isCancelled || toggleAvailability.isPending}
+                    onPress={() => !isCancelled && toggleAvailability.mutate(option.id)}
+                    disabled={isCancelled || toggleAvailability.isPending}
                   >
-                    <View style={styles.dateOptionHeader}>
-                      <Text style={styles.dateOptionDate}>
+                    <View style={styles.dateDetailLeft}>
+                      <Text style={[
+                        styles.dateDetailDate,
+                        info.userAvailable && styles.dateDetailDateSelected,
+                      ]}>
                         {new Date(option.date).toLocaleDateString('en-US', {
                           weekday: 'short',
                           month: 'short',
                           day: 'numeric',
                         })}
                       </Text>
-                      {userAvailable && <Text style={styles.checkmark}>✓</Text>}
+                      {info.users.length > 0 && (
+                        <View style={styles.dateDetailAvatars}>
+                          {info.users.slice(0, 4).map((profile, idx) => (
+                            <View
+                              key={idx}
+                              style={[
+                                styles.miniAvatar,
+                                { marginLeft: idx > 0 ? -8 : 0 },
+                              ]}
+                            >
+                              <Text style={styles.miniAvatarText}>
+                                {profile.display_name[0]}
+                              </Text>
+                            </View>
+                          ))}
+                          {info.users.length > 4 && (
+                            <Text style={styles.moreUsers}>+{info.users.length - 4}</Text>
+                          )}
+                        </View>
+                      )}
                     </View>
-                    <Text style={[styles.dateOptionCount, meetsMinimum && styles.dateOptionCountReady]}>
-                      {count}/{plan.min_people} available
-                    </Text>
-                    {optionAvailabilities.length > 0 && (
-                      <View style={styles.availableUsers}>
-                        {optionAvailabilities.slice(0, 5).map((a) => (
-                          <View key={a.id} style={styles.miniAvatar}>
-                            <Text style={styles.miniAvatarText}>
-                              {a.profile.display_name[0]}
-                            </Text>
-                          </View>
-                        ))}
-                        {optionAvailabilities.length > 5 && (
-                          <Text style={styles.moreUsers}>
-                            +{optionAvailabilities.length - 5}
-                          </Text>
-                        )}
-                      </View>
-                    )}
+                    <View style={styles.dateDetailRight}>
+                      <Text style={[
+                        styles.dateDetailCount,
+                        info.meetsMinimum && styles.dateDetailCountReady,
+                      ]}>
+                        {info.count}/{plan.min_people}
+                      </Text>
+                      {info.userAvailable && <Text style={styles.checkmark}>✓</Text>}
+                    </View>
                   </TouchableOpacity>
                 );
               })}
@@ -582,5 +724,97 @@ const styles = StyleSheet.create({
   moreUsers: {
     fontSize: 10,
     color: COLORS.gray[500],
+    marginLeft: 4,
+  },
+  // Calendar styles
+  calendarLegend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  legendDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  legendText: {
+    fontSize: 11,
+    color: COLORS.gray[500],
+  },
+  calendarContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.gray[200],
+    marginBottom: 16,
+  },
+  // Date details list
+  dateDetailsList: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: 16,
+  },
+  dateDetailsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.gray[700],
+    marginBottom: 12,
+  },
+  dateDetailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray[100],
+  },
+  dateDetailItemSelected: {
+    backgroundColor: COLORS.primary + '08',
+    marginHorizontal: -16,
+    paddingHorizontal: 16,
+  },
+  dateDetailItemReady: {
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.success,
+    marginLeft: -16,
+    paddingLeft: 13,
+  },
+  dateDetailLeft: {
+    flex: 1,
+  },
+  dateDetailRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dateDetailDate: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.gray[900],
+    marginBottom: 4,
+  },
+  dateDetailDateSelected: {
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+  dateDetailAvatars: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  dateDetailCount: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.gray[400],
+  },
+  dateDetailCountReady: {
+    color: COLORS.success,
   },
 });

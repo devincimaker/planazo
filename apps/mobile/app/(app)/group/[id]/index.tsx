@@ -45,14 +45,23 @@ export default function GroupDetailScreen() {
   const { data: plans, isLoading: plansLoading } = useQuery({
     queryKey: ['group-plans', id],
     queryFn: async () => {
+      // Fetch plans with RSVP counts
       const { data, error } = await supabase
         .from('plans')
-        .select('*')
+        .select(`
+          *,
+          rsvps(response)
+        `)
         .eq('group_id', id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return data as Plan[];
+
+      // Calculate yes_count for each plan
+      return (data || []).map((plan: any) => ({
+        ...plan,
+        yes_count: plan.rsvps?.filter((r: any) => r.response === 'yes').length || 0,
+      })) as (Plan & { yes_count: number })[];
     },
     enabled: !!id,
   });
@@ -84,9 +93,10 @@ export default function GroupDetailScreen() {
     }
   }
 
-  const openPlans = plans?.filter((p) => p.status === 'open') || [];
-  const lockedPlans = plans?.filter((p) => p.status === 'locked') || [];
-  const pastPlans = plans?.filter((p) => p.status === 'cancelled') || [];
+  // Split plans: confirmed (min reached but still open), open (not yet confirmed), cancelled
+  const confirmedPlans = plans?.filter((p) => p.status === 'open' && p.yes_count >= p.min_people) || [];
+  const openPlans = plans?.filter((p) => p.status === 'open' && p.yes_count < p.min_people) || [];
+  const cancelledPlans = plans?.filter((p) => p.status === 'cancelled') || [];
 
   return (
     <>
@@ -147,6 +157,45 @@ export default function GroupDetailScreen() {
             <Text style={styles.createButtonText}>Create Plan</Text>
           </TouchableOpacity>
 
+          {/* Confirmed Plans - Show first since they're most important */}
+          {confirmedPlans.length > 0 && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitleConfirmed}>Confirmed Plans</Text>
+                <View style={styles.confirmedBadge}>
+                  <Text style={styles.confirmedBadgeText}>{confirmedPlans.length}</Text>
+                </View>
+              </View>
+              <View style={styles.planList}>
+                {confirmedPlans.map((plan) => (
+                  <TouchableOpacity
+                    key={plan.id}
+                    style={styles.planCardConfirmed}
+                    onPress={() => router.push(`/(app)/plan/${plan.id}`)}
+                  >
+                    <View style={styles.confirmedIndicator} />
+                    <View style={styles.planCardContent}>
+                      <View style={styles.planHeader}>
+                        <Text style={styles.planType}>🎉</Text>
+                        <Text style={styles.planTitle}>{plan.title}</Text>
+                      </View>
+                      <Text style={styles.planDateConfirmed}>
+                        {new Date(plan.locked_date || plan.event_date || '').toLocaleDateString('en-US', {
+                          weekday: 'short',
+                          month: 'short',
+                          day: 'numeric',
+                        })}
+                      </Text>
+                      {plan.location && (
+                        <Text style={styles.planLocation}>📍 {plan.location}</Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
+
           {/* Open Plans */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Open Plans ({openPlans.length})</Text>
@@ -185,30 +234,6 @@ export default function GroupDetailScreen() {
               </View>
             )}
           </View>
-
-          {/* Locked Plans */}
-          {lockedPlans.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Happening! ({lockedPlans.length})</Text>
-              <View style={styles.planList}>
-                {lockedPlans.map((plan) => (
-                  <TouchableOpacity
-                    key={plan.id}
-                    style={[styles.planCard, styles.planCardLocked]}
-                    onPress={() => router.push(`/(app)/plan/${plan.id}`)}
-                  >
-                    <View style={styles.planHeader}>
-                      <Text style={styles.planType}>🎉</Text>
-                      <Text style={styles.planTitle}>{plan.title}</Text>
-                    </View>
-                    <Text style={styles.planDate}>
-                      {new Date(plan.locked_date || plan.event_date || '').toLocaleDateString()}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          )}
         </ScrollView>
       </View>
     </>
@@ -289,11 +314,33 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: 24,
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 8,
+  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: COLORS.gray[900],
     marginBottom: 12,
+  },
+  sectionTitleConfirmed: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.success,
+  },
+  confirmedBadge: {
+    backgroundColor: COLORS.success,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  confirmedBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.white,
   },
   planList: {
     gap: 12,
@@ -303,9 +350,25 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
   },
-  planCardLocked: {
-    borderWidth: 2,
-    borderColor: COLORS.success,
+  planCardConfirmed: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    flexDirection: 'row',
+    overflow: 'hidden',
+  },
+  confirmedIndicator: {
+    width: 4,
+    backgroundColor: COLORS.success,
+  },
+  planCardContent: {
+    flex: 1,
+    padding: 16,
+  },
+  planDateConfirmed: {
+    fontSize: 14,
+    color: COLORS.success,
+    fontWeight: '600',
+    marginBottom: 4,
   },
   planHeader: {
     flexDirection: 'row',
