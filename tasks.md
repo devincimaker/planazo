@@ -6,6 +6,8 @@ To-Do:
 [ ] Add push notifications (Would be great to have this in the starter)
 [ ] Add images to groups
 [ ] Add images to users
+[ ] Implement the admin functionality. Right now there isn't anything done.
+[ ] You should be able to create an event from the home, and select in which group you want it to go.
 
 Doing:
 

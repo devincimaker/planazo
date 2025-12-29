@@ -1,6 +1,6 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Share } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Share, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../../../lib/supabase';
 import { useAuthStore } from '../../../../stores/authStore';
 import { COLORS } from '../../../../constants/colors';
@@ -9,6 +9,7 @@ import type { Group, Plan, GroupMember } from '@planazo/shared';
 export default function GroupDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { user } = useAuthStore();
 
   const { data: group, isLoading: groupLoading, refetch } = useQuery({
@@ -131,6 +132,40 @@ export default function GroupDetailScreen() {
     }
   }
 
+  const leaveGroup = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from('group_members')
+        .delete()
+        .eq('group_id', id)
+        .eq('user_id', user?.id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['groups'] });
+      router.replace('/(app)/(tabs)/groups');
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error.message);
+    },
+  });
+
+  function confirmLeave() {
+    Alert.alert(
+      'Leave Group',
+      'Are you sure you want to leave this group?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Leave',
+          style: 'destructive',
+          onPress: () => leaveGroup.mutate(),
+        },
+      ]
+    );
+  }
+
   // Split plans: confirmed (min reached but still open), open (not yet confirmed), cancelled
   const confirmedPlans = plans?.filter((p) => p.status === 'open' && p.is_confirmed) || [];
   const openPlans = plans?.filter((p) => p.status === 'open' && !p.is_confirmed) || [];
@@ -152,7 +187,11 @@ export default function GroupDetailScreen() {
               <TouchableOpacity onPress={() => router.push(`/(app)/group/${id}/settings`)}>
                 <Text style={styles.headerButton}>⚙️</Text>
               </TouchableOpacity>
-            ) : null,
+            ) : (
+              <TouchableOpacity onPress={confirmLeave}>
+                <Text style={styles.leaveButton}>Leave</Text>
+              </TouchableOpacity>
+            ),
         }}
       />
       <View style={styles.container}>
@@ -290,6 +329,12 @@ const styles = StyleSheet.create({
   },
   headerButton: {
     fontSize: 20,
+    padding: 8,
+  },
+  leaveButton: {
+    fontSize: 16,
+    color: COLORS.error,
+    fontWeight: '500',
     padding: 8,
   },
   backButton: {
