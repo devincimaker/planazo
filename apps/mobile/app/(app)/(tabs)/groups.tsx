@@ -124,16 +124,15 @@ export default function GroupsScreen() {
 
   const joinGroup = useMutation({
     mutationFn: async () => {
-      // Find group by invite code
-      const { data: group, error: findError } = await supabase
-        .from('groups')
-        .select('id')
-        .eq('invite_code', joinCode.toUpperCase().trim())
-        .single();
+      // Find group by invite code using RPC (bypasses RLS)
+      const { data: groups, error: findError } = await supabase
+        .rpc('get_group_by_invite_code', { code: joinCode });
 
-      if (findError || !group) {
+      if (findError || !groups || groups.length === 0) {
         throw new Error('Invalid invite code');
       }
+
+      const group = groups[0];
 
       // Check if already a member
       const { data: existing } = await supabase
