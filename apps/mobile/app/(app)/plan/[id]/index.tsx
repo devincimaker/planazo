@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native';
-import { useLocalSearchParams, Stack } from 'expo-router';
+import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../../../lib/supabase';
 import { useAuthStore } from '../../../../stores/authStore';
@@ -8,6 +8,7 @@ import type { Plan, RsvpWithProfile, PlanDateOption, DateAvailability } from '@p
 
 export default function PlanDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
 
@@ -157,7 +158,17 @@ export default function PlanDetailScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: plan.title }} />
+      <Stack.Screen
+        options={{
+          title: plan.title,
+          headerTitleStyle: { color: COLORS.gray[900] },
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+              <Text style={styles.backButtonText}>‹ Back</Text>
+            </TouchableOpacity>
+          ),
+        }}
+      />
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
@@ -360,6 +371,14 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
+  },
+  backButton: {
+    paddingVertical: 8,
+    paddingRight: 16,
+  },
+  backButtonText: {
+    fontSize: 17,
+    color: COLORS.primary,
   },
   loadingText: {
     textAlign: 'center',
