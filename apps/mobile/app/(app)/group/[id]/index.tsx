@@ -101,6 +101,25 @@ export default function GroupDetailScreen() {
 
   const isAdmin = membership?.role === 'admin';
 
+  const getBestDate = (plan: any) => {
+    if (plan.locked_date) return plan.locked_date;
+    if (plan.event_date) return plan.event_date;
+
+    // For flexible plans, find earliest date meeting minimum
+    if (plan.plan_date_options?.length > 0) {
+      const bestOption = plan.plan_date_options
+        .map((opt: any) => ({
+          date: opt.date,
+          count: opt.date_availability?.length || 0,
+        }))
+        .filter((opt: any) => opt.count >= plan.min_people)
+        .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
+
+      if (bestOption) return bestOption.date;
+    }
+    return null;
+  };
+
   async function shareInviteCode() {
     if (!group) return;
     try {
@@ -199,11 +218,13 @@ export default function GroupDetailScreen() {
                         <Text style={styles.planTitle}>{plan.title}</Text>
                       </View>
                       <Text style={styles.planDateConfirmed}>
-                        {new Date(plan.locked_date || plan.event_date || '').toLocaleDateString('en-US', {
-                          weekday: 'short',
-                          month: 'short',
-                          day: 'numeric',
-                        })}
+                        {getBestDate(plan)
+                          ? new Date(getBestDate(plan)).toLocaleDateString('en-US', {
+                              weekday: 'short',
+                              month: 'short',
+                              day: 'numeric',
+                            })
+                          : 'Date TBD'}
                       </Text>
                       {plan.location && (
                         <Text style={styles.planLocation}>📍 {plan.location}</Text>

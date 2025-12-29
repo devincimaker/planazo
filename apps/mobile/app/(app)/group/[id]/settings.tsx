@@ -239,7 +239,7 @@ export default function GroupSettingsScreen() {
             style={[styles.dangerButton, styles.deleteButton]}
             onPress={confirmDelete}
           >
-            <Text style={styles.dangerButtonText}>Delete Group</Text>
+            <Text style={styles.deleteButtonText}>Delete Group</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -393,5 +393,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: COLORS.error,
+  },
+  deleteButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.white,
   },
 });
