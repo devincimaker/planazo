@@ -5,6 +5,7 @@
     "dev": "turbo dev --ui tui",
     "build": "turbo build",
     "lint": "turbo lint",
+    "test": "turbo test",
     "dev:api": "turbo dev --filter=api",
     "dev:mobile": "turbo dev --filter=mobile",
     "db:push": "npx supabase db push",

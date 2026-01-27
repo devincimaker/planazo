@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import { groupRoutes } from './routes/groups.js';
 import { planRoutes } from './routes/plans.js';
+import { friendRoutes } from './routes/friends.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -22,7 +23,14 @@ app.get('/health', (req, res) => {
 // API routes
 app.use('/api/groups', groupRoutes);
 app.use('/api/plans', planRoutes);
+app.use('/api/friends', friendRoutes);
 
-app.listen(PORT, () => {
-  console.log(`Planazo API running on http://localhost:${PORT}`);
-});
+// Only start the server if this file is run directly (not imported for testing)
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`Planazo API running on http://localhost:${PORT}`);
+  });
+}
+
+// Export for testing
+export { app };

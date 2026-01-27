@@ -68,7 +68,7 @@ export type PlanStatus = 'open' | 'locked' | 'cancelled';
 
 export interface Plan {
   id: string;
-  group_id: string;
+  group_id: string | null; // null for groupless plans
   created_by: string;
   title: string;
   description: string | null;
@@ -132,7 +132,10 @@ export type NotificationType =
   | 'plan_locked'
   | 'plan_cancelled'
   | 'invited_to_group'
-  | 'kicked_from_group';
+  | 'kicked_from_group'
+  | 'friend_request'
+  | 'friend_accepted'
+  | 'plan_invite';
 
 export interface Notification {
   id: string;
@@ -157,6 +160,41 @@ export interface GroupInvite {
   status: InviteStatus;
   created_at: string;
   expires_at: string;
+}
+
+// Friendship types
+export type FriendshipStatus = 'pending' | 'accepted';
+
+export interface Friendship {
+  id: string;
+  requester_id: string;
+  addressee_id: string;
+  status: FriendshipStatus;
+  created_at: string;
+  accepted_at: string | null;
+}
+
+export interface FriendshipWithProfiles extends Friendship {
+  requester: Profile;
+  addressee: Profile;
+}
+
+export interface FriendWithProfile {
+  friendship: Friendship;
+  friend: Profile;
+}
+
+// Plan invite types (for groupless plans)
+export interface PlanInvite {
+  id: string;
+  plan_id: string;
+  user_id: string;
+  invited_by: string;
+  created_at: string;
+}
+
+export interface PlanInviteWithProfile extends PlanInvite {
+  profile: Profile;
 }
 
 // Extended types for UI
@@ -184,7 +222,7 @@ export interface JoinGroupRequest {
 }
 
 export interface CreatePlanRequest {
-  group_id: string;
+  group_id?: string; // optional for groupless plans
   title: string;
   description?: string;
   location?: string;
@@ -203,4 +241,37 @@ export interface UpdateRsvpRequest {
 export interface UpdateAvailabilityRequest {
   date_option_id: string;
   available: boolean;
+}
+
+// Friends API types
+export interface SendFriendRequestRequest {
+  addressee_id: string;
+}
+
+export interface FriendsResponse {
+  friends: FriendWithProfile[];
+  pendingReceived: FriendshipWithProfiles[];
+  pendingSent: FriendshipWithProfiles[];
+}
+
+// Groupless plan types
+export interface CreateGrouplessPlanRequest {
+  title: string;
+  description?: string;
+  location?: string;
+  plan_type: PlanType;
+  event_date?: string;
+  date_options?: string[];
+  min_people: number;
+  max_people?: number;
+  deadline?: string;
+  invite_friend_ids: string[];
+}
+
+export interface GrouplessPlanWithDetails extends Plan {
+  creator: Profile;
+  invites: PlanInviteWithProfile[];
+  rsvp_count: number;
+  user_rsvp?: Rsvp;
+  date_options?: DateOptionWithAvailability[];
 }

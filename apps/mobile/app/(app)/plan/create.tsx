@@ -7,17 +7,19 @@ import {
   TextInput,
   TouchableOpacity,
   Alert,
+  Image,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { Calendar, DateData } from 'react-native-calendars';
 import { supabase } from '../../../lib/supabase';
+import { api } from '../../../lib/api';
 import { useAuthStore } from '../../../stores/authStore';
 import { COLORS } from '../../../constants/colors';
-import type { PlanType } from '@planazo/shared';
+import type { PlanType, FriendsResponse } from '@planazo/shared';
 
 export default function CreatePlanScreen() {
-  const { groupId } = useLocalSearchParams<{ groupId: string }>();
+  const { groupId } = useLocalSearchParams<{ groupId?: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
@@ -30,6 +32,16 @@ export default function CreatePlanScreen() {
   const [maxPeople, setMaxPeople] = useState('');
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [flexibleDates, setFlexibleDates] = useState<string[]>([]);
+  const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
+
+  // Fetch friends for groupless plans
+  const { data: friendsData } = useQuery<FriendsResponse>({
+    queryKey: ['friends'],
+    queryFn: () => api.friends.list(),
+    enabled: !groupId, // Only fetch if creating groupless plan
+  });
+
+  const friends = friendsData?.friends || [];
 
   // Get today's date in YYYY-MM-DD format
   const today = new Date().toISOString().split('T')[0];
@@ -55,7 +67,23 @@ export default function CreatePlanScreen() {
 
   const createPlan = useMutation({
     mutationFn: async () => {
-      // Create the plan
+      // If groupless plan, use the API
+      if (!groupId) {
+        const plan = await api.plans.createGroupless({
+          title: title.trim(),
+          description: description.trim() || undefined,
+          location: location.trim() || undefined,
+          plan_type: planType,
+          event_date: planType === 'fixed' && selectedDate ? new Date(selectedDate).toISOString() : undefined,
+          date_options: planType === 'flexible' ? flexibleDates.map(d => new Date(d).toISOString()) : undefined,
+          min_people: parseInt(minPeople) || 2,
+          max_people: maxPeople ? parseInt(maxPeople) : undefined,
+          invite_friend_ids: selectedFriendIds,
+        });
+        return plan;
+      }
+
+      // Group plan - use Supabase directly
       const { data: plan, error: planError } = await supabase
         .from('plans')
         .insert({
@@ -87,19 +115,46 @@ export default function CreatePlanScreen() {
           .insert(dateOptions);
 
         if (datesError) throw datesError;
+
+        // Auto-mark creator as available for all dates
+        const { data: insertedDateOptions } = await supabase
+          .from('plan_date_options')
+          .select('id')
+          .eq('plan_id', plan.id);
+
+        if (insertedDateOptions) {
+          const availabilities = insertedDateOptions.map((opt) => ({
+            plan_id: plan.id,
+            date_option_id: opt.id,
+            user_id: user?.id,
+            available: true,
+          }));
+
+          await supabase.from('date_availability').insert(availabilities);
+        }
+      } else {
+        // For fixed plans, auto-RSVP creator as "yes"
+        await supabase.from('rsvps').insert({
+          plan_id: plan.id,
+          user_id: user?.id,
+          response: 'yes',
+        });
       }
 
       return plan;
     },
     onSuccess: (plan) => {
-      queryClient.invalidateQueries({ queryKey: ['group-plans', groupId] });
+      if (groupId) {
+        queryClient.invalidateQueries({ queryKey: ['group-plans', groupId] });
+      }
+      queryClient.invalidateQueries({ queryKey: ['home-plans'] });
       router.back();
       // Navigate to the new plan
       setTimeout(() => {
         router.push(`/(app)/plan/${plan.id}`);
       }, 100);
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       Alert.alert('Error', error.message);
     },
   });
@@ -114,6 +169,14 @@ export default function CreatePlanScreen() {
 
   function removeFlexibleDate(dateString: string) {
     setFlexibleDates(flexibleDates.filter((d) => d !== dateString));
+  }
+
+  function toggleFriend(friendId: string) {
+    if (selectedFriendIds.includes(friendId)) {
+      setSelectedFriendIds(selectedFriendIds.filter((id) => id !== friendId));
+    } else {
+      setSelectedFriendIds([...selectedFriendIds, friendId]);
+    }
   }
 
   // Build marked dates for calendar
@@ -132,7 +195,8 @@ export default function CreatePlanScreen() {
   const isValid =
     title.trim() &&
     parseInt(minPeople) >= 2 &&
-    (planType === 'fixed' ? selectedDate : flexibleDates.length > 0);
+    (planType === 'fixed' ? selectedDate : flexibleDates.length > 0) &&
+    (groupId || selectedFriendIds.length > 0); // Require friends for groupless plans
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -201,6 +265,54 @@ export default function CreatePlanScreen() {
           onChangeText={setLocation}
         />
       </View>
+
+      {/* Friend Selection - only for groupless plans */}
+      {!groupId && (
+        <View style={styles.section}>
+          <Text style={styles.label}>Invite Friends *</Text>
+          <Text style={styles.hint}>Select friends to invite to this plan</Text>
+          {friends.length > 0 ? (
+            <View style={styles.friendsList}>
+              {friends.map((item) => (
+                <TouchableOpacity
+                  key={item.friend.id}
+                  style={[
+                    styles.friendItem,
+                    selectedFriendIds.includes(item.friend.id) && styles.friendItemSelected,
+                  ]}
+                  onPress={() => toggleFriend(item.friend.id)}
+                >
+                  {item.friend.avatar_url ? (
+                    <Image source={{ uri: item.friend.avatar_url }} style={styles.friendAvatar} />
+                  ) : (
+                    <View style={styles.friendAvatarPlaceholder}>
+                      <Text style={styles.friendAvatarText}>
+                        {item.friend.display_name.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
+                  <Text style={[
+                    styles.friendName,
+                    selectedFriendIds.includes(item.friend.id) && styles.friendNameSelected,
+                  ]}>
+                    {item.friend.display_name}
+                  </Text>
+                  {selectedFriendIds.includes(item.friend.id) && (
+                    <Text style={styles.checkmark}>✓</Text>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.noFriendsState}>
+              <Text style={styles.noFriendsText}>No friends yet</Text>
+              <Text style={styles.noFriendsSubtext}>
+                Add friends from the Friends tab first
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Date Selection - Calendar */}
       <View style={styles.section}>
@@ -448,5 +560,72 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: COLORS.white,
+  },
+  friendsList: {
+    gap: 8,
+  },
+  friendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderWidth: 2,
+    borderColor: COLORS.gray[200],
+    borderRadius: 12,
+    padding: 12,
+  },
+  friendItemSelected: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primary + '10',
+  },
+  friendAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 12,
+  },
+  friendAvatarPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  friendAvatarText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.white,
+  },
+  friendName: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '500',
+    color: COLORS.gray[900],
+  },
+  friendNameSelected: {
+    color: COLORS.primary,
+  },
+  checkmark: {
+    fontSize: 18,
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+  noFriendsState: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: 24,
+    alignItems: 'center',
+  },
+  noFriendsText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.gray[700],
+    marginBottom: 4,
+  },
+  noFriendsSubtext: {
+    fontSize: 14,
+    color: COLORS.gray[500],
+    textAlign: 'center',
   },
 });
