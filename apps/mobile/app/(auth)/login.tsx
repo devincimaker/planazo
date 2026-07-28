@@ -28,38 +28,42 @@ export default function LoginScreen() {
       return;
     }
 
-    setLoading(true);
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.trim().toLowerCase(),
-      password,
-    });
+    try {
+      setLoading(true);
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
+      });
 
-    if (error) {
-      Alert.alert('Error', error.message);
-      setLoading(false);
-      return;
-    }
-
-    // Update auth store
-    setSession(data.session);
-
-    // Fetch profile
-    if (data.session?.user) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', data.session.user.id)
-        .single();
-
-      if (profile) {
-        setProfile(profile);
+      if (error) {
+        Alert.alert('Error', error.message);
+        return;
       }
+
+      // Update auth store
+      setSession(data.session);
+
+      // Fetch profile
+      if (data.session?.user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', data.session.user.id)
+          .single();
+
+        if (profile) {
+          setProfile(profile);
+        }
+      }
+
+      // Navigate to app
+      router.replace('/(app)/(tabs)');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unexpected login error';
+      Alert.alert('Network Error', message);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
-
-    // Navigate to app
-    router.replace('/(app)/(tabs)');
   }
 
   return (

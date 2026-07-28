@@ -5,6 +5,13 @@ import { supabase } from '../../../../lib/supabase';
 import { useAuthStore } from '../../../../stores/authStore';
 import { COLORS } from '../../../../constants/colors';
 import type { Group, Plan, GroupMember } from '@planazo/shared';
+import {
+  countAvailabilityByDate,
+  earliestViableDate,
+  flattenNestedOptions,
+  getYesCount,
+  isPlanConfirmed,
+} from '@planazo/shared';
 
 export default function GroupDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -61,25 +68,21 @@ export default function GroupDetailScreen() {
 
       // Calculate confirmed status for each plan
       return (data || []).map((plan: any) => {
-        const yesCount = plan.rsvps?.filter((r: any) => r.response === 'yes').length || 0;
-
-        // For flexible plans, check if any date has enough people
-        let flexibleConfirmed = false;
-        let bestDateCount = 0;
-        if (plan.plan_type === 'flexible' && plan.plan_date_options) {
-          plan.plan_date_options.forEach((opt: any) => {
-            const count = opt.date_availability?.length || 0;
-            if (count > bestDateCount) bestDateCount = count;
-            if (count >= plan.min_people) flexibleConfirmed = true;
-          });
-        }
+        const { dateOptions, availabilities } = flattenNestedOptions(plan.plan_date_options);
+        const counts = Object.values(countAvailabilityByDate(dateOptions, availabilities));
+        const bestDateCount = counts.reduce((max, c) => Math.max(max, c.count), 0);
 
         return {
           ...plan,
-          yes_count: plan.plan_type === 'fixed' ? yesCount : bestDateCount,
-          is_confirmed: plan.plan_type === 'fixed'
-            ? yesCount >= plan.min_people
-            : flexibleConfirmed,
+          yes_count: plan.plan_type === 'fixed' ? getYesCount(plan.rsvps) : bestDateCount,
+          is_confirmed: isPlanConfirmed({
+            plan_type: plan.plan_type,
+            status: plan.status,
+            min_people: plan.min_people,
+            rsvps: plan.rsvps,
+            dateOptions,
+            availabilities,
+          }),
         };
       }) as (Plan & { yes_count: number; is_confirmed: boolean })[];
     },
@@ -107,18 +110,11 @@ export default function GroupDetailScreen() {
     if (plan.event_date) return plan.event_date;
 
     // For flexible plans, find earliest date meeting minimum
-    if (plan.plan_date_options?.length > 0) {
-      const bestOption = plan.plan_date_options
-        .map((opt: any) => ({
-          date: opt.date,
-          count: opt.date_availability?.length || 0,
-        }))
-        .filter((opt: any) => opt.count >= plan.min_people)
-        .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
-
-      if (bestOption) return bestOption.date;
-    }
-    return null;
+    const { dateOptions, availabilities } = flattenNestedOptions(plan.plan_date_options);
+    return earliestViableDate(
+      countAvailabilityByDate(dateOptions, availabilities),
+      plan.min_people
+    );
   };
 
   async function shareInviteCode() {

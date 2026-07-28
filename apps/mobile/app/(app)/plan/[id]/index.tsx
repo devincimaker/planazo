@@ -6,6 +6,7 @@ import { supabase } from '../../../../lib/supabase';
 import { useAuthStore } from '../../../../stores/authStore';
 import { COLORS } from '../../../../constants/colors';
 import type { Plan, RsvpWithProfile, PlanDateOption, DateAvailability } from '@planazo/shared';
+import { getYesCount, isPlanConfirmed } from '@planazo/shared';
 
 export default function PlanDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -203,29 +204,20 @@ export default function PlanDetailScreen() {
     },
   });
 
-  const yesCount = rsvps?.filter((r) => r.response === 'yes').length ?? 0;
+  const yesCount = getYesCount(rsvps);
   const userDeclinedFlexible = plan?.plan_type === 'flexible' && rsvps?.find(r => r.user_id === user?.id)?.response === 'no';
 
-  // For fixed plans: check RSVP count
-  // For flexible plans: check if any date option has enough people
-  const isFixedConfirmed = plan?.plan_type === 'fixed' && yesCount >= (plan?.min_people || 2);
-  const isFlexibleConfirmed = plan?.plan_type === 'flexible' && dateOptions?.some((option) => {
-    const count = availabilities?.filter((a) => a.date_option_id === option.id).length || 0;
-    return count >= (plan?.min_people || 2);
-  });
-  const isConfirmed = isFixedConfirmed || isFlexibleConfirmed;
+  const isConfirmed = plan
+    ? isPlanConfirmed({
+        plan_type: plan.plan_type,
+        status: plan.status,
+        min_people: plan.min_people,
+        rsvps,
+        dateOptions,
+        availabilities,
+      })
+    : false;
   const isCancelled = plan?.status === 'cancelled';
-
-  // Find the best date for flexible plans (most availability that meets minimum)
-  const bestFlexibleDate = plan?.plan_type === 'flexible' && dateOptions
-    ? dateOptions
-        .map((option) => ({
-          option,
-          count: availabilities?.filter((a) => a.date_option_id === option.id).length || 0,
-        }))
-        .filter((d) => d.count >= (plan?.min_people || 2))
-        .sort((a, b) => b.count - a.count)[0]
-    : null;
 
   const getStatusBadge = () => {
     if (isCancelled) return { text: 'Cancelled', color: COLORS.error };
@@ -273,8 +265,8 @@ export default function PlanDetailScreen() {
       const meetsMinimum = count >= plan.min_people;
 
       // Color based on availability count
-      let dotColor = COLORS.gray[300];
-      let selectedColor = COLORS.gray[100];
+      let dotColor: string = COLORS.gray[300];
+      let selectedColor: string = COLORS.gray[100];
 
       if (count > 0) {
         const ratio = Math.min(count / plan.min_people, 1);
