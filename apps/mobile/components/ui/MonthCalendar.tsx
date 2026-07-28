@@ -1,0 +1,188 @@
+import { useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { ThemedText } from './ThemedText';
+import { colors, fonts } from '../../theme/tokens';
+
+const DOW = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+// How far ahead the month arrows can go (design: half a year of runway)
+const MAX_MONTHS_AHEAD = 5;
+
+const pad = (n: number) => String(n).padStart(2, '0');
+const isoOf = (y: number, m: number, d: number) => `${y}-${pad(m + 1)}-${pad(d)}`;
+
+interface MonthCalendarProps {
+  /** Picked days as YYYY-MM-DD */
+  selected: string[];
+  onToggleDay: (iso: string) => void;
+}
+
+/** Month grid from design 5a: tap days to pick them, past days are dead. */
+export function MonthCalendar({ selected, onToggleDay }: MonthCalendarProps) {
+  const [offset, setOffset] = useState(0);
+
+  const now = new Date();
+  const today = isoOf(now.getFullYear(), now.getMonth(), now.getDate());
+  const base = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+  const y = base.getFullYear();
+  const m = base.getMonth();
+  const firstDow = new Date(y, m, 1).getDay();
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+
+  type Cell = { key: string; iso?: string; label?: string };
+  const cells: Cell[] = [];
+  for (let i = 0; i < firstDow; i++) cells.push({ key: `pad-${i}` });
+  for (let d = 1; d <= daysInMonth; d++) {
+    const iso = isoOf(y, m, d);
+    cells.push({ key: iso, iso, label: String(d) });
+  }
+  while (cells.length % 7 !== 0) cells.push({ key: `pad-t${cells.length}` });
+  const weeks: Cell[][] = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+
+  const label = base.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.header}>
+        <Pressable
+          onPress={() => setOffset((o) => Math.max(0, o - 1))}
+          accessibilityRole="button"
+          accessibilityLabel="Previous month"
+          testID="cal-prev"
+          style={styles.arrow}
+        >
+          <ThemedText color={colors.accent} style={styles.arrowLabel}>
+            ‹
+          </ThemedText>
+        </Pressable>
+        <ThemedText style={styles.monthLabel}>{label}</ThemedText>
+        <Pressable
+          onPress={() => setOffset((o) => Math.min(MAX_MONTHS_AHEAD, o + 1))}
+          accessibilityRole="button"
+          accessibilityLabel="Next month"
+          testID="cal-next"
+          style={[styles.arrow, styles.arrowRight]}
+        >
+          <ThemedText color={colors.accent} style={styles.arrowLabel}>
+            ›
+          </ThemedText>
+        </Pressable>
+      </View>
+
+      <View style={styles.week}>
+        {DOW.map((d, i) => (
+          <ThemedText key={`dow-${i}`} style={styles.dow}>
+            {d}
+          </ThemedText>
+        ))}
+      </View>
+
+      <View style={styles.grid}>
+        {weeks.map((week, wi) => (
+          <View key={`w-${wi}`} style={styles.week}>
+            {week.map((cell) => {
+              if (!cell.iso) return <View key={cell.key} style={styles.day} />;
+              const past = cell.iso < today;
+              const on = selected.includes(cell.iso);
+              const isToday = cell.iso === today;
+              return (
+                <Pressable
+                  key={cell.key}
+                  onPress={() => onToggleDay(cell.iso!)}
+                  disabled={past}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on, disabled: past }}
+                  testID={`cal-day-${cell.iso}`}
+                  style={[styles.day, on && styles.dayOn]}
+                >
+                  <ThemedText
+                    style={[styles.dayLabel, (on || isToday) && styles.dayLabelBold]}
+                    color={
+                      on
+                        ? colors.textOnAccent
+                        : past
+                          ? colors.textFaint
+                          : isToday
+                            ? colors.accent
+                            : colors.textPrimary
+                    }
+                  >
+                    {cell.label}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 22,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    gap: 10,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+  },
+  arrow: {
+    width: 28,
+  },
+  arrowRight: {
+    alignItems: 'flex-end',
+  },
+  arrowLabel: {
+    fontSize: 20,
+    lineHeight: 24,
+  },
+  monthLabel: {
+    fontFamily: fonts.display,
+    fontSize: 17,
+    lineHeight: 21,
+    color: colors.textPrimary,
+  },
+  grid: {
+    gap: 2,
+  },
+  week: {
+    flexDirection: 'row',
+    gap: 2,
+  },
+  dow: {
+    flex: 1,
+    textAlign: 'center',
+    fontFamily: fonts.bodyBold,
+    fontSize: 12,
+    lineHeight: 15,
+    color: colors.textFaint,
+    paddingBottom: 4,
+  },
+  day: {
+    flex: 1,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+  },
+  dayOn: {
+    backgroundColor: colors.accent,
+  },
+  dayLabel: {
+    fontFamily: fonts.bodyMedium,
+    fontSize: 15,
+    lineHeight: 19,
+  },
+  dayLabelBold: {
+    fontFamily: fonts.bodyBold,
+  },
+});

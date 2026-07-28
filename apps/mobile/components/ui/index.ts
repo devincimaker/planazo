@@ -6,6 +6,7 @@ export { Badge } from './Badge';
 export { Avatar, colorForName } from './Avatar';
 export { AvatarStack } from './AvatarStack';
 export { SlotBar } from './SlotBar';
+export { MonthCalendar } from './MonthCalendar';
 export { DateOptionRow } from './DateOptionRow';
 export { AnswerFooter } from './AnswerFooter';
 export { ListRow } from './ListRow';
