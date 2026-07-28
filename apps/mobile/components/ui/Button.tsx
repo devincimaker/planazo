@@ -60,7 +60,8 @@ export function Button({
       <ThemedText
         variant={size === 'md' ? 'bodyStrong' : 'body'}
         color={textColor[variant]}
-        style={[styles.label, size === 'lg' && styles.labelLg]}
+        numberOfLines={1}
+        style={[styles.label, size === 'md' ? styles.labelMd : styles.labelLg]}
       >
         {label}
       </ThemedText>
@@ -75,7 +76,7 @@ const styles = StyleSheet.create({
   },
   md: {
     paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     borderRadius: radii.row,
   },
   lg: {
@@ -107,6 +108,10 @@ const styles = StyleSheet.create({
   },
   label: {
     fontFamily: fonts.bodyBold,
+  },
+  labelMd: {
+    fontSize: 14,
+    lineHeight: 18,
   },
   labelLg: {
     fontSize: 16,

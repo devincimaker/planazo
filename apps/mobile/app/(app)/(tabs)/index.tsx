@@ -28,6 +28,8 @@ import {
   Avatar,
   AvatarStack,
   AnswerFooter,
+  Button,
+  DateOptionRow,
   EmptyState,
   colorForName,
 } from '../../../components/ui';
@@ -45,6 +47,8 @@ export default function FeedScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<Filter>('all');
+  // Local date selections per flexible plan, committed on "Send N dates"
+  const [pickedDates, setPickedDates] = useState<Record<string, string[]>>({});
 
   const { data: plans, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['home-plans', user?.id],
@@ -103,6 +107,26 @@ export default function FeedScreen() {
     onError: (error: Error) => Alert.alert('Error', error.message),
   });
 
+  const sendDates = useMutation({
+    mutationFn: async ({ planId, optionIds }: { planId: string; optionIds: string[] }) => {
+      const rows = optionIds.map((optionId) => ({
+        plan_id: planId,
+        user_id: user?.id,
+        date_option_id: optionId,
+        available: true,
+      }));
+      const { error } = await supabase
+        .from('date_availability')
+        .upsert(rows, { onConflict: 'plan_id,user_id,date_option_id' });
+      if (error) throw error;
+    },
+    onSuccess: (_data, { planId }) => {
+      setPickedDates((prev) => ({ ...prev, [planId]: [] }));
+      invalidate();
+    },
+    onError: (error: Error) => Alert.alert('Error', error.message),
+  });
+
   const declineFlexible = useMutation({
     mutationFn: async ({ planId, optionIds }: { planId: string; optionIds: string[] }) => {
       const { error } = await supabase.from('rsvps').upsert(
@@ -146,10 +170,7 @@ export default function FeedScreen() {
       } else if (plan.event_date) {
         when = `${fmtDay(plan.event_date)} · ${fmtTime(plan.event_date)}`;
       } else {
-        const viable = earliestViableDate(countByDate, plan.min_people);
-        when = viable
-          ? `Leading date ${fmtDay(viable)}`
-          : `${dateOptions.length} date${dateOptions.length === 1 ? '' : 's'} on the table`;
+        when = `${dateOptions.length} date${dateOptions.length === 1 ? '' : 's'} on the table`;
       }
 
       let goingNames: string[];
@@ -178,6 +199,8 @@ export default function FeedScreen() {
         myDates,
         when,
         goingNames,
+        dateOptions,
+        countByDate,
         optionIds: dateOptions.map((o) => o.id),
         sortKey: sortDate ? new Date(sortDate).getTime() : Number.MAX_SAFE_INTEGER,
       };
@@ -218,8 +241,7 @@ export default function FeedScreen() {
       );
     }
 
-    // Flexible: picking dates lives on the detail screen for now — the next
-    // slice moves the date chips inline into this card.
+    // Flexible: answer inline — tap the dates that work, send them (2a)
     if (d.userRsvp?.response === 'no') {
       return (
         <AnswerFooter size="md" answered="no" onChange={() => clearAnswer.mutate(plan.id)} />
@@ -235,13 +257,55 @@ export default function FeedScreen() {
         />
       );
     }
+
+    const picked = pickedDates[plan.id] ?? [];
+    const togglePicked = (optionId: string) =>
+      setPickedDates((prev) => ({
+        ...prev,
+        [plan.id]: picked.includes(optionId)
+          ? picked.filter((id) => id !== optionId)
+          : [...picked, optionId],
+      }));
+
     return (
-      <AnswerFooter
-        size="md"
-        yesLabel="Pick dates"
-        onYes={() => openPlan(plan.id)}
-        onNo={() => declineFlexible.mutate({ planId: plan.id, optionIds: d.optionIds })}
-      />
+      <View style={styles.chips}>
+        {d.dateOptions.map((opt) => (
+          <DateOptionRow
+            key={opt.id}
+            label={fmtDay(opt.date)}
+            meta={`${d.countByDate[opt.id]?.count ?? 0} free`}
+            selected={picked.includes(opt.id)}
+            onPress={() => togglePicked(opt.id)}
+            testID={`date-option-${opt.id}`}
+          />
+        ))}
+        <View style={styles.chipButtons}>
+          <Button
+            label="Can't make it"
+            variant="secondary"
+            size="md"
+            onPress={() => declineFlexible.mutate({ planId: plan.id, optionIds: d.optionIds })}
+            style={styles.noButton}
+          />
+          {picked.length === 0 ? (
+            <Button
+              label="Tap the dates you can do"
+              variant="secondary"
+              size="md"
+              disabled
+              haptic={false}
+              style={styles.sendButton}
+            />
+          ) : (
+            <Button
+              label={`Send ${picked.length} date${picked.length === 1 ? '' : 's'}`}
+              size="md"
+              onPress={() => sendDates.mutate({ planId: plan.id, optionIds: picked })}
+              style={styles.sendButton}
+            />
+          )}
+        </View>
+      </View>
     );
   };
 
@@ -261,9 +325,9 @@ export default function FeedScreen() {
 
       <View style={styles.filters}>
         <Chip label="All" active={filter === 'all'} onPress={() => setFilter('all')} />
-        <Chip label="Needs answer" active={filter === 'needs'} onPress={() => setFilter('needs')} />
+        <Chip label="Needs you" active={filter === 'needs'} onPress={() => setFilter('needs')} />
         <Chip
-          label="Happening"
+          label="Confirmed"
           active={filter === 'happening'}
           onPress={() => setFilter('happening')}
         />
@@ -305,9 +369,8 @@ export default function FeedScreen() {
                         </ThemedText>
                       </View>
                       <Badge
-                        label={d.confirmed ? 'Confirmed' : 'Open'}
-                        tone={d.confirmed ? 'confirmed' : 'open'}
-                        uppercase
+                        label={d.needs ? 'Needs you' : d.confirmed ? 'Confirmed' : 'Open'}
+                        tone={d.needs ? 'open' : d.confirmed ? 'confirmed' : 'muted'}
                       />
                     </View>
 
@@ -321,11 +384,15 @@ export default function FeedScreen() {
                       </ThemedText>
                     ) : null}
 
-                    {d.goingNames.length > 0 ? (
+                    {d.goingNames.length > 0 && !(d.plan.plan_type === 'flexible' && d.needs) ? (
                       <View style={styles.faces}>
                         <AvatarStack
                           names={d.goingNames}
-                          label={`${d.goingNames.length} in · needs ${d.plan.min_people}`}
+                          label={
+                            d.goingNames.length < d.plan.min_people
+                              ? `${d.goingNames.length} of ${d.plan.min_people} needed`
+                              : `${d.goingNames.length} going`
+                          }
                         />
                       </View>
                     ) : null}
@@ -401,5 +468,20 @@ const styles = StyleSheet.create({
   },
   answer: {
     marginTop: spacing.md,
+  },
+  chips: {
+    gap: spacing.sm,
+  },
+  chipButtons: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: spacing.xxs,
+  },
+  noButton: {
+    flexBasis: 118,
+    flexGrow: 0,
+  },
+  sendButton: {
+    flex: 1,
   },
 });

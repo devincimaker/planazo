@@ -79,14 +79,17 @@ const flexibleOpen = {
 
 let plansChain: ReturnType<typeof chain>;
 let rsvpsChain: ReturnType<typeof chain>;
+let availChain: ReturnType<typeof chain>;
 
 function primeSupabase(plans: unknown[]) {
   plansChain = chain({ data: plans, error: null });
   rsvpsChain = chain({ error: null });
+  availChain = chain({ error: null });
   mockFrom.mockImplementation((table: string) => {
     if (table === 'group_members') return chain({ data: [{ group_id: 'g1' }], error: null });
     if (table === 'plans') return plansChain;
     if (table === 'rsvps') return rsvpsChain;
+    if (table === 'date_availability') return availChain;
     return chain({ data: null, error: null });
   });
 }
@@ -119,7 +122,30 @@ describe('FeedScreen', () => {
     expect(screen.getByText('Escape room revenge')).toBeTruthy();
     expect(screen.getByText('Domingueros')).toBeTruthy();
     expect(screen.getByText('2 dates on the table')).toBeTruthy();
-    expect(screen.getAllByText('Open').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Needs you').length).toBeGreaterThan(0);
+  });
+
+  it('picks dates inline and sends them (2a)', async () => {
+    primeSupabase([flexibleOpen]);
+    await renderFeed();
+    await waitFor(() => expect(screen.getByText('Tap the dates you can do')).toBeTruthy());
+    expect(screen.getByText('1 free')).toBeTruthy();
+    expect(screen.getByText('0 free')).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('date-option-d1'));
+    expect(screen.getByText('Send 1 date')).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('date-option-d2'));
+    await fireEvent.press(screen.getByText('Send 2 dates'));
+
+    await waitFor(() => expect(availChain.upsert).toHaveBeenCalled());
+    expect(availChain.upsert).toHaveBeenCalledWith(
+      [
+        { plan_id: 'p3', user_id: 'me', date_option_id: 'd1', available: true },
+        { plan_id: 'p3', user_id: 'me', date_option_id: 'd2', available: true },
+      ],
+      { onConflict: 'plan_id,user_id,date_option_id' }
+    );
   });
 
   it('answers a fixed plan inline with an RSVP upsert', async () => {
@@ -151,9 +177,9 @@ describe('FeedScreen', () => {
     await waitFor(() => expect(screen.getByText('Sunday roast')).toBeTruthy());
 
     // fixedAnswered has 3 yes ≥ min 3 → Confirmed badge
-    expect(screen.getByText('Confirmed')).toBeTruthy();
+    expect(screen.getAllByText('Confirmed').length).toBeGreaterThan(0);
 
-    await fireEvent.press(screen.getByText('Needs answer'));
+    await fireEvent.press(screen.getByRole('button', { name: 'Needs you' }));
     expect(screen.queryByText('Sunday roast')).toBeNull();
     expect(screen.getByText('Padel + pizza')).toBeTruthy();
   });
