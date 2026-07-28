@@ -10,6 +10,7 @@ export default function AppLayout() {
       }}
     >
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="profile" options={{ title: 'Profile' }} />
       <Stack.Screen name="group/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="plan/create" options={{ title: 'Create Plan', presentation: 'modal' }} />
       <Stack.Screen name="plan/[id]" options={{ headerShown: false }} />

@@ -1,324 +1,405 @@
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+import {
+  View,
+  ScrollView,
+  StyleSheet,
+  RefreshControl,
+  Pressable,
+  ActivityIndicator,
+  Alert,
+} from 'react-native';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { COLORS } from '../../../constants/colors';
-import { useAuthStore } from '../../../stores/authStore';
-import { supabase } from '../../../lib/supabase';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   countAvailabilityByDate,
   earliestViableDate,
   flattenNestedOptions,
   isPlanConfirmed,
-  isUserParticipating,
   needsUserResponse,
 } from '@planazo/shared';
+import { supabase } from '../../../lib/supabase';
+import { useAuthStore } from '../../../stores/authStore';
+import {
+  ThemedText,
+  Card,
+  Chip,
+  Badge,
+  Avatar,
+  AvatarStack,
+  AnswerFooter,
+  EmptyState,
+  colorForName,
+} from '../../../components/ui';
+import { colors, spacing } from '../../../theme/tokens';
 
-export default function HomeScreen() {
+type Filter = 'all' | 'needs' | 'happening';
+
+const fmtDay = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+const fmtTime = (iso: string) =>
+  new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+export default function FeedScreen() {
   const { profile, user } = useAuthStore();
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const [filter, setFilter] = useState<Filter>('all');
 
   const { data: plans, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['home-plans', user?.id],
     queryFn: async () => {
-      // First get user's group IDs
       const { data: memberships, error: memberError } = await supabase
         .from('group_members')
         .select('group_id')
         .eq('user_id', user?.id);
 
       if (memberError) throw memberError;
-      if (!memberships || memberships.length === 0) return [];
+      const groupIds = (memberships ?? []).map((m) => m.group_id);
+      if (groupIds.length === 0) return [];
 
-      const groupIds = memberships.map((m) => m.group_id);
-
-      // Get all plans from user's groups with RSVPs and date availabilities
       const { data, error } = await supabase
         .from('plans')
-        .select(`
-          *,
+        .select(
+          `*,
           groups(id, name),
-          rsvps(user_id, response),
-          plan_date_options(id, date, date_availability(user_id))
-        `)
+          rsvps(user_id, response, profile:profiles(display_name)),
+          plan_date_options(id, date, date_availability(user_id, profile:profiles(display_name)))`
+        )
         .in('group_id', groupIds)
         .neq('status', 'cancelled')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return data || [];
+      return data ?? [];
     },
     enabled: !!user,
   });
 
-  // Filter for "Upcoming Plans" - confirmed plans where user is participating
-  const upcomingPlans = plans?.filter((plan: any) => {
-    const { dateOptions, availabilities } = flattenNestedOptions(plan.plan_date_options);
-    const planData = {
-      plan_type: plan.plan_type,
-      status: plan.status,
-      min_people: plan.min_people,
-      rsvps: plan.rsvps,
-      dateOptions,
-      availabilities,
-    };
-    return isUserParticipating(planData, user?.id) && isPlanConfirmed(planData);
-  }) || [];
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['home-plans'] });
 
-  // Filter for "Needs Your Response" - open plans user hasn't responded to
-  const needsResponsePlans = plans?.filter((plan: any) => {
-    const { availabilities } = flattenNestedOptions(plan.plan_date_options);
-    return needsUserResponse(
-      { plan_type: plan.plan_type, status: plan.status, rsvps: plan.rsvps, availabilities },
-      user?.id
-    );
-  }) || [];
-
-  const formatDate = (plan: any) => {
-    if (plan.locked_date) {
-      return new Date(plan.locked_date).toLocaleDateString('en-US', {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
-      });
-    }
-    if (plan.event_date) {
-      return new Date(plan.event_date).toLocaleDateString('en-US', {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
-      });
-    }
-    // For flexible plans, find the earliest date that meets minimum people
-    if (plan.plan_date_options?.length > 0) {
-      const { dateOptions, availabilities } = flattenNestedOptions(plan.plan_date_options);
-      const earliest = earliestViableDate(
-        countAvailabilityByDate(dateOptions, availabilities),
-        plan.min_people
+  const answerFixed = useMutation({
+    mutationFn: async ({ planId, response }: { planId: string; response: 'yes' | 'no' }) => {
+      const { error } = await supabase.from('rsvps').upsert(
+        { plan_id: planId, user_id: user?.id, response },
+        { onConflict: 'plan_id,user_id' }
       );
+      if (error) throw error;
+    },
+    onSuccess: invalidate,
+    onError: (error: Error) => Alert.alert('Error', error.message),
+  });
 
-      if (earliest) {
-        return new Date(earliest).toLocaleDateString('en-US', {
-          weekday: 'short',
-          month: 'short',
-          day: 'numeric',
-        });
+  const clearAnswer = useMutation({
+    mutationFn: async (planId: string) => {
+      const { error } = await supabase
+        .from('rsvps')
+        .delete()
+        .eq('plan_id', planId)
+        .eq('user_id', user!.id);
+      if (error) throw error;
+    },
+    onSuccess: invalidate,
+    onError: (error: Error) => Alert.alert('Error', error.message),
+  });
+
+  const declineFlexible = useMutation({
+    mutationFn: async ({ planId, optionIds }: { planId: string; optionIds: string[] }) => {
+      const { error } = await supabase.from('rsvps').upsert(
+        { plan_id: planId, user_id: user?.id, response: 'no' },
+        { onConflict: 'plan_id,user_id' }
+      );
+      if (error) throw error;
+      if (optionIds.length > 0) {
+        const { error: availError } = await supabase
+          .from('date_availability')
+          .delete()
+          .eq('user_id', user!.id)
+          .in('date_option_id', optionIds);
+        if (availError) throw availError;
       }
-      return `${plan.plan_date_options.length} date options`;
-    }
-    return 'No date set';
-  };
+    },
+    onSuccess: invalidate,
+    onError: (error: Error) => Alert.alert('Error', error.message),
+  });
 
-  const onRefresh = async () => {
-    await refetch();
+  const decorated = useMemo(() => {
+    return (plans ?? []).map((plan: any) => {
+      const { dateOptions, availabilities } = flattenNestedOptions(plan.plan_date_options);
+      const planData = {
+        plan_type: plan.plan_type,
+        status: plan.status,
+        min_people: plan.min_people,
+        rsvps: plan.rsvps,
+        dateOptions,
+        availabilities,
+      };
+      const confirmed = isPlanConfirmed(planData);
+      const needs = needsUserResponse(planData, user?.id);
+      const userRsvp = (plan.rsvps ?? []).find((r: any) => r.user_id === user?.id);
+      const myDates = availabilities.filter((a) => a.user_id === user?.id).length;
+      const countByDate = countAvailabilityByDate(dateOptions, availabilities);
+
+      let when: string;
+      if (plan.locked_date) {
+        when = `${fmtDay(plan.locked_date)} · ${fmtTime(plan.locked_date)}`;
+      } else if (plan.event_date) {
+        when = `${fmtDay(plan.event_date)} · ${fmtTime(plan.event_date)}`;
+      } else {
+        const viable = earliestViableDate(countByDate, plan.min_people);
+        when = viable
+          ? `Leading date ${fmtDay(viable)}`
+          : `${dateOptions.length} date${dateOptions.length === 1 ? '' : 's'} on the table`;
+      }
+
+      let goingNames: string[];
+      if (plan.plan_type === 'fixed') {
+        goingNames = (plan.rsvps ?? [])
+          .filter((r: any) => r.response === 'yes')
+          .map((r: any) => r.profile?.display_name ?? '?');
+      } else {
+        const seen = new Map<string, string>();
+        (plan.plan_date_options ?? []).forEach((opt: any) =>
+          (opt.date_availability ?? []).forEach((a: any) => {
+            seen.set(a.user_id, a.profile?.display_name ?? '?');
+          })
+        );
+        goingNames = [...seen.values()];
+      }
+
+      const sortDate =
+        plan.locked_date ?? plan.event_date ?? earliestViableDate(countByDate, plan.min_people);
+
+      return {
+        plan,
+        confirmed,
+        needs,
+        userRsvp,
+        myDates,
+        when,
+        goingNames,
+        optionIds: dateOptions.map((o) => o.id),
+        sortKey: sortDate ? new Date(sortDate).getTime() : Number.MAX_SAFE_INTEGER,
+      };
+    });
+  }, [plans, user?.id]);
+
+  const visible = useMemo(() => {
+    const filtered = decorated.filter((d) =>
+      filter === 'needs' ? d.needs : filter === 'happening' ? d.confirmed : true
+    );
+    return filtered.sort((a, b) =>
+      a.needs !== b.needs ? (a.needs ? -1 : 1) : a.sortKey - b.sortKey
+    );
+  }, [decorated, filter]);
+
+  const openPlan = (planId: string) => router.push(`/(app)/plan/${planId}`);
+
+  const renderAnswer = (d: (typeof decorated)[number]) => {
+    const { plan } = d;
+    if (plan.status !== 'open') return null;
+
+    if (plan.plan_type === 'fixed') {
+      if (d.userRsvp?.response === 'yes' || d.userRsvp?.response === 'no') {
+        return (
+          <AnswerFooter
+            size="md"
+            answered={d.userRsvp.response}
+            onChange={() => clearAnswer.mutate(plan.id)}
+          />
+        );
+      }
+      return (
+        <AnswerFooter
+          size="md"
+          onYes={() => answerFixed.mutate({ planId: plan.id, response: 'yes' })}
+          onNo={() => answerFixed.mutate({ planId: plan.id, response: 'no' })}
+        />
+      );
+    }
+
+    // Flexible: picking dates lives on the detail screen for now — the next
+    // slice moves the date chips inline into this card.
+    if (d.userRsvp?.response === 'no') {
+      return (
+        <AnswerFooter size="md" answered="no" onChange={() => clearAnswer.mutate(plan.id)} />
+      );
+    }
+    if (d.myDates > 0) {
+      return (
+        <AnswerFooter
+          size="md"
+          answered="yes"
+          answerLabel={`You sent ${d.myDates} date${d.myDates === 1 ? '' : 's'}`}
+          onChange={() => openPlan(plan.id)}
+        />
+      );
+    }
+    return (
+      <AnswerFooter
+        size="md"
+        yesLabel="Pick dates"
+        onYes={() => openPlan(plan.id)}
+        onNo={() => declineFlexible.mutate({ planId: plan.id, optionIds: d.optionIds })}
+      />
+    );
   };
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl refreshing={isRefetching} onRefresh={onRefresh} tintColor={COLORS.primary} />
-      }
-    >
-      <View style={styles.welcomeCard}>
-        <Text style={styles.welcomeText}>
-          Welcome back, {profile?.display_name || 'Friend'}!
-        </Text>
-        <Text style={styles.welcomeSubtext}>
-          Ready for your next adventure?
-        </Text>
+    <SafeAreaView style={styles.screen} edges={['top']}>
+      <View style={styles.header}>
+        <ThemedText variant="headerTitle">Planazo</ThemedText>
+        <Pressable
+          onPress={() => router.push('/(app)/profile')}
+          accessibilityRole="button"
+          accessibilityLabel="Profile"
+          testID="feed-avatar"
+        >
+          <Avatar name={profile?.display_name ?? '?'} dark size={36} imageUrl={profile?.avatar_url} />
+        </Pressable>
       </View>
 
-      {/* Needs Your Response Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Needs Your Response</Text>
-        {isLoading ? (
-          <View style={styles.loadingState}>
-            <ActivityIndicator color={COLORS.primary} />
-          </View>
-        ) : needsResponsePlans.length > 0 ? (
-          <View style={styles.planList}>
-            {needsResponsePlans.map((plan: any) => (
-              <TouchableOpacity
-                key={plan.id}
-                style={styles.planCardUrgent}
-                onPress={() => router.push(`/(app)/plan/${plan.id}`)}
-              >
-                <View style={styles.urgentIndicator} />
-                <View style={styles.planCardContent}>
-                  <View style={styles.planHeader}>
-                    <Text style={styles.planType}>
-                      {plan.plan_type === 'fixed' ? '📅' : '🗓️'}
-                    </Text>
-                    <Text style={styles.planTitle}>{plan.title}</Text>
-                  </View>
-                  <Text style={styles.planGroup}>{plan.groups?.name}</Text>
-                  <Text style={styles.planDate}>{formatDate(plan)}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        ) : (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyEmoji}>✅</Text>
-            <Text style={styles.emptyText}>All caught up!</Text>
-            <Text style={styles.emptySubtext}>
-              No pending plans requiring your response
-            </Text>
-          </View>
-        )}
+      <View style={styles.filters}>
+        <Chip label="All" active={filter === 'all'} onPress={() => setFilter('all')} />
+        <Chip label="Needs answer" active={filter === 'needs'} onPress={() => setFilter('needs')} />
+        <Chip
+          label="Happening"
+          active={filter === 'happening'}
+          onPress={() => setFilter('happening')}
+        />
       </View>
 
-      {/* Upcoming Plans Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Upcoming Plans</Text>
-        {isLoading ? (
-          <View style={styles.loadingState}>
-            <ActivityIndicator color={COLORS.primary} />
-          </View>
-        ) : upcomingPlans.length > 0 ? (
-          <View style={styles.planList}>
-            {upcomingPlans.map((plan: any) => (
-              <TouchableOpacity
-                key={plan.id}
-                style={styles.planCard}
-                onPress={() => router.push(`/(app)/plan/${plan.id}`)}
-              >
-                <View style={styles.planHeader}>
-                  <Text style={styles.planType}>
-                    {plan.plan_type === 'fixed' ? '📅' : '🗓️'}
-                  </Text>
-                  <Text style={styles.planTitle}>{plan.title}</Text>
-                </View>
-                <Text style={styles.planGroup}>{plan.groups?.name}</Text>
-                <Text style={styles.planDatePrimary}>{formatDate(plan)}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        ) : (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyEmoji}>📅</Text>
-            <Text style={styles.emptyText}>No upcoming plans yet</Text>
-            <Text style={styles.emptySubtext}>
-              Join a group and RSVP to plans!
-            </Text>
-          </View>
-        )}
-      </View>
-    </ScrollView>
+      {isLoading ? (
+        <View style={styles.loading}>
+          <ActivityIndicator size="large" color={colors.accent} />
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.list}
+          contentContainerStyle={styles.listContent}
+          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} />}
+        >
+          {visible.length === 0 ? (
+            <EmptyState
+              title={filter === 'needs' ? 'Nothing to answer' : 'Nothing on the table'}
+              body={
+                filter === 'needs'
+                  ? 'When someone in a group proposes a plan, it lands here.'
+                  : 'Start something — pick a group, throw out a date or a few, and see who bites.'
+              }
+              ctaLabel="Start a plan"
+              onPress={() => router.push('/(app)/plan/create')}
+            />
+          ) : (
+            visible.map((d) => {
+              const groupName = d.plan.groups?.name ?? 'Group';
+              const groupColor = colorForName(groupName);
+              return (
+                <Card key={d.plan.id} stripeColor={groupColor} testID={`plan-card-${d.plan.id}`}>
+                  <Pressable onPress={() => openPlan(d.plan.id)}>
+                    <View style={styles.cardTop}>
+                      <View style={styles.groupRow}>
+                        <View style={[styles.swatch, { backgroundColor: groupColor }]} />
+                        <ThemedText variant="caption" color={colors.textSecondary}>
+                          {groupName}
+                        </ThemedText>
+                      </View>
+                      <Badge
+                        label={d.confirmed ? 'Confirmed' : 'Open'}
+                        tone={d.confirmed ? 'confirmed' : 'open'}
+                        uppercase
+                      />
+                    </View>
+
+                    <ThemedText variant="cardTitle" style={styles.title}>
+                      {d.plan.title}
+                    </ThemedText>
+                    <ThemedText variant="bodyStrong">{d.when}</ThemedText>
+                    {d.plan.location || d.plan.description ? (
+                      <ThemedText variant="sub" numberOfLines={1} style={styles.sub}>
+                        {d.plan.location ?? d.plan.description}
+                      </ThemedText>
+                    ) : null}
+
+                    {d.goingNames.length > 0 ? (
+                      <View style={styles.faces}>
+                        <AvatarStack
+                          names={d.goingNames}
+                          label={`${d.goingNames.length} in · needs ${d.plan.min_people}`}
+                        />
+                      </View>
+                    ) : null}
+                  </Pressable>
+
+                  <View style={styles.answer}>{renderAnswer(d)}</View>
+                </Card>
+              );
+            })
+          )}
+        </ScrollView>
+      )}
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    backgroundColor: COLORS.gray[50],
+    backgroundColor: colors.background,
   },
-  content: {
-    padding: 16,
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
   },
-  welcomeCard: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 16,
-    padding: 24,
-    marginBottom: 24,
+  filters: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.md,
   },
-  welcomeText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: COLORS.white,
-    marginBottom: 4,
-  },
-  welcomeSubtext: {
-    fontSize: 16,
-    color: COLORS.white,
-    opacity: 0.9,
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.gray[900],
-    marginBottom: 12,
-  },
-  loadingState: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    padding: 32,
+  loading: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  planList: {
-    gap: 12,
-  },
-  planCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    padding: 16,
-  },
-  planCardUrgent: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    flexDirection: 'row',
-    overflow: 'hidden',
-  },
-  urgentIndicator: {
-    width: 4,
-    backgroundColor: COLORS.primary,
-  },
-  planCardContent: {
+  list: {
     flex: 1,
-    padding: 16,
   },
-  planHeader: {
+  listContent: {
+    paddingHorizontal: spacing.xl,
+    paddingBottom: 120,
+    gap: spacing.lg,
+  },
+  cardTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  groupRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
+    gap: 7,
   },
-  planType: {
-    fontSize: 18,
+  swatch: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
   },
-  planTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.gray[900],
-    flex: 1,
+  title: {
+    marginBottom: spacing.xs,
   },
-  planGroup: {
-    fontSize: 14,
-    color: COLORS.gray[500],
-    marginBottom: 4,
+  sub: {
+    marginTop: spacing.xxs,
   },
-  planDate: {
-    fontSize: 14,
-    color: COLORS.gray[600],
+  faces: {
+    marginTop: spacing.md,
   },
-  planDatePrimary: {
-    fontSize: 14,
-    color: COLORS.primary,
-    fontWeight: '500',
-  },
-  emptyState: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    padding: 32,
-    alignItems: 'center',
-  },
-  emptyEmoji: {
-    fontSize: 48,
-    marginBottom: 12,
-  },
-  emptyText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.gray[700],
-    marginBottom: 4,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: COLORS.gray[500],
-    textAlign: 'center',
+  answer: {
+    marginTop: spacing.md,
   },
 });

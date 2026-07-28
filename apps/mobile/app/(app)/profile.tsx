@@ -5,9 +5,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
-import { supabase } from '../../../lib/supabase';
-import { useAuthStore } from '../../../stores/authStore';
-import { COLORS } from '../../../constants/colors';
+import { supabase } from '../../lib/supabase';
+import { useAuthStore } from '../../stores/authStore';
+import { COLORS } from '../../constants/colors';
 
 export default function ProfileScreen() {
   const router = useRouter();
