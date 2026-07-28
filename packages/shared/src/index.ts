@@ -207,3 +207,13 @@ export interface UpdateAvailabilityRequest {
 
 // Plan domain logic (single source of truth for confirmation math)
 export * from './plan-logic';
+
+// Generated from the Supabase schema — regenerate with `pnpm db:gen:types`
+// after adding a migration. Do not edit by hand.
+export type {
+  Database,
+  Tables,
+  TablesInsert,
+  TablesUpdate,
+  Enums,
+} from './database.types';

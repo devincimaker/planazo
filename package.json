@@ -10,6 +10,7 @@
     "db:reset": "npx supabase db reset",
     "db:diff": "npx supabase db diff",
     "db:migrate:new": "npx supabase migration new",
+    "db:gen:types": "npx supabase gen types typescript --local > packages/shared/src/database.types.ts",
     "db:seed:demo": "node scripts/seed-demo-data.mjs",
     "test": "turbo test"
   },
