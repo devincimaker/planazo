@@ -22,12 +22,13 @@ cd apps/mobile && npx expo run:ios --device "$IOS_SIMULATOR" --no-bundler
 npx expo start --port $EXPO_PORT &
 
 # 4. Launch the app with a deep link to the correct Metro port
-xcrun simctl openurl "$UDID" "exp+habits-coach://expo-development-client/?url=http%3A%2F%2Flocalhost%3A$EXPO_PORT"
+xcrun simctl openurl "$UDID" "com.planazo.app://expo-development-client/?url=http%3A%2F%2Flocalhost%3A$EXPO_PORT"
 ```
 
 **Why?**
 - Expo's deep links can open on any booted simulator with the app installed, not the one you specified. Using `--no-bundler` and launching by UDID ensures the correct simulator.
 - The Dev Client discovers all Metro bundlers on the network. Using `openurl` with the specific port URL forces it to connect to the correct one instead of showing a picker or auto-connecting to the wrong server.
+- If `EXPO_PORT` is occupied by another project's Metro (other apps in ~/Solopreneur run their own), start Metro on a free port instead and put that port in the `openurl` URL — do not kill the other project's bundler.
 
 #### Native Packages Require Rebuild
 
