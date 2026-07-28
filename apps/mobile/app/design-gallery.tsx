@@ -1,5 +1,5 @@
 import { ScrollView, View, StyleSheet } from 'react-native';
-import { Redirect } from 'expo-router';
+import { Redirect, useLocalSearchParams } from 'expo-router';
 import {
   ThemedText,
   Button,
@@ -30,12 +30,20 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export default function DesignGallery() {
+  // Screenshot-tooling affordances (simctl cannot scroll): ?tail=1 renders
+  // sections bottom-up; ?y=<px> starts the scroll at an offset.
+  const { tail, y } = useLocalSearchParams<{ tail?: string; y?: string }>();
+
   if (!__DEV__) {
     return <Redirect href="/" />;
   }
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.screen}
+      contentOffset={y ? { x: 0, y: Number(y) } : undefined}
+      contentContainerStyle={[styles.content, tail === '1' && styles.reversed]}
+    >
       <ThemedText variant="screenTitle">Design gallery</ThemedText>
       <ThemedText variant="sub">Every component in the kit, all states.</ThemedText>
 
@@ -141,6 +149,9 @@ const styles = StyleSheet.create({
     paddingTop: 72,
     paddingBottom: 64,
     gap: spacing.md,
+  },
+  reversed: {
+    flexDirection: 'column-reverse',
   },
   section: {
     gap: spacing.md,

@@ -85,7 +85,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   noButton: {
-    flexBasis: 130,
+    flexBasis: 150,
     flexGrow: 0,
   },
   yesButton: {
