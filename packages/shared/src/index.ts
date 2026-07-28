@@ -204,3 +204,6 @@ export interface UpdateAvailabilityRequest {
   date_option_id: string;
   available: boolean;
 }
+
+// Plan domain logic (single source of truth for confirmation math)
+export * from './plan-logic';

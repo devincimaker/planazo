@@ -4,6 +4,14 @@ import { useRouter } from 'expo-router';
 import { COLORS } from '../../../constants/colors';
 import { useAuthStore } from '../../../stores/authStore';
 import { supabase } from '../../../lib/supabase';
+import {
+  countAvailabilityByDate,
+  earliestViableDate,
+  flattenNestedOptions,
+  isPlanConfirmed,
+  isUserParticipating,
+  needsUserResponse,
+} from '@planazo/shared';
 
 export default function HomeScreen() {
   const { profile, user } = useAuthStore();
@@ -44,48 +52,25 @@ export default function HomeScreen() {
 
   // Filter for "Upcoming Plans" - confirmed plans where user is participating
   const upcomingPlans = plans?.filter((plan: any) => {
-    // Check if user is participating
-    let userParticipating = false;
-    if (plan.plan_type === 'fixed') {
-      const userRsvp = plan.rsvps?.find((r: any) => r.user_id === user?.id);
-      userParticipating = userRsvp?.response === 'yes';
-    } else {
-      userParticipating = plan.plan_date_options?.some((opt: any) =>
-        opt.date_availability?.some((a: any) => a.user_id === user?.id)
-      );
-    }
-    if (!userParticipating) return false;
-
-    // Check if plan is confirmed (has enough people)
-    if (plan.plan_type === 'fixed') {
-      const yesCount = plan.rsvps?.filter((r: any) => r.response === 'yes').length || 0;
-      return yesCount >= plan.min_people;
-    } else {
-      // For flexible: any date has enough people
-      return plan.plan_date_options?.some((opt: any) => {
-        const count = opt.date_availability?.length || 0;
-        return count >= plan.min_people;
-      });
-    }
+    const { dateOptions, availabilities } = flattenNestedOptions(plan.plan_date_options);
+    const planData = {
+      plan_type: plan.plan_type,
+      status: plan.status,
+      min_people: plan.min_people,
+      rsvps: plan.rsvps,
+      dateOptions,
+      availabilities,
+    };
+    return isUserParticipating(planData, user?.id) && isPlanConfirmed(planData);
   }) || [];
 
   // Filter for "Needs Your Response" - open plans user hasn't responded to
   const needsResponsePlans = plans?.filter((plan: any) => {
-    if (plan.status !== 'open') return false;
-
-    if (plan.plan_type === 'fixed') {
-      const userRsvp = plan.rsvps?.find((r: any) => r.user_id === user?.id);
-      return !userRsvp || userRsvp.response === null;
-    } else {
-      // For flexible: check if user declined OR has availability
-      const userRsvp = plan.rsvps?.find((r: any) => r.user_id === user?.id);
-      if (userRsvp?.response === 'no') return false; // Declined
-
-      const hasAvailability = plan.plan_date_options?.some((opt: any) =>
-        opt.date_availability?.some((a: any) => a.user_id === user?.id)
-      );
-      return !hasAvailability;
-    }
+    const { availabilities } = flattenNestedOptions(plan.plan_date_options);
+    return needsUserResponse(
+      { plan_type: plan.plan_type, status: plan.status, rsvps: plan.rsvps, availabilities },
+      user?.id
+    );
   }) || [];
 
   const formatDate = (plan: any) => {
@@ -105,16 +90,14 @@ export default function HomeScreen() {
     }
     // For flexible plans, find the earliest date that meets minimum people
     if (plan.plan_date_options?.length > 0) {
-      const bestOption = plan.plan_date_options
-        .map((opt: any) => ({
-          date: opt.date,
-          count: opt.date_availability?.length || 0,
-        }))
-        .filter((opt: any) => opt.count >= plan.min_people)
-        .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
+      const { dateOptions, availabilities } = flattenNestedOptions(plan.plan_date_options);
+      const earliest = earliestViableDate(
+        countAvailabilityByDate(dateOptions, availabilities),
+        plan.min_people
+      );
 
-      if (bestOption) {
-        return new Date(bestOption.date).toLocaleDateString('en-US', {
+      if (earliest) {
+        return new Date(earliest).toLocaleDateString('en-US', {
           weekday: 'short',
           month: 'short',
           day: 'numeric',
