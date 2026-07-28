@@ -5,14 +5,17 @@
     "dev": "turbo dev --ui tui",
     "build": "turbo build",
     "lint": "turbo lint",
-    "dev:api": "turbo dev --filter=api",
     "dev:mobile": "turbo dev --filter=mobile",
     "db:push": "npx supabase db push",
     "db:reset": "npx supabase db reset",
     "db:diff": "npx supabase db diff",
-    "db:migrate:new": "npx supabase migration new"
+    "db:migrate:new": "npx supabase migration new",
+    "db:seed:demo": "node scripts/seed-demo-data.mjs",
+    "test": "turbo test"
   },
   "devDependencies": {
+    "@supabase/supabase-js": "^2.89.0",
+    "dotenv": "^16.4.5",
     "turbo": "^2.3.0"
   },
   "packageManager": "pnpm@9.15.1"
