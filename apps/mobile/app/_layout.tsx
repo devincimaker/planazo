@@ -14,39 +14,88 @@ function InitialLayout() {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session?.user) {
-        supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single()
-          .then(({ data }) => {
-            if (data) setProfile(data);
-          });
+    let isMounted = true;
+
+    async function syncProfile(userId: string) {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        throw error;
       }
-      setIsLoading(false);
-      setIsReady(true);
-    });
+
+      if (isMounted) {
+        setProfile(data);
+      }
+    }
+
+    async function initialize() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!isMounted) return;
+
+        setSession(session);
+        if (session?.user) {
+          await syncProfile(session.user.id);
+        } else {
+          setProfile(null);
+        }
+      } catch (error) {
+        console.error(
+          'Failed to initialize Supabase session. Check EXPO_PUBLIC_SUPABASE_URL and that the host is reachable from the simulator.',
+          error
+        );
+        try {
+          await supabase.auth.signOut({ scope: 'local' });
+        } catch (signOutError) {
+          console.error('Failed to clear the local Supabase session after initialization error.', signOutError);
+        }
+        if (isMounted) {
+          setSession(null);
+          setProfile(null);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+          setIsReady(true);
+        }
+      }
+    }
+
+    async function handleAuthStateChange(session: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session']) {
+      setSession(session);
+
+      if (!session?.user) {
+        setProfile(null);
+        return;
+      }
+
+      try {
+        await syncProfile(session.user.id);
+      } catch (error) {
+        console.error(
+          'Failed to load Supabase profile after auth change. Check EXPO_PUBLIC_SUPABASE_URL and that the host is reachable from the simulator.',
+          error
+        );
+        if (isMounted) {
+          setProfile(null);
+        }
+      }
+    }
+
+    void initialize();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session?.user) {
-        supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single()
-          .then(({ data }) => {
-            if (data) setProfile(data);
-          });
-      } else {
-        setProfile(null);
-      }
+      void handleAuthStateChange(session);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   if (!isReady || isLoading) {

@@ -273,8 +273,8 @@ export default function PlanDetailScreen() {
       const meetsMinimum = count >= plan.min_people;
 
       // Color based on availability count
-      let dotColor = COLORS.gray[300];
-      let selectedColor = COLORS.gray[100];
+      let dotColor: string = COLORS.gray[300];
+      let selectedColor: string = COLORS.gray[100];
 
       if (count > 0) {
         const ratio = Math.min(count / plan.min_people, 1);

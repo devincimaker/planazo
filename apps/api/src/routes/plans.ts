@@ -1,6 +1,11 @@
 import { Router, Response } from 'express';
 import { supabaseAdmin } from '../config/supabase.js';
 import { authMiddleware, AuthenticatedRequest } from '../middleware/auth.js';
+import {
+  countAvailabilityByDate,
+  findViableDates,
+  getUsersForDateOption,
+} from '../utils/plan-utils.js';
 
 export const planRoutes = Router();
 
@@ -88,22 +93,9 @@ planRoutes.post('/:planId/check-lock', async (req: AuthenticatedRequest, res: Re
         return res.json({ message: 'No availabilities', locked: false });
       }
 
-      // Count per date option
-      const countByDate: Record<string, { count: number; date: string }> = {};
-      dateOptions.forEach((opt) => {
-        countByDate[opt.id] = { count: 0, date: opt.date };
-      });
-
-      availabilities.forEach((a) => {
-        if (countByDate[a.date_option_id]) {
-          countByDate[a.date_option_id].count++;
-        }
-      });
-
-      // Find dates with enough people
-      const viableDates = Object.entries(countByDate)
-        .filter(([_, val]) => val.count >= plan.min_people)
-        .sort((a, b) => b[1].count - a[1].count);
+      // Count per date option and find dates with enough people
+      const countByDate = countAvailabilityByDate(dateOptions, availabilities);
+      const viableDates = findViableDates(countByDate, plan.min_people);
 
       if (viableDates.length > 0) {
         // Pick the date with most availability
@@ -121,9 +113,7 @@ planRoutes.post('/:planId/check-lock', async (req: AuthenticatedRequest, res: Re
 
         // Create notifications for available users on that date
         const dateOptionId = viableDates[0][0];
-        const availableUsers = availabilities
-          .filter((a) => a.date_option_id === dateOptionId)
-          .map((a) => a.user_id);
+        const availableUsers = getUsersForDateOption(availabilities, dateOptionId);
 
         const notifications = availableUsers.map((userId) => ({
           user_id: userId,

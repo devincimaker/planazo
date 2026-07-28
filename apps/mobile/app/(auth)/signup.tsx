@@ -95,63 +95,67 @@ export default function SignupScreen() {
       return;
     }
 
-    setLoading(true);
-    const { data, error } = await supabase.auth.signUp({
-      email: email.trim().toLowerCase(),
-      password,
-      options: {
-        data: {
-          display_name: displayName.trim(),
+    try {
+      setLoading(true);
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim().toLowerCase(),
+        password,
+        options: {
+          data: {
+            display_name: displayName.trim(),
+          },
         },
-      },
-    });
+      });
 
-    if (error) {
-      Alert.alert('Error', error.message);
-      setLoading(false);
-      return;
-    }
+      if (error) {
+        Alert.alert('Error', error.message);
+        return;
+      }
 
-    // If session exists (email confirmation disabled), go to app
-    if (data.session) {
-      setSession(data.session);
+      // If session exists (email confirmation disabled), go to app
+      if (data.session) {
+        setSession(data.session);
 
-      // Upload avatar if selected
-      let avatarUrl: string | null = null;
-      if (avatarUri && data.session.user) {
-        avatarUrl = await uploadAvatar(data.session.user.id);
+        // Upload avatar if selected
+        let avatarUrl: string | null = null;
+        if (avatarUri && data.session.user) {
+          avatarUrl = await uploadAvatar(data.session.user.id);
 
-        // Update profile with avatar URL
-        if (avatarUrl) {
-          await supabase
+          // Update profile with avatar URL
+          if (avatarUrl) {
+            await supabase
+              .from('profiles')
+              .update({ avatar_url: avatarUrl })
+              .eq('id', data.session.user.id);
+          }
+        }
+
+        // Fetch profile (created by trigger)
+        if (data.session.user) {
+          const { data: profile } = await supabase
             .from('profiles')
-            .update({ avatar_url: avatarUrl })
-            .eq('id', data.session.user.id);
+            .select('*')
+            .eq('id', data.session.user.id)
+            .single();
+
+          if (profile) {
+            setProfile(profile);
+          }
         }
+
+        router.replace('/(app)/(tabs)');
+      } else {
+        // Email confirmation required
+        Alert.alert(
+          'Success',
+          'Account created! Please check your email to verify your account.',
+          [{ text: 'OK' }]
+        );
       }
-
-      // Fetch profile (created by trigger)
-      if (data.session.user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', data.session.user.id)
-          .single();
-
-        if (profile) {
-          setProfile(profile);
-        }
-      }
-
-      setLoading(false);
-      router.replace('/(app)/(tabs)');
-    } else {
-      // Email confirmation required
-      Alert.alert(
-        'Success',
-        'Account created! Please check your email to verify your account.',
-        [{ text: 'OK' }]
-      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unexpected signup error';
+      Alert.alert('Network Error', message);
+    } finally {
       setLoading(false);
     }
   }

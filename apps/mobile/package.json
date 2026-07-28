@@ -11,6 +11,7 @@
     "expo": "expo"
   },
   "dependencies": {
+    "@planazo/shared": "workspace:*",
     "@react-native-community/datetimepicker": "^8.4.4",
     "@supabase/supabase-js": "^2.89.0",
     "@tanstack/react-query": "^5.90.14",

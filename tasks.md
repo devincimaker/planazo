@@ -9,6 +9,7 @@ To-Do:
 [ ] You should be able to create an event from the home, and select in which group you want it to go.
 [ ] Launch it for Android
 [ ] Add quick actions to the events, the ones where it's easy to do at least.
+[ ] Add a photo album to each event so people can attach and view shared photos.
 [ ] Add groupless events.
 [ ] Add friends
 

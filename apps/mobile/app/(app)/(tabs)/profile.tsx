@@ -20,7 +20,7 @@ export default function ProfileScreen() {
 
   const updateProfile = useMutation({
     mutationFn: async () => {
-      const updates: { display_name: string; avatar_url?: string } = {
+      const updates: { display_name: string; avatar_url?: string | null } = {
         display_name: displayName.trim(),
       };
       if (avatarUrl !== profile?.avatar_url) {

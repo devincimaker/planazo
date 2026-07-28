@@ -2,8 +2,34 @@ import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
 
-const supabaseUrl = 'https://zorflbkhfashxojvqplz.supabase.co';
-const supabaseAnonKey = 'sb_publishable_ASny6OVK0oD0WTgcaaGLgw_UL8P2_yh';
+function getRequiredEnv(name: 'EXPO_PUBLIC_SUPABASE_URL' | 'EXPO_PUBLIC_SUPABASE_ANON_KEY') {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(`Missing required env var: ${name}`);
+  }
+  return value;
+}
+
+const supabaseUrl = getRequiredEnv('EXPO_PUBLIC_SUPABASE_URL').replace(/\/+$/, '');
+const supabaseAnonKey = getRequiredEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY');
+
+const supabaseFetch: typeof fetch = async (input, init) => {
+  try {
+    return await fetch(input, init);
+  } catch (error) {
+    const target =
+      typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+
+    const message = error instanceof Error ? error.message : 'Unknown network error';
+    throw new Error(
+      `Failed to reach Supabase at ${target}. Check EXPO_PUBLIC_SUPABASE_URL and that the host resolves from the simulator. Original error: ${message}`
+    );
+  }
+};
 
 const ExpoSecureStoreAdapter = {
   getItem: (key: string) => {
@@ -18,6 +44,9 @@ const ExpoSecureStoreAdapter = {
 };
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  global: {
+    fetch: supabaseFetch,
+  },
   auth: {
     storage: ExpoSecureStoreAdapter,
     autoRefreshToken: true,
