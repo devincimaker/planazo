@@ -71,7 +71,7 @@ export function AnswerFooter({
         variant="secondary"
         size={size}
         onPress={onNo}
-        style={styles.noButton}
+        style={size === 'md' ? styles.noButtonMd : styles.noButton}
         testID="answer-no"
       />
       <Button label={yesLabel} size={size} onPress={onYes} style={styles.yesButton} testID="answer-yes" />
@@ -86,6 +86,10 @@ const styles = StyleSheet.create({
   },
   noButton: {
     flexBasis: 150,
+    flexGrow: 0,
+  },
+  noButtonMd: {
+    flexBasis: 118,
     flexGrow: 0,
   },
   yesButton: {

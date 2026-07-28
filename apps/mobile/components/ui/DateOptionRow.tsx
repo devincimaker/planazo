@@ -58,8 +58,8 @@ const styles = StyleSheet.create({
     borderColor: colors.accent,
   },
   unselected: {
-    backgroundColor: colors.surface,
-    borderColor: colors.borderStrong,
+    backgroundColor: colors.surfaceSunken,
+    borderColor: 'transparent',
   },
   pressed: {
     opacity: 0.85,
