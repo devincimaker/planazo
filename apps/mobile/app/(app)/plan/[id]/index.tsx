@@ -1,33 +1,61 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native';
-import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
+import { useMemo, useState } from 'react';
+import {
+  View,
+  ScrollView,
+  StyleSheet,
+  Pressable,
+  ActivityIndicator,
+  Alert,
+  RefreshControl,
+  Share,
+} from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Calendar, DateData } from 'react-native-calendars';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, { FadeInDown, FadeOutUp, LinearTransition } from 'react-native-reanimated';
+import {
+  countAvailabilityByDate,
+  getYesCount,
+  type DateCount,
+} from '@planazo/shared';
 import { supabase } from '../../../../lib/supabase';
 import { useAuthStore } from '../../../../stores/authStore';
-import { COLORS } from '../../../../constants/colors';
-import type { Plan, RsvpWithProfile, PlanDateOption, DateAvailability } from '@planazo/shared';
-import { getYesCount, isPlanConfirmed } from '@planazo/shared';
+import {
+  ThemedText,
+  Card,
+  Badge,
+  Avatar,
+  AnswerFooter,
+  Button,
+  SlotBar,
+  ListRow,
+  colorForName,
+} from '../../../../components/ui';
+import { colors, fonts, radii, spacing } from '../../../../theme/tokens';
+
+const fmtDay = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+const fmtTime = (iso: string) =>
+  new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
 export default function PlanDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
+  // null = not editing dates; array = local picks being edited
+  const [editingPicks, setEditingPicks] = useState<string[] | null>(null);
 
-  const { data: plan, isLoading, refetch } = useQuery({
+  const { data: plan, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['plan', id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('plans')
-        .select(`
-          *,
-          creator:profiles!plans_created_by_fkey(*)
-        `)
+        .select('*, creator:profiles!plans_created_by_fkey(display_name), groups(id, name)')
         .eq('id', id)
         .single();
-
       if (error) throw error;
-      return data as Plan & { creator: any };
+      return data as any;
     },
     enabled: !!id,
   });
@@ -37,14 +65,10 @@ export default function PlanDetailScreen() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('rsvps')
-        .select(`
-          *,
-          profile:profiles(*)
-        `)
+        .select('*, profile:profiles(display_name)')
         .eq('plan_id', id);
-
       if (error) throw error;
-      return data as RsvpWithProfile[];
+      return data as any[];
     },
     enabled: !!id,
   });
@@ -57,9 +81,8 @@ export default function PlanDetailScreen() {
         .select('*')
         .eq('plan_id', id)
         .order('date', { ascending: true });
-
       if (error) throw error;
-      return data as PlanDateOption[];
+      return data as any[];
     },
     enabled: !!id && plan?.plan_type === 'flexible',
   });
@@ -69,895 +92,689 @@ export default function PlanDetailScreen() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('date_availability')
-        .select(`
-          *,
-          profile:profiles(*)
-        `)
+        .select('*, profile:profiles(display_name)')
         .eq('plan_id', id);
-
       if (error) throw error;
-      return data as (DateAvailability & { profile: any })[];
+      return data as any[];
     },
     enabled: !!id && plan?.plan_type === 'flexible',
   });
 
-  const userRsvp = rsvps?.find((r) => r.user_id === user?.id);
+  const { data: membership } = useQuery({
+    queryKey: ['plan-membership', plan?.group_id, user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('group_members')
+        .select('role')
+        .eq('group_id', plan!.group_id)
+        .eq('user_id', user!.id)
+        .single();
+      return data;
+    },
+    enabled: !!plan?.group_id && !!user,
+  });
 
-  const updateRsvp = useMutation({
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ['plan', id] });
+    queryClient.invalidateQueries({ queryKey: ['plan-rsvps', id] });
+    queryClient.invalidateQueries({ queryKey: ['plan-availabilities', id] });
+    queryClient.invalidateQueries({ queryKey: ['home-plans'] });
+    if (plan?.group_id) {
+      queryClient.invalidateQueries({ queryKey: ['group-plans', plan.group_id] });
+    }
+  };
+
+  const answerRsvp = useMutation({
     mutationFn: async (response: 'yes' | 'no') => {
-      if (userRsvp) {
-        const { error } = await supabase
-          .from('rsvps')
-          .update({ response })
-          .eq('id', userRsvp.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from('rsvps').insert({
-          plan_id: id,
-          user_id: user?.id,
-          response,
-        });
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['plan-rsvps', id] });
-      // Also refresh group plans list so confirmed status updates there
-      if (plan?.group_id) {
-        queryClient.invalidateQueries({ queryKey: ['group-plans', plan.group_id] });
-      }
-    },
-    onError: (error) => {
-      Alert.alert('Error', error.message);
-    },
-  });
-
-  const toggleAvailability = useMutation({
-    mutationFn: async (dateOptionId: string) => {
-      const existing = availabilities?.find(
-        (a) => a.date_option_id === dateOptionId && a.user_id === user?.id
+      const { error } = await supabase.from('rsvps').upsert(
+        { plan_id: id, user_id: user?.id, response },
+        { onConflict: 'plan_id,user_id' }
       );
-
-      if (existing) {
-        const { error } = await supabase
-          .from('date_availability')
-          .delete()
-          .eq('id', existing.id);
-        if (error) throw error;
-      } else {
-        // Also remove any "no" RSVP if they're now marking availability
-        await supabase
-          .from('rsvps')
-          .delete()
-          .eq('plan_id', id)
-          .eq('user_id', user?.id)
-          .eq('response', 'no');
-
-        const { error } = await supabase.from('date_availability').insert({
-          plan_id: id,
-          user_id: user?.id,
-          date_option_id: dateOptionId,
-          available: true,
-        });
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['plan-availabilities', id] });
-      queryClient.invalidateQueries({ queryKey: ['plan-rsvps', id] });
-      queryClient.invalidateQueries({ queryKey: ['home-plans'] });
-    },
-    onError: (error) => {
-      Alert.alert('Error', error.message);
-    },
-  });
-
-  // Decline flexible plan entirely
-  const declineFlexiblePlan = useMutation({
-    mutationFn: async () => {
-      // Upsert RSVP with 'no' response
-      const { error } = await supabase
-        .from('rsvps')
-        .upsert({
-          plan_id: id,
-          user_id: user?.id,
-          response: 'no',
-        }, { onConflict: 'plan_id,user_id' });
       if (error) throw error;
-
-      // Remove any date availabilities
-      if (dateOptions && dateOptions.length > 0) {
-        const { error: availError } = await supabase
-          .from('date_availability')
-          .delete()
-          .eq('user_id', user?.id)
-          .in('date_option_id', dateOptions.map(o => o.id));
-        if (availError) throw availError;
-      }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['plan-rsvps', id] });
-      queryClient.invalidateQueries({ queryKey: ['plan-availabilities', id] });
-      queryClient.invalidateQueries({ queryKey: ['home-plans'] });
-    },
-    onError: (error: any) => {
-      Alert.alert('Error', error.message);
-    },
+    onSuccess: invalidateAll,
+    onError: (error: Error) => Alert.alert('Error', error.message),
   });
 
-  // Undo decline for flexible plan
-  const undoDeclineFlexiblePlan = useMutation({
+  const clearRsvp = useMutation({
     mutationFn: async () => {
       const { error } = await supabase
         .from('rsvps')
         .delete()
         .eq('plan_id', id)
-        .eq('user_id', user?.id);
+        .eq('user_id', user!.id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['plan-rsvps', id] });
-      queryClient.invalidateQueries({ queryKey: ['home-plans'] });
-    },
-    onError: (error: any) => {
-      Alert.alert('Error', error.message);
-    },
+    onSuccess: invalidateAll,
+    onError: (error: Error) => Alert.alert('Error', error.message),
   });
 
-  const yesCount = getYesCount(rsvps);
-  const userDeclinedFlexible = plan?.plan_type === 'flexible' && rsvps?.find(r => r.user_id === user?.id)?.response === 'no';
+  const sendDates = useMutation({
+    mutationFn: async (picked: string[]) => {
+      const mine = (availabilities ?? []).filter((a) => a.user_id === user?.id);
+      const removed = mine.filter((a) => !picked.includes(a.date_option_id)).map((a) => a.id);
 
-  const isConfirmed = plan
-    ? isPlanConfirmed({
-        plan_type: plan.plan_type,
-        status: plan.status,
-        min_people: plan.min_people,
-        rsvps,
-        dateOptions,
-        availabilities,
-      })
-    : false;
-  const isCancelled = plan?.status === 'cancelled';
-
-  const getStatusBadge = () => {
-    if (isCancelled) return { text: 'Cancelled', color: COLORS.error };
-    if (isConfirmed) return { text: 'Confirmed!', color: COLORS.success };
-    return { text: 'Open', color: COLORS.primary };
-  };
-
-  const status = getStatusBadge();
-
-  // Calendar theme
-  const calendarTheme = {
-    backgroundColor: COLORS.white,
-    calendarBackground: COLORS.white,
-    textSectionTitleColor: COLORS.gray[500],
-    todayTextColor: COLORS.gray[900],
-    dayTextColor: COLORS.gray[300],
-    textDisabledColor: COLORS.gray[200],
-    arrowColor: COLORS.primary,
-    monthTextColor: COLORS.gray[900],
-    textDayFontWeight: '500' as const,
-    textMonthFontWeight: '600' as const,
-    textDayHeaderFontWeight: '500' as const,
-  };
-
-  // Build marked dates for flexible plan calendar
-  const getFlexibleMarkedDates = () => {
-    if (!dateOptions || !plan) return {};
-
-    const marked: Record<string, any> = {};
-    const dateOptionMap = new Map<string, PlanDateOption>();
-
-    // Map date strings to date options
-    dateOptions.forEach((option) => {
-      const dateStr = option.date.split('T')[0];
-      dateOptionMap.set(dateStr, option);
-    });
-
-    dateOptions.forEach((option) => {
-      const dateStr = option.date.split('T')[0];
-      const optionAvailabilities = availabilities?.filter(
-        (a) => a.date_option_id === option.id
-      ) || [];
-      const count = optionAvailabilities.length;
-      const userAvailable = optionAvailabilities.some((a) => a.user_id === user?.id);
-      const meetsMinimum = count >= plan.min_people;
-
-      // Color based on availability count
-      let dotColor: string = COLORS.gray[300];
-      let selectedColor: string = COLORS.gray[100];
-
-      if (count > 0) {
-        const ratio = Math.min(count / plan.min_people, 1);
-        if (meetsMinimum) {
-          selectedColor = COLORS.success;
-          dotColor = COLORS.success;
-        } else if (ratio >= 0.5) {
-          selectedColor = COLORS.warning;
-          dotColor = COLORS.warning;
-        } else {
-          selectedColor = COLORS.primary + '40';
-          dotColor = COLORS.primary;
-        }
+      if (picked.length > 0) {
+        const rows = picked.map((optionId) => ({
+          plan_id: id,
+          user_id: user?.id,
+          date_option_id: optionId,
+          available: true,
+        }));
+        const { error } = await supabase
+          .from('date_availability')
+          .upsert(rows, { onConflict: 'plan_id,user_id,date_option_id' });
+        if (error) throw error;
       }
+      if (removed.length > 0) {
+        const { error } = await supabase.from('date_availability').delete().in('id', removed);
+        if (error) throw error;
+      }
+      // Sending dates supersedes a previous "no"
+      await supabase.from('rsvps').delete().eq('plan_id', id).eq('user_id', user!.id);
+    },
+    onSuccess: () => {
+      setEditingPicks(null);
+      invalidateAll();
+    },
+    onError: (error: Error) => Alert.alert('Error', error.message),
+  });
 
-      marked[dateStr] = {
-        selected: true,
-        selectedColor: userAvailable ? COLORS.primary : selectedColor,
-        selectedTextColor: userAvailable ? COLORS.white : COLORS.gray[900],
-        marked: count > 0,
-        dotColor: dotColor,
-        customStyles: {
-          container: {
-            borderWidth: userAvailable ? 0 : 2,
-            borderColor: count > 0 ? dotColor : COLORS.gray[300],
-          },
-        },
-      };
-    });
+  const declineAll = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from('rsvps').upsert(
+        { plan_id: id, user_id: user?.id, response: 'no' },
+        { onConflict: 'plan_id,user_id' }
+      );
+      if (error) throw error;
+      const mine = (availabilities ?? []).filter((a) => a.user_id === user?.id);
+      if (mine.length > 0) {
+        const { error: availError } = await supabase
+          .from('date_availability')
+          .delete()
+          .in('id', mine.map((a) => a.id));
+        if (availError) throw availError;
+      }
+    },
+    onSuccess: () => {
+      setEditingPicks(null);
+      invalidateAll();
+    },
+    onError: (error: Error) => Alert.alert('Error', error.message),
+  });
 
-    return marked;
-  };
+  const lockPlan = useMutation({
+    mutationFn: async (dateOptionId: string) => {
+      const { data, error } = await supabase.rpc('lock_plan', {
+        p_plan_id: id,
+        p_date_option_id: dateOptionId,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: invalidateAll,
+    onError: (error: Error) => Alert.alert('Error', error.message),
+  });
 
-  // Handle calendar day press for flexible plans
-  const handleFlexibleDayPress = (day: DateData) => {
-    if (isCancelled) return;
+  const reopenPlan = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.rpc('reopen_plan', { p_plan_id: id });
+      if (error) throw error;
+    },
+    onSuccess: invalidateAll,
+    onError: (error: Error) => Alert.alert('Error', error.message),
+  });
 
-    const dateOption = dateOptions?.find((opt) => opt.date.split('T')[0] === day.dateString);
-    if (dateOption) {
-      toggleAvailability.mutate(dateOption.id);
+  const cancelPlan = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.rpc('cancel_plan', { p_plan_id: id });
+      if (error) throw error;
+    },
+    onSuccess: invalidateAll,
+    onError: (error: Error) => Alert.alert('Error', error.message),
+  });
+
+  const derived = useMemo(() => {
+    if (!plan) return null;
+    const isFlexible = plan.plan_type === 'flexible';
+    const isLocked = plan.status === 'locked';
+    const isCancelled = plan.status === 'cancelled';
+    const isOpenFlexible = isFlexible && plan.status === 'open';
+
+    const yesCount = getYesCount(rsvps);
+    const countByDate: Record<string, DateCount> = countAvailabilityByDate(
+      (dateOptions ?? []).map((o) => ({ id: o.id, date: o.date })),
+      (availabilities ?? []).map((a) => ({ date_option_id: a.date_option_id, user_id: a.user_id }))
+    );
+
+    // Leading option: most availability, ties to the earlier date
+    const lead = Object.entries(countByDate).sort(
+      (a, b) =>
+        b[1].count - a[1].count ||
+        new Date(a[1].date).getTime() - new Date(b[1].date).getTime()
+    )[0];
+    const leadCount = lead?.[1].count ?? 0;
+
+    const going = isOpenFlexible ? leadCount : yesCount;
+    const confirmed = !isCancelled && (isLocked || going >= plan.min_people);
+    const gap = plan.min_people - going;
+
+    let headline: string;
+    if (isCancelled) headline = 'Called off';
+    else if (confirmed) headline = "It's on";
+    else if (isOpenFlexible && lead && leadCount > 0)
+      headline = `${gap} more on ${fmtDay(lead[1].date)}`;
+    else headline = `${gap} more and it's on`;
+
+    const capLine = plan.max_people
+      ? confirmed
+        ? `${going} in · room for ${Math.max(plan.max_people - going, 0)} more`
+        : `Happens with ${plan.min_people} · caps at ${plan.max_people}`
+      : `Happens with ${plan.min_people}`;
+
+    const myAvail = (availabilities ?? []).filter((a) => a.user_id === user?.id);
+    const userRsvp = (rsvps ?? []).find((r) => r.user_id === user?.id);
+
+    const goingPeople: { id: string; name: string }[] = [];
+    const seen = new Set<string>();
+    const pushPerson = (uid: string, name: string) => {
+      if (uid === user?.id || seen.has(uid)) return;
+      seen.add(uid);
+      goingPeople.push({ id: uid, name });
+    };
+    if (isOpenFlexible) {
+      (availabilities ?? []).forEach((a) => pushPerson(a.user_id, a.profile?.display_name ?? '?'));
+    } else {
+      (rsvps ?? [])
+        .filter((r) => r.response === 'yes')
+        .forEach((r) => pushPerson(r.user_id, r.profile?.display_name ?? '?'));
     }
-  };
+    const youIn = isOpenFlexible ? myAvail.length > 0 : userRsvp?.response === 'yes';
 
-  // Get availability info for a date
-  const getDateAvailabilityInfo = (dateStr: string) => {
-    const dateOption = dateOptions?.find((opt) => opt.date.split('T')[0] === dateStr);
-    if (!dateOption) return null;
+    const outCount = (rsvps ?? []).filter((r) => r.response === 'no').length;
 
-    const optionAvailabilities = availabilities?.filter(
-      (a) => a.date_option_id === dateOption.id
-    ) || [];
+    const isHost = plan.created_by === user?.id || membership?.role === 'admin';
+    const viableLead = lead && leadCount >= plan.min_people ? { id: lead[0], ...lead[1] } : null;
 
     return {
-      count: optionAvailabilities.length,
-      users: optionAvailabilities.map((a) => a.profile),
-      meetsMinimum: optionAvailabilities.length >= (plan?.min_people || 2),
-      userAvailable: optionAvailabilities.some((a) => a.user_id === user?.id),
+      isFlexible,
+      isLocked,
+      isCancelled,
+      isOpenFlexible,
+      confirmed,
+      headline,
+      capLine,
+      going,
+      yesCount,
+      countByDate,
+      leadId: lead?.[0] ?? null,
+      myAvail,
+      userRsvp,
+      goingPeople,
+      youIn,
+      outCount,
+      isHost,
+      viableLead,
     };
-  };
+  }, [plan, rsvps, dateOptions, availabilities, membership, user?.id]);
 
-  if (isLoading || !plan) {
+  if (isLoading || !plan || !derived) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.loadingText}>Loading...</Text>
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
 
+  const d = derived;
+  const groupName = plan.groups?.name ?? 'Group';
+  const groupColor = colorForName(groupName);
+  const editing = d.isOpenFlexible && (editingPicks !== null || d.myAvail.length === 0) && !d.userRsvp;
+  const picked = editingPicks ?? d.myAvail.map((a) => a.date_option_id);
+
+  const togglePick = (optionId: string) => {
+    const base = editingPicks ?? d.myAvail.map((a) => a.date_option_id);
+    setEditingPicks(
+      base.includes(optionId) ? base.filter((x) => x !== optionId) : [...base, optionId]
+    );
+  };
+
+  const showMenu = () => {
+    Alert.alert('Plan options', undefined, [
+      {
+        text: 'Cancel plan',
+        style: 'destructive',
+        onPress: () =>
+          Alert.alert('Cancel this plan?', 'Everyone who answered will be notified.', [
+            { text: 'Keep it', style: 'cancel' },
+            { text: 'Cancel plan', style: 'destructive', onPress: () => cancelPlan.mutate() },
+          ]),
+      },
+      { text: 'Close', style: 'cancel' },
+    ]);
+  };
+
+  const nudge = () =>
+    Share.share({ message: `"${plan.title}" needs answers on Planazo — planazo://plan/${plan.id}` });
+
+  const statusBadge = d.isCancelled
+    ? { label: 'Cancelled', tone: 'muted' as const }
+    : d.confirmed
+      ? { label: 'Confirmed', tone: 'confirmed' as const }
+      : { label: 'Open', tone: 'open' as const };
+
+  const renderFooter = () => {
+    if (d.isCancelled) return null;
+
+    if (!d.isOpenFlexible) {
+      // Fixed plans and locked flexible plans: a plain yes/no
+      if (d.userRsvp?.response === 'yes' || d.userRsvp?.response === 'no') {
+        return (
+          <AnswerFooter answered={d.userRsvp.response} onChange={() => clearRsvp.mutate()} />
+        );
+      }
+      return (
+        <AnswerFooter
+          onYes={() => answerRsvp.mutate('yes')}
+          onNo={() => answerRsvp.mutate('no')}
+        />
+      );
+    }
+
+    // Open flexible: date voting
+    if (!editing) {
+      if (d.userRsvp?.response === 'no') {
+        return <AnswerFooter answered="no" onChange={() => clearRsvp.mutate()} />;
+      }
+      return (
+        <AnswerFooter
+          answered="yes"
+          answerLabel={`You sent ${d.myAvail.length} date${d.myAvail.length === 1 ? '' : 's'}`}
+          onChange={() => setEditingPicks(d.myAvail.map((a) => a.date_option_id))}
+        />
+      );
+    }
+
+    return (
+      <View style={styles.footerRow}>
+        <Button
+          label="None of them"
+          variant="secondary"
+          onPress={() => declineAll.mutate()}
+          style={styles.footerNo}
+        />
+        {picked.length === 0 ? (
+          <Button
+            label="Tap the dates you can do"
+            variant="secondary"
+            disabled
+            haptic={false}
+            style={styles.footerYes}
+          />
+        ) : (
+          <Button
+            label={
+              d.myAvail.length > 0
+                ? 'Update your dates'
+                : `Send ${picked.length} date${picked.length === 1 ? '' : 's'}`
+            }
+            onPress={() => sendDates.mutate(picked)}
+            style={styles.footerYes}
+          />
+        )}
+      </View>
+    );
+  };
+
   return (
-    <>
-      <Stack.Screen
-        options={{
-          title: plan.title,
-          headerTitleStyle: { color: COLORS.gray[900] },
-          headerLeft: () => (
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-              <Text style={styles.backButtonText}>‹ Back</Text>
-            </TouchableOpacity>
-          ),
-        }}
-      />
+    <SafeAreaView style={styles.screen} edges={['top']}>
+      <View style={styles.topBar}>
+        <Pressable onPress={() => router.back()} accessibilityRole="button" testID="back">
+          <ThemedText variant="bodyStrong" color={colors.accent}>
+            ‹ {groupName}
+          </ThemedText>
+        </Pressable>
+        {d.isHost ? (
+          <Pressable onPress={showMenu} accessibilityRole="button" accessibilityLabel="Plan options" testID="plan-menu">
+            <ThemedText variant="bodyStrong" color={colors.textMuted} style={styles.dots}>
+              ···
+            </ThemedText>
+          </Pressable>
+        ) : null}
+      </View>
+
       <ScrollView
-        style={styles.container}
+        style={styles.scroll}
         contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor={COLORS.primary} />
-        }
+        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} />}
       >
-        {/* Status Badge */}
-        <View style={[styles.statusBadge, { backgroundColor: status.color }]}>
-          <Text style={styles.statusText}>{status.text}</Text>
+        <View style={styles.titleBlock}>
+          <View style={styles.chipRow}>
+            <Badge label={statusBadge.label} tone={statusBadge.tone} uppercase />
+            <View style={[styles.swatch, { backgroundColor: groupColor }]} />
+            <ThemedText variant="caption">{groupName}</ThemedText>
+          </View>
+          <ThemedText variant="screenTitle">{plan.title}</ThemedText>
+          {plan.description ? <ThemedText variant="sub">{plan.description}</ThemedText> : null}
         </View>
 
-        {/* Plan Info */}
-        <View style={styles.card}>
-          <View style={styles.planHeader}>
-            <Text style={styles.planType}>
-              {plan.plan_type === 'fixed' ? '📅 Fixed Date' : '🗓️ Flexible'}
-            </Text>
-          </View>
-
-          <Text style={styles.title}>{plan.title}</Text>
-
-          {plan.description && (
-            <Text style={styles.description}>{plan.description}</Text>
-          )}
-
-          {plan.location && (
-            <View style={styles.infoRow}>
-              <Text style={styles.infoEmoji}>📍</Text>
-              <Text style={styles.infoText}>{plan.location}</Text>
-            </View>
-          )}
-
-          {(plan.event_date || plan.locked_date) && (
-            <View style={styles.infoRow}>
-              <Text style={styles.infoEmoji}>🗓️</Text>
-              <Text style={styles.infoText}>
-                {new Date(plan.locked_date || plan.event_date || '').toLocaleDateString('en-US', {
-                  weekday: 'long',
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                })}
-              </Text>
-            </View>
-          )}
-
-          <View style={styles.infoRow}>
-            <Text style={styles.infoEmoji}>👥</Text>
-            <Text style={styles.infoText}>
-              Min {plan.min_people} people
-              {plan.max_people && ` • Max ${plan.max_people}`}
-            </Text>
-          </View>
-
-          <Text style={styles.creator}>
-            Created by {plan.creator?.display_name || 'Unknown'}
-          </Text>
-        </View>
-
-        {/* Fixed Plan RSVP - still allow RSVPs even when confirmed */}
-        {plan.plan_type === 'fixed' && !isCancelled && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Your Response</Text>
-            <View style={styles.rsvpButtons}>
-              <TouchableOpacity
-                style={[
-                  styles.rsvpButton,
-                  userRsvp?.response === 'yes' && styles.rsvpButtonActive,
-                ]}
-                onPress={() => updateRsvp.mutate('yes')}
-                disabled={updateRsvp.isPending}
-              >
-                <Text style={styles.rsvpEmoji}>✅</Text>
-                <Text
-                  style={[
-                    styles.rsvpText,
-                    userRsvp?.response === 'yes' && styles.rsvpTextActive,
-                  ]}
-                >
-                  I'm in!
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.rsvpButton,
-                  userRsvp?.response === 'no' && styles.rsvpButtonNo,
-                ]}
-                onPress={() => updateRsvp.mutate('no')}
-                disabled={updateRsvp.isPending}
-              >
-                <Text style={styles.rsvpEmoji}>❌</Text>
-                <Text
-                  style={[
-                    styles.rsvpText,
-                    userRsvp?.response === 'no' && styles.rsvpTextActive,
-                  ]}
-                >
-                  Can't make it
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {/* Fixed Plan Attendees */}
-        {plan.plan_type === 'fixed' && rsvps && rsvps.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>
-              Attendees ({yesCount}/{plan.min_people} min)
-            </Text>
-            <View style={styles.attendeeList}>
-              {rsvps
-                .filter((r) => r.response === 'yes')
-                .map((rsvp) => (
-                  <View key={rsvp.id} style={styles.attendee}>
-                    <View style={styles.attendeeAvatar}>
-                      <Text style={styles.attendeeAvatarText}>
-                        {rsvp.profile.display_name[0].toUpperCase()}
-                      </Text>
-                    </View>
-                    <Text style={styles.attendeeName}>{rsvp.profile.display_name}</Text>
-                  </View>
-                ))}
-            </View>
-          </View>
-        )}
-
-        {/* Flexible Plan - Declined State */}
-        {plan.plan_type === 'flexible' && userDeclinedFlexible && !isCancelled && (
-          <View style={styles.declinedBanner}>
-            <Text style={styles.declinedText}>You've declined this plan</Text>
-            <TouchableOpacity
-              style={styles.undoButton}
-              onPress={() => undoDeclineFlexiblePlan.mutate()}
-              disabled={undoDeclineFlexiblePlan.isPending}
+        <Card>
+          <View style={styles.statusTop}>
+            <ThemedText
+              variant="statusHeadline"
+              color={d.isCancelled ? colors.textMuted : d.confirmed ? colors.confirmed : colors.accent}
+              style={styles.headline}
             >
-              <Text style={styles.undoButtonText}>Undo</Text>
-            </TouchableOpacity>
+              {d.headline}
+            </ThemedText>
+            <ThemedText variant="caption" color={colors.textFaint}>
+              {d.going} in
+            </ThemedText>
           </View>
-        )}
+          <View style={styles.slotWrap}>
+            <SlotBar going={d.going} min={plan.min_people} cap={plan.max_people} />
+          </View>
+          <ThemedText variant="caption" color={d.confirmed ? colors.confirmed : colors.textMuted}>
+            {d.capLine}
+          </ThemedText>
+        </Card>
 
-        {/* Flexible Plan Date Options - Calendar View */}
-        {plan.plan_type === 'flexible' && dateOptions && !userDeclinedFlexible && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Select Your Available Dates</Text>
-            <Text style={styles.hint}>Tap highlighted dates to mark yourself available</Text>
+        {d.isOpenFlexible ? (
+          <Animated.View
+            entering={FadeInDown}
+            exiting={FadeOutUp}
+            layout={LinearTransition}
+            style={styles.section}
+          >
+            <ThemedText variant="sectionLabel">Which days work</ThemedText>
+            {(dateOptions ?? []).map((opt) => {
+              const count = d.countByDate[opt.id]?.count ?? 0;
+              const mine = picked.includes(opt.id);
+              const isLead = opt.id === d.leadId && count > 0;
+              const ratio = Math.min(count / plan.min_people, 1);
+              return (
+                <Pressable
+                  key={opt.id}
+                  onPress={() => togglePick(opt.id)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: mine }}
+                  testID={`vote-${opt.id}`}
+                  style={[styles.dateCard, mine && styles.dateCardMine]}
+                >
+                  <View style={styles.dateTop}>
+                    <View style={styles.dateLabelRow}>
+                      <ThemedText
+                        variant="bodyStrong"
+                        color={mine ? colors.accentPressed : colors.textPrimary}
+                        style={styles.dateLabel}
+                      >
+                        {fmtDay(opt.date)}
+                      </ThemedText>
+                      {isLead ? <Badge label="Leading" tone="muted" uppercase /> : null}
+                    </View>
+                    <View style={styles.dateMetaRow}>
+                      <ThemedText variant="caption" color={mine ? colors.accentPressed : colors.textMuted}>
+                        {count} free
+                      </ThemedText>
+                      <ThemedText variant="bodyStrong" color={colors.accent} style={styles.mark}>
+                        {mine ? '✓' : ''}
+                      </ThemedText>
+                    </View>
+                  </View>
+                  <View style={styles.track}>
+                    <View
+                      style={[
+                        styles.trackFill,
+                        {
+                          width: `${Math.round(ratio * 100)}%`,
+                          backgroundColor:
+                            count >= plan.min_people ? colors.confirmed : colors.accent,
+                        },
+                      ]}
+                    />
+                  </View>
+                </Pressable>
+              );
+            })}
+          </Animated.View>
+        ) : null}
 
-            {/* Legend */}
-            <View style={styles.calendarLegend}>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: COLORS.primary }]} />
-                <Text style={styles.legendText}>You're available</Text>
-              </View>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: COLORS.success }]} />
-                <Text style={styles.legendText}>Min reached</Text>
-              </View>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: COLORS.warning }]} />
-                <Text style={styles.legendText}>Almost there</Text>
-              </View>
-            </View>
-
-            {/* Calendar */}
-            <View style={styles.calendarContainer}>
-              <Calendar
-                theme={calendarTheme}
-                markedDates={getFlexibleMarkedDates()}
-                onDayPress={handleFlexibleDayPress}
-                enableSwipeMonths
-                disableAllTouchEventsForDisabledDays
+        <Animated.View layout={LinearTransition}>
+          <Card padded={false}>
+            {d.isLocked && plan.locked_date ? (
+              <Animated.View entering={FadeInDown}>
+                <ListRow title={fmtDay(plan.locked_date)} value={fmtTime(plan.locked_date)} />
+              </Animated.View>
+            ) : null}
+            {plan.event_date ? (
+              <ListRow title={fmtDay(plan.event_date)} value={fmtTime(plan.event_date)} />
+            ) : null}
+            {plan.location ? (
+              <ListRow
+                title={plan.location}
+                divider={!!plan.event_date || (d.isLocked && !!plan.locked_date)}
+                right={
+                  <ThemedText variant="bodyStrong" color={colors.accent}>
+                    Map
+                  </ThemedText>
+                }
               />
-            </View>
+            ) : null}
+            <ListRow
+              title={`Hosted by ${d.isHost ? 'you' : plan.creator?.display_name ?? '?'}`}
+              divider={!!plan.location || !!plan.event_date || (d.isLocked && !!plan.locked_date)}
+            />
+          </Card>
+        </Animated.View>
 
-            {/* Date Details List */}
-            <View style={styles.dateDetailsList}>
-              <Text style={styles.dateDetailsTitle}>Date Details</Text>
-              {dateOptions.map((option) => {
-                const dateStr = option.date.split('T')[0];
-                const info = getDateAvailabilityInfo(dateStr);
-                if (!info) return null;
-
-                return (
-                  <TouchableOpacity
-                    key={option.id}
-                    style={[
-                      styles.dateDetailItem,
-                      info.userAvailable && styles.dateDetailItemSelected,
-                      info.meetsMinimum && styles.dateDetailItemReady,
-                    ]}
-                    onPress={() => !isCancelled && toggleAvailability.mutate(option.id)}
-                    disabled={isCancelled || toggleAvailability.isPending}
-                  >
-                    <View style={styles.dateDetailLeft}>
-                      <Text style={[
-                        styles.dateDetailDate,
-                        info.userAvailable && styles.dateDetailDateSelected,
-                      ]}>
-                        {new Date(option.date).toLocaleDateString('en-US', {
-                          weekday: 'short',
-                          month: 'short',
-                          day: 'numeric',
-                        })}
-                      </Text>
-                      {info.users.length > 0 && (
-                        <View style={styles.dateDetailAvatars}>
-                          {info.users.slice(0, 4).map((profile, idx) => (
-                            <View
-                              key={idx}
-                              style={[
-                                styles.miniAvatar,
-                                { marginLeft: idx > 0 ? -8 : 0 },
-                              ]}
-                            >
-                              <Text style={styles.miniAvatarText}>
-                                {profile.display_name[0]}
-                              </Text>
-                            </View>
-                          ))}
-                          {info.users.length > 4 && (
-                            <Text style={styles.moreUsers}>+{info.users.length - 4}</Text>
-                          )}
-                        </View>
-                      )}
-                    </View>
-                    <View style={styles.dateDetailRight}>
-                      <Text style={[
-                        styles.dateDetailCount,
-                        info.meetsMinimum && styles.dateDetailCountReady,
-                      ]}>
-                        {info.count}/{plan.min_people}
-                      </Text>
-                      {info.userAvailable && <Text style={styles.checkmark}>✓</Text>}
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {/* Can't make it button */}
-            {!isCancelled && (
-              <TouchableOpacity
-                style={styles.declineButton}
-                onPress={() => declineFlexiblePlan.mutate()}
-                disabled={declineFlexiblePlan.isPending}
-              >
-                <Text style={styles.declineButtonText}>
-                  {declineFlexiblePlan.isPending ? 'Declining...' : "Can't make it"}
-                </Text>
-              </TouchableOpacity>
-            )}
+        <View style={styles.section}>
+          <ThemedText variant="sectionLabel">
+            {d.isOpenFlexible ? 'In the mix' : 'Going'}
+          </ThemedText>
+          <View style={styles.people}>
+            {d.youIn ? (
+              <View style={[styles.person, styles.personYou]}>
+                <Avatar name="You" dark size={26} />
+                <ThemedText variant="bodyStrong" color={colors.accentPressed}>
+                  You
+                </ThemedText>
+              </View>
+            ) : null}
+            {d.goingPeople.map((p) => (
+              <View key={p.id} style={styles.person}>
+                <Avatar name={p.name} size={26} />
+                <ThemedText variant="bodyStrong">{p.name}</ThemedText>
+              </View>
+            ))}
           </View>
-        )}
+          {d.outCount > 0 ? (
+            <ThemedText variant="caption" color={colors.textFaint}>
+              {d.outCount} can't make it
+            </ThemedText>
+          ) : null}
+        </View>
+
+        {d.isHost && d.isOpenFlexible && d.viableLead ? (
+          <Button
+            label={`Lock in ${fmtDay(d.viableLead.date)}`}
+            variant="outline"
+            onPress={() =>
+              Alert.alert(
+                `Lock in ${fmtDay(d.viableLead!.date)}?`,
+                'This ends the vote and notifies everyone who can make it.',
+                [
+                  { text: 'Not yet', style: 'cancel' },
+                  { text: 'Lock in', onPress: () => lockPlan.mutate(d.viableLead!.id) },
+                ]
+              )
+            }
+            testID="lock-in"
+          />
+        ) : null}
+        {d.isHost && d.isLocked && d.isFlexible ? (
+          <Button
+            label="Reopen the vote"
+            variant="outline"
+            onPress={() => reopenPlan.mutate()}
+            testID="reopen"
+          />
+        ) : null}
+        {!d.isCancelled && !d.confirmed ? (
+          <Button label="Nudge the rest" variant="outline" onPress={nudge} haptic={false} />
+        ) : null}
       </ScrollView>
-    </>
+
+      <View style={styles.footer}>{renderFooter()}</View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    backgroundColor: COLORS.gray[50],
+    backgroundColor: colors.background,
+  },
+  loading: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+  },
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+  },
+  dots: {
+    letterSpacing: 2,
+    fontSize: 19,
+  },
+  scroll: {
+    flex: 1,
   },
   content: {
-    padding: 16,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: 150,
+    gap: spacing.xl,
   },
-  backButton: {
-    paddingVertical: 8,
-    paddingRight: 16,
+  titleBlock: {
+    gap: spacing.sm,
   },
-  backButtonText: {
-    fontSize: 17,
-    color: COLORS.primary,
-  },
-  loadingText: {
-    textAlign: 'center',
-    marginTop: 32,
-    color: COLORS.gray[500],
-  },
-  statusBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    marginBottom: 16,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.white,
-  },
-  card: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 20,
-  },
-  planHeader: {
-    marginBottom: 12,
-  },
-  planType: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.gray[500],
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: COLORS.gray[900],
-    marginBottom: 8,
-  },
-  description: {
-    fontSize: 16,
-    color: COLORS.gray[600],
-    marginBottom: 16,
-    lineHeight: 24,
-  },
-  infoRow: {
+  chipRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    gap: spacing.sm,
   },
-  infoEmoji: {
-    fontSize: 16,
-    marginRight: 8,
+  swatch: {
+    width: 14,
+    height: 14,
+    borderRadius: 5,
+    marginLeft: spacing.xs,
   },
-  infoText: {
-    fontSize: 14,
-    color: COLORS.gray[700],
+  statusTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    gap: spacing.md,
   },
-  creator: {
-    fontSize: 12,
-    color: COLORS.gray[400],
-    marginTop: 12,
+  headline: {
+    flexShrink: 1,
+  },
+  slotWrap: {
+    marginVertical: spacing.md,
   },
   section: {
-    marginBottom: 20,
+    gap: spacing.sm,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.gray[900],
-    marginBottom: 12,
-  },
-  hint: {
-    fontSize: 12,
-    color: COLORS.gray[500],
-    marginBottom: 12,
-  },
-  rsvpButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  rsvpButton: {
-    flex: 1,
-    backgroundColor: COLORS.white,
-    borderWidth: 2,
-    borderColor: COLORS.gray[200],
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-  },
-  rsvpButtonActive: {
-    borderColor: COLORS.success,
-    backgroundColor: COLORS.success + '10',
-  },
-  rsvpButtonNo: {
-    borderColor: COLORS.error,
-    backgroundColor: COLORS.error + '10',
-  },
-  rsvpEmoji: {
-    fontSize: 24,
-    marginBottom: 8,
-  },
-  rsvpText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.gray[700],
-  },
-  rsvpTextActive: {
-    color: COLORS.gray[900],
-  },
-  attendeeList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  attendee: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.white,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+  dateCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.border,
     borderRadius: 20,
-    gap: 8,
+    padding: spacing.lg,
+    gap: 9,
   },
-  attendeeAvatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
+  dateCardMine: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accent,
   },
-  attendeeAvatarText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: COLORS.white,
-  },
-  attendeeName: {
-    fontSize: 14,
-    color: COLORS.gray[700],
-  },
-  dateOptionList: {
-    gap: 12,
-  },
-  dateOption: {
-    backgroundColor: COLORS.white,
-    borderWidth: 2,
-    borderColor: COLORS.gray[200],
-    borderRadius: 12,
-    padding: 16,
-  },
-  dateOptionSelected: {
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.primary + '10',
-  },
-  dateOptionReady: {
-    borderColor: COLORS.success,
-  },
-  dateOptionHeader: {
+  dateTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    gap: spacing.sm,
   },
-  dateOptionDate: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.gray[900],
-  },
-  checkmark: {
-    fontSize: 18,
-    color: COLORS.primary,
-    fontWeight: 'bold',
-  },
-  dateOptionCount: {
-    fontSize: 12,
-    color: COLORS.gray[500],
-    marginBottom: 8,
-  },
-  dateOptionCountReady: {
-    color: COLORS.success,
-    fontWeight: '600',
-  },
-  availableUsers: {
+  dateLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: spacing.sm,
   },
-  miniAvatar: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: COLORS.gray[300],
+  dateLabel: {
+    fontSize: 16,
+  },
+  dateMetaRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: spacing.sm,
   },
-  miniAvatarText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: COLORS.white,
+  mark: {
+    width: 14,
+    textAlign: 'center',
   },
-  moreUsers: {
-    fontSize: 10,
-    color: COLORS.gray[500],
-    marginLeft: 4,
+  track: {
+    height: 6,
+    borderRadius: radii.pill,
+    backgroundColor: colors.divider,
+    overflow: 'hidden',
   },
-  // Calendar styles
-  calendarLegend: {
+  trackFill: {
+    height: 6,
+    borderRadius: radii.pill,
+  },
+  people: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 16,
-    marginBottom: 12,
-    paddingHorizontal: 4,
+    gap: spacing.sm,
   },
-  legendItem: {
+  person: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: spacing.sm,
+    paddingVertical: 7,
+    paddingLeft: 7,
+    paddingRight: 13,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
   },
-  legendDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+  personYou: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accent,
   },
-  legendText: {
-    fontSize: 11,
-    color: COLORS.gray[500],
+  footer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.tabBarBackground,
+    borderTopWidth: 1,
+    borderTopColor: colors.tabBarBorder,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
+    paddingBottom: 30,
   },
-  calendarContainer: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: COLORS.gray[200],
-    marginBottom: 16,
-  },
-  // Date details list
-  dateDetailsList: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    padding: 16,
-  },
-  dateDetailsTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.gray[700],
-    marginBottom: 12,
-  },
-  dateDetailItem: {
+  footerRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray[100],
+    gap: 10,
   },
-  dateDetailItemSelected: {
-    backgroundColor: COLORS.primary + '08',
-    marginHorizontal: -16,
-    paddingHorizontal: 16,
+  footerNo: {
+    flexBasis: 130,
+    flexGrow: 0,
   },
-  dateDetailItemReady: {
-    borderLeftWidth: 3,
-    borderLeftColor: COLORS.success,
-    marginLeft: -16,
-    paddingLeft: 13,
-  },
-  dateDetailLeft: {
+  footerYes: {
     flex: 1,
-  },
-  dateDetailRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  dateDetailDate: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: COLORS.gray[900],
-    marginBottom: 4,
-  },
-  dateDetailDateSelected: {
-    color: COLORS.primary,
-    fontWeight: '600',
-  },
-  dateDetailAvatars: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  dateDetailCount: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.gray[400],
-  },
-  dateDetailCountReady: {
-    color: COLORS.success,
-  },
-  // Decline styles
-  declinedBanner: {
-    backgroundColor: COLORS.error + '15',
-    borderRadius: 12,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  declinedText: {
-    fontSize: 14,
-    color: COLORS.error,
-    fontWeight: '500',
-  },
-  undoButton: {
-    backgroundColor: COLORS.white,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: COLORS.error,
-  },
-  undoButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.error,
-  },
-  declineButton: {
-    backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: COLORS.error,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  declineButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.error,
   },
 });
