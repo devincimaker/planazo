@@ -94,12 +94,13 @@ export default function CreatePlanScreen() {
 
   const stepMin = (delta: 1 | -1) => {
     const next = Math.min(20, Math.max(2, min + delta));
-    // Keep the ceiling above the floor when the floor climbs into it
-    if (cap !== null && cap <= next) setCap(next + 1);
+    // The ceiling may equal the floor ("exactly N people" is a valid plan),
+    // so a climbing floor drags the cap along to match, never past it
+    if (cap !== null && cap < next) setCap(next);
     setMin(next);
   };
-  const capUp = () => setCap((c) => Math.min(40, (c ?? min) + 1));
-  const capDown = () => setCap((c) => (c === null || c - 1 <= min ? null : c - 1));
+  const capUp = () => setCap((c) => (c === null ? min : Math.min(40, c + 1)));
+  const capDown = () => setCap((c) => (c === null || c - 1 < min ? null : c - 1));
 
   // Build Dates from components, never by parsing strings: Hermes and the
   // native picker can disagree on the UTC offset of a parsed date-time,

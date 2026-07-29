@@ -223,23 +223,43 @@ describe('CreatePlanScreen', () => {
     expect(screen.getByTestId('min-value')).toHaveTextContent('2');
 
     await fireEvent.press(screen.getByTestId('cap-up'));
-    expect(screen.getByTestId('cap-value')).toHaveTextContent('3');
+    expect(screen.getByTestId('cap-value')).toHaveTextContent('2');
 
     await fireEvent.press(screen.getByTestId('cap-down'));
     expect(screen.getByTestId('cap-value')).toHaveTextContent('—');
     expect(screen.getByText('No limit')).toBeTruthy();
   });
 
-  it('raising the floor into the cap pushes the cap up', async () => {
+  it('cap can equal the min for an exact-headcount plan', async () => {
     await renderCreate();
     await screen.findByTestId('group-g1');
 
     await fireEvent.press(screen.getByTestId('cap-up'));
-    expect(screen.getByTestId('cap-value')).toHaveTextContent('5');
+    expect(screen.getByTestId('cap-value')).toHaveTextContent('4');
+
+    await fireEvent.changeText(screen.getByTestId('title-input'), 'Padel');
+    await fireEvent.press(screen.getByTestId('cal-day-2026-08-07'));
+    await fireEvent.press(screen.getByTestId('post-cta'));
+
+    await waitFor(() => expect(mockBack).toHaveBeenCalled());
+    expect(plansChain.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ min_people: 4, max_people: 4 })
+    );
+  });
+
+  it('raising the floor into the cap drags the cap along to match', async () => {
+    await renderCreate();
+    await screen.findByTestId('group-g1');
+
+    await fireEvent.press(screen.getByTestId('cap-up'));
+    expect(screen.getByTestId('cap-value')).toHaveTextContent('4');
 
     await fireEvent.press(screen.getByTestId('min-up'));
     expect(screen.getByTestId('min-value')).toHaveTextContent('5');
-    expect(screen.getByTestId('cap-value')).toHaveTextContent('6');
+    expect(screen.getByTestId('cap-value')).toHaveTextContent('5');
+
+    await fireEvent.press(screen.getByTestId('cap-down'));
+    expect(screen.getByTestId('cap-value')).toHaveTextContent('—');
   });
 
   it('does not post until there is a title and a date', async () => {
