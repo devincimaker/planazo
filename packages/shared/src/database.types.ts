@@ -83,6 +83,39 @@ export type Database = {
           },
         ]
       }
+      feedback: {
+        Row: {
+          app_version: string | null
+          created_at: string
+          device_model: string | null
+          id: string
+          kind: string
+          message: string
+          screenshot_path: string | null
+          user_id: string
+        }
+        Insert: {
+          app_version?: string | null
+          created_at?: string
+          device_model?: string | null
+          id?: string
+          kind: string
+          message?: string
+          screenshot_path?: string | null
+          user_id: string
+        }
+        Update: {
+          app_version?: string | null
+          created_at?: string
+          device_model?: string | null
+          id?: string
+          kind?: string
+          message?: string
+          screenshot_path?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       friendships: {
         Row: {
           addressee_id: string
@@ -407,6 +440,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          add_to_calendar: boolean
           avatar_url: string | null
           created_at: string | null
           display_name: string
@@ -417,6 +451,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          add_to_calendar?: boolean
           avatar_url?: string | null
           created_at?: string | null
           display_name: string
@@ -427,6 +462,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          add_to_calendar?: boolean
           avatar_url?: string | null
           created_at?: string | null
           display_name?: string

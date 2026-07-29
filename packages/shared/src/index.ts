@@ -28,7 +28,10 @@ export interface Profile {
   email: string;
   display_name: string;
   avatar_url: string | null;
+  /** Permanent — invite links resolve through it, so it never changes. */
+  handle: string | null;
   push_token: string | null;
+  add_to_calendar: boolean;
   created_at: string;
   updated_at: string;
 }
