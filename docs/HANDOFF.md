@@ -15,12 +15,14 @@ What the design specifies:
 - **12b — profile sheet**, opened from the feed avatar. **Read-only**: name + avatar big at the top, "@handle · in N groups", and ONE outlined **Edit name & photo** button as the only way in ("no tap in this sheet can change anything by accident"). Below: rows/switches — "Add to my calendar" toggle, email, a **Send feedback** group sitting directly above the **version number** (14a: "that's where people already look when something's wrong"), sign out.
 - **12c — edit open**: name field + avatar with camera badge; **Save greys out until something actually changed**. The handle is shown but fixed: "@rovidal · your handle stays put" (invite links point at it — column already exists and is permanent by design).
 - **11b — photo sheet**: Take photo / Choose from library / **Use my initial instead** (the honest default).
-- **14a→14b — feedback flow**: tapping the row **grabs a screenshot of the screen you were on** and attaches it automatically. Compose: pick what kind of thing it is, screenshot already attached (swap for any photo, or drop it), optional one-line text, Send.
-- **14c — after send**: drops you back where you were with a quiet confirmation, no thank-you screen. Second entry point: when the user takes an **OS screenshot anywhere in the app, offer to send it as feedback** ("fires at the moment of annoyance").
+- **Feedback — two entry points (USER DECISION 2026-07-29, diverges from 14a's auto-grab; do not "fix" back to the design):**
+  1. **OS screenshot taken while the app is open** → open the feedback bottom sheet with that screenshot attached, note field, Send. Implementation: iOS only reports *that* a screenshot happened (expo-screen-capture listener), never the image — so re-capture the current screen with react-native-view-shot the instant the event fires (user is still on that screen; same pixels, no photo permission). If they annotated the screenshot first and want that version, the library picker in the sheet covers it.
+  2. **Send-feedback row in the profile sheet** → **no auto-attached screenshot at all** (by the time anyone reaches the row they've navigated back through the feed, so a grab of "the screen you were on" is mostly feed shots). Instead: optional pick-from-library, kind picker, optional text, Send.
+- **14b/14c conventions still apply**: compose = pick what kind of thing it is + optional one-liner; attachment swappable/droppable; Send drops you back where you were with a quiet confirmation, no thank-you screen.
 
 Needs:
 - **Migrations**: `feedback` table (user, kind, message, screenshot path) + a storage bucket for feedback screenshots (an `avatars` bucket already exists from migration `…007`; avatar upload itself may just need wiring).
-- **Native deps → rebuild**: `react-native-view-shot` (the auto-screenshot). `expo-image-picker` is **already installed and in the current build**. The OS-screenshot listener needs `expo-screen-capture` (also native) — treat it as an optional slice-end item and flag if deferring.
+- **Native deps → one rebuild**: `expo-screen-capture` (the screenshot listener — **core scope**, it's entry point 1) + `react-native-view-shot` (the instant re-capture that listener path needs). `expo-image-picker` is **already installed and in the current build**.
 
 ## Then: Endgame (concretely, in likely order)
 
