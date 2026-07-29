@@ -112,10 +112,15 @@ export default function CreatePlanScreen() {
     return d;
   };
 
+  // Local wall-clock date from a YYYY-MM-DD day (plus optional time)
+  const localDate = (iso: string, h = 0, m = 0) => {
+    const [y, mo, d] = iso.split('-').map(Number);
+    return new Date(y, mo - 1, d, h, m);
+  };
+
   const eventDateIso = () => {
-    const [y, mo, d] = dates[0].split('-').map(Number);
     const [h, m] = time.split(':').map(Number);
-    return new Date(y, mo - 1, d, h, m).toISOString();
+    return localDate(dates[0], h, m).toISOString();
   };
 
   const onTimeChange = (_event: unknown, picked?: Date) => {
@@ -159,11 +164,28 @@ export default function CreatePlanScreen() {
         .single();
       if (error) throw error;
 
-      if (!fixed) {
-        const { error: datesError } = await supabase
+      // The host counts from the start: a yes-RSVP on a fixed plan,
+      // availability on every proposed day on a flexible one.
+      if (fixed) {
+        const { error: rsvpError } = await supabase
+          .from('rsvps')
+          .insert({ plan_id: plan.id, user_id: user.id, response: 'yes' });
+        if (rsvpError) throw rsvpError;
+      } else {
+        const { data: options, error: datesError } = await supabase
           .from('plan_date_options')
-          .insert(dates.map((d) => ({ plan_id: plan.id, date: new Date(d).toISOString() })));
+          .insert(dates.map((d) => ({ plan_id: plan.id, date: localDate(d).toISOString() })))
+          .select();
         if (datesError) throw datesError;
+        const { error: availError } = await supabase.from('date_availability').insert(
+          (options ?? []).map((o) => ({
+            plan_id: plan.id,
+            user_id: user.id,
+            date_option_id: o.id,
+            available: true,
+          }))
+        );
+        if (availError) throw availError;
       }
       return plan;
     },

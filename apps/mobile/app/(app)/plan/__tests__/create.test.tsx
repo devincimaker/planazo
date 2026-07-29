@@ -61,14 +61,20 @@ const MEMBERSHIPS = [
 
 let plansChain: ReturnType<typeof chain>;
 let optionsChain: ReturnType<typeof chain>;
+let rsvpsChain: ReturnType<typeof chain>;
+let availChain: ReturnType<typeof chain>;
 
 function primeSupabase() {
   plansChain = chain({ data: { id: 'new-plan' }, error: null });
-  optionsChain = chain({ error: null });
+  optionsChain = chain({ data: [{ id: 'd1' }, { id: 'd2' }], error: null });
+  rsvpsChain = chain({ error: null });
+  availChain = chain({ error: null });
   mockFrom.mockImplementation((table: string) => {
     if (table === 'group_members') return chain({ data: MEMBERSHIPS, error: null });
     if (table === 'plans') return plansChain;
     if (table === 'plan_date_options') return optionsChain;
+    if (table === 'rsvps') return rsvpsChain;
+    if (table === 'date_availability') return availChain;
     return chain({ data: null, error: null });
   });
 }
@@ -296,6 +302,11 @@ describe('CreatePlanScreen', () => {
       })
     );
     expect(optionsChain.insert).not.toHaveBeenCalled();
+    expect(rsvpsChain.insert).toHaveBeenCalledWith({
+      plan_id: 'new-plan',
+      user_id: 'me',
+      response: 'yes',
+    });
   });
 
   it('posts a flexible plan with one option row per date', async () => {
@@ -312,9 +323,14 @@ describe('CreatePlanScreen', () => {
       expect.objectContaining({ plan_type: 'flexible', event_date: null })
     );
     expect(optionsChain.insert).toHaveBeenCalledWith([
-      { plan_id: 'new-plan', date: new Date('2026-08-07').toISOString() },
-      { plan_id: 'new-plan', date: new Date('2026-08-09').toISOString() },
+      { plan_id: 'new-plan', date: new Date(2026, 7, 7).toISOString() },
+      { plan_id: 'new-plan', date: new Date(2026, 7, 9).toISOString() },
     ]);
+    expect(availChain.insert).toHaveBeenCalledWith([
+      { plan_id: 'new-plan', user_id: 'me', date_option_id: 'd1', available: true },
+      { plan_id: 'new-plan', user_id: 'me', date_option_id: 'd2', available: true },
+    ]);
+    expect(rsvpsChain.insert).not.toHaveBeenCalled();
   });
 
   it('folds place & notes into the post', async () => {
