@@ -1,511 +1,413 @@
 import { useState } from 'react';
 import {
   View,
-  Text,
-  StyleSheet,
   ScrollView,
-  TouchableOpacity,
+  StyleSheet,
   RefreshControl,
-  TextInput,
-  Modal,
+  Pressable,
+  ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
+  TextInput,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { flattenNestedOptions, needsUserResponse } from '@planazo/shared';
 import { supabase } from '../../../lib/supabase';
 import { useAuthStore } from '../../../stores/authStore';
-import { COLORS } from '../../../constants/colors';
-import type { GroupWithMemberCount } from '@planazo/shared';
+import { ThemedText, Card, Button, GroupTile } from '../../../components/ui';
+import { colors, fonts, radii, spacing, groupColors } from '../../../theme/tokens';
 
-function generateInviteCode(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let result = '';
-  for (let i = 0; i < 8; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
+/** Invite codes travel as links; accept a raw code or anything containing one. */
+export function inviteCodeFrom(text: string): string | null {
+  return text.toUpperCase().match(/[A-HJ-NP-Z2-9]{8}/)?.[0] ?? null;
+}
+
+interface GroupRow {
+  id: string;
+  role: string;
+  name: string;
+  color: string | null;
+  members: number;
+  needsYou: number;
 }
 
 export default function GroupsScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showJoinModal, setShowJoinModal] = useState(false);
-  const [groupName, setGroupName] = useState('');
-  const [groupDescription, setGroupDescription] = useState('');
-  const [joinCode, setJoinCode] = useState('');
+  const [joinText, setJoinText] = useState('');
 
-  const { data: groups, isLoading, refetch } = useQuery({
-    queryKey: ['groups'],
-    queryFn: async () => {
-      const { data, error } = await supabase
+  const { data: rows, isLoading, refetch, isRefetching } = useQuery({
+    queryKey: ['groups', user?.id],
+    queryFn: async (): Promise<GroupRow[]> => {
+      const { data: memberships, error } = await supabase
         .from('group_members')
-        .select(`
-          group_id,
-          role,
-          groups:group_id (
-            id,
-            name,
-            description,
-            invite_code,
-            created_by,
-            created_at
-          )
-        `)
-        .eq('user_id', user?.id);
-
+        .select('group_id, role, groups:group_id(id, name, color, created_at)')
+        .eq('user_id', user!.id);
       if (error) throw error;
 
-      // Get member counts
-      const groupIds = data.map((d) => d.group_id);
-      const { data: counts } = await supabase
-        .from('group_members')
-        .select('group_id')
-        .in('group_id', groupIds);
+      const groupIds = (memberships ?? []).map((m) => m.group_id);
+      if (groupIds.length === 0) return [];
 
-      const countMap: Record<string, number> = {};
-      counts?.forEach((c) => {
-        countMap[c.group_id] = (countMap[c.group_id] || 0) + 1;
+      const [countsRes, plansRes] = await Promise.all([
+        supabase.from('group_members').select('group_id').in('group_id', groupIds),
+        supabase
+          .from('plans')
+          .select(
+            `id, group_id, plan_type, status, min_people,
+            rsvps(user_id, response),
+            plan_date_options(id, date, date_availability(user_id))`
+          )
+          .in('group_id', groupIds)
+          .eq('status', 'open'),
+      ]);
+      if (countsRes.error) throw countsRes.error;
+      if (plansRes.error) throw plansRes.error;
+
+      const memberCount: Record<string, number> = {};
+      (countsRes.data ?? []).forEach((c) => {
+        memberCount[c.group_id] = (memberCount[c.group_id] ?? 0) + 1;
       });
 
-      return data.map((d) => ({
-        ...(d.groups as any),
-        member_count: countMap[d.group_id] || 0,
-        role: d.role,
-      })) as (GroupWithMemberCount & { role: string })[];
+      const needsCount: Record<string, number> = {};
+      (plansRes.data ?? []).forEach((plan: any) => {
+        const { availabilities } = flattenNestedOptions(plan.plan_date_options);
+        const needs = needsUserResponse(
+          {
+            plan_type: plan.plan_type,
+            status: plan.status,
+            rsvps: plan.rsvps,
+            availabilities,
+          },
+          user?.id
+        );
+        if (needs) needsCount[plan.group_id] = (needsCount[plan.group_id] ?? 0) + 1;
+      });
+
+      return (memberships ?? [])
+        .map((m: any) => ({
+          id: m.group_id,
+          role: m.role,
+          name: m.groups?.name ?? 'Group',
+          color: m.groups?.color ?? null,
+          createdAt: m.groups?.created_at ?? '',
+          members: memberCount[m.group_id] ?? 0,
+          needsYou: needsCount[m.group_id] ?? 0,
+        }))
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     },
     enabled: !!user,
   });
 
-  const createGroup = useMutation({
-    mutationFn: async () => {
-      const inviteCode = generateInviteCode();
+  const joinByCode = useMutation({
+    mutationFn: async (code: string) => {
+      const { data: found, error: findError } = await supabase.rpc('get_group_by_invite_code', {
+        code,
+      });
+      if (findError || !found || found.length === 0) throw new Error('That link doesn’t work');
 
-      // Create group
-      const { data: group, error: groupError } = await supabase
-        .from('groups')
-        .insert({
-          name: groupName.trim(),
-          description: groupDescription.trim() || null,
-          invite_code: inviteCode,
-          created_by: user?.id,
-        })
-        .select()
-        .single();
-
-      if (groupError) throw groupError;
-
-      // Add creator as admin
-      const { error: memberError } = await supabase
-        .from('group_members')
-        .insert({
-          group_id: group.id,
-          user_id: user?.id,
-          role: 'admin',
-        });
-
-      if (memberError) throw memberError;
-
-      return group;
+      const { error: joinError } = await supabase.from('group_members').insert({
+        group_id: found[0].id,
+        user_id: user?.id,
+        role: 'member',
+      });
+      if (joinError) {
+        throw new Error(
+          joinError.code === '23505' ? 'You’re already in this group' : joinError.message
+        );
+      }
+      return found[0];
     },
-    onSuccess: () => {
+    onSuccess: (group) => {
+      setJoinText('');
       queryClient.invalidateQueries({ queryKey: ['groups'] });
-      setShowCreateModal(false);
-      setGroupName('');
-      setGroupDescription('');
+      router.push(`/(app)/group/${group.id}`);
     },
-    onError: (error) => {
-      Alert.alert('Error', error.message);
-    },
+    onError: (error: Error) => Alert.alert('Couldn’t join', error.message),
   });
 
-  const joinGroup = useMutation({
-    mutationFn: async () => {
-      // Find group by invite code using RPC (bypasses RLS)
-      const { data: groups, error: findError } = await supabase
-        .rpc('get_group_by_invite_code', { code: joinCode });
-
-      if (findError || !groups || groups.length === 0) {
-        throw new Error('Invalid invite code');
-      }
-
-      const group = groups[0];
-
-      // Check if already a member
-      const { data: existing } = await supabase
-        .from('group_members')
-        .select('id')
-        .eq('group_id', group.id)
-        .eq('user_id', user?.id)
-        .single();
-
-      if (existing) {
-        throw new Error('You are already a member of this group');
-      }
-
-      // Join group
-      const { error: joinError } = await supabase
-        .from('group_members')
-        .insert({
-          group_id: group.id,
-          user_id: user?.id,
-          role: 'member',
-        });
-
-      if (joinError) throw joinError;
-
-      return group;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['groups'] });
-      setShowJoinModal(false);
-      setJoinCode('');
-      Alert.alert('Success', 'You have joined the group!');
-    },
-    onError: (error) => {
-      Alert.alert('Error', error.message);
-    },
-  });
+  const hasGroups = (rows ?? []).length > 0;
+  const joinCode = inviteCodeFrom(joinText);
 
   return (
-    <View style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor={COLORS.primary} />
-        }
-      >
-        <View style={styles.actions}>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => setShowCreateModal(true)}
+    <SafeAreaView style={styles.screen} edges={['top']}>
+      <View style={styles.header}>
+        <ThemedText variant="headerTitle">Groups</ThemedText>
+        {hasGroups ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push('/(app)/group/new')}
+            style={({ pressed }) => [styles.newPill, pressed && styles.pressed]}
+            testID="new-group"
           >
-            <Text style={styles.actionEmoji}>➕</Text>
-            <Text style={styles.actionText}>Create Group</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.actionButtonSecondary]}
-            onPress={() => setShowJoinModal(true)}
-          >
-            <Text style={styles.actionEmoji}>🔗</Text>
-            <Text style={[styles.actionText, styles.actionTextSecondary]}>Join Group</Text>
-          </TouchableOpacity>
-        </View>
+            <ThemedText variant="bodyStrong" color={colors.background} style={styles.newPlus}>
+              +
+            </ThemedText>
+            <ThemedText variant="bodyStrong" color={colors.background} style={styles.newLabel}>
+              New group
+            </ThemedText>
+          </Pressable>
+        ) : null}
+      </View>
 
-        {groups && groups.length > 0 ? (
-          <View style={styles.groupList}>
-            {groups.map((group) => (
-              <TouchableOpacity
-                key={group.id}
-                style={styles.groupCard}
-                onPress={() => router.push(`/(app)/group/${group.id}`)}
+      {isLoading ? (
+        <View style={styles.loading}>
+          <ActivityIndicator size="large" color={colors.accent} />
+        </View>
+      ) : !hasGroups ? (
+        // 16a: two ways in, and they're not equal — the link field is real,
+        // creating is second, and the header pill stays gone.
+        <View style={styles.empty}>
+          <View style={styles.emptyArt}>
+            <View style={[styles.emptyTile, { backgroundColor: groupColors[0] }]} />
+            <View style={[styles.emptyTile, { backgroundColor: colors.border }]} />
+            <View style={[styles.emptyTile, styles.emptyTileDashed]} />
+          </View>
+          <ThemedText variant="headerTitle" style={styles.emptyTitle}>
+            A group is just{'\n'}your group of people
+          </ThemedText>
+          <ThemedText variant="body" color={colors.textSecondary}>
+            Flatmates, the padel lot, the ones who actually turn up. Plans you make go to one
+            group, not to everybody.
+          </ThemedText>
+
+          <View style={styles.joinRow}>
+            <TextInput
+              style={styles.joinInput}
+              placeholder="Paste an invite link"
+              placeholderTextColor={colors.textFaint}
+              value={joinText}
+              onChangeText={setJoinText}
+              autoCapitalize="none"
+              autoCorrect={false}
+              testID="join-input"
+            />
+            <Pressable
+              accessibilityRole="button"
+              disabled={!joinCode || joinByCode.isPending}
+              onPress={() => joinCode && joinByCode.mutate(joinCode)}
+              style={[styles.joinButton, joinCode ? styles.joinButtonReady : null]}
+              testID="join-button"
+            >
+              <ThemedText
+                variant="bodyStrong"
+                color={joinCode ? colors.textOnAccent : colors.textFaint}
+                style={styles.joinButtonLabel}
               >
-                <View style={styles.groupInfo}>
-                  <Text style={styles.groupName}>{group.name}</Text>
-                  {group.description && (
-                    <Text style={styles.groupDescription} numberOfLines={1}>
-                      {group.description}
-                    </Text>
-                  )}
-                  <View style={styles.groupMeta}>
-                    <Text style={styles.memberCount}>
-                      👥 {group.member_count} members
-                    </Text>
-                    {group.role === 'admin' && (
-                      <View style={styles.adminBadge}>
-                        <Text style={styles.adminBadgeText}>Admin</Text>
-                      </View>
-                    )}
+                Join
+              </ThemedText>
+            </Pressable>
+          </View>
+          <View style={styles.orRow}>
+            <View style={styles.orLine} />
+            <ThemedText variant="caption" color={colors.textFaint}>
+              or
+            </ThemedText>
+            <View style={styles.orLine} />
+          </View>
+          <Button
+            label="Create a group"
+            variant="ink"
+            onPress={() => router.push('/(app)/group/new')}
+            testID="create-group"
+          />
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.list}
+          contentContainerStyle={styles.listContent}
+          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} />}
+        >
+          <ThemedText variant="sectionLabel" style={styles.sectionLabel}>
+            Your groups
+          </ThemedText>
+          <Card padded={false}>
+            {(rows ?? []).map((g, i) => (
+              <Pressable
+                key={g.id}
+                accessibilityRole="button"
+                onPress={() => router.push(`/(app)/group/${g.id}`)}
+                style={({ pressed }) => [
+                  styles.row,
+                  i > 0 && styles.rowDivider,
+                  pressed && styles.rowPressed,
+                ]}
+                testID={`group-row-${g.id}`}
+              >
+                <GroupTile name={g.name} color={g.color} size={42} />
+                <View style={styles.rowBody}>
+                  <ThemedText variant="bodyStrong" style={styles.rowName} numberOfLines={1}>
+                    {g.name}
+                  </ThemedText>
+                  <View style={styles.rowMeta}>
+                    <ThemedText variant="caption">
+                      {g.members} {g.members === 1 ? 'person' : 'people'}
+                    </ThemedText>
+                    {g.needsYou > 0 ? (
+                      <ThemedText variant="caption" color={colors.accent}>
+                        {' · '}
+                        {g.needsYou} plan{g.needsYou === 1 ? '' : 's'} waiting on you
+                      </ThemedText>
+                    ) : null}
                   </View>
                 </View>
-                <Text style={styles.chevron}>›</Text>
-              </TouchableOpacity>
+                <ThemedText variant="body" color={colors.textFaint}>
+                  ›
+                </ThemedText>
+              </Pressable>
             ))}
-          </View>
-        ) : !isLoading ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyEmoji}>👥</Text>
-            <Text style={styles.emptyText}>No groups yet</Text>
-            <Text style={styles.emptySubtext}>
-              Create a group or join one with an invite code
-            </Text>
-          </View>
-        ) : null}
-      </ScrollView>
-
-      {/* Create Group Modal */}
-      <Modal visible={showCreateModal} animationType="slide" transparent>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalOverlay}
-        >
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Create Group</Text>
-
-            <Text style={styles.label}>Group Name</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g., Weekend Warriors"
-              placeholderTextColor={COLORS.gray[400]}
-              value={groupName}
-              onChangeText={setGroupName}
-            />
-
-            <Text style={styles.label}>Description (optional)</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              placeholder="What's this group about?"
-              placeholderTextColor={COLORS.gray[400]}
-              value={groupDescription}
-              onChangeText={setGroupDescription}
-              multiline
-              numberOfLines={3}
-            />
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => setShowCreateModal(false)}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.submitButton, !groupName.trim() && styles.submitButtonDisabled]}
-                onPress={() => createGroup.mutate()}
-                disabled={!groupName.trim() || createGroup.isPending}
-              >
-                <Text style={styles.submitButtonText}>
-                  {createGroup.isPending ? 'Creating...' : 'Create'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* Join Group Modal */}
-      <Modal visible={showJoinModal} animationType="slide" transparent>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalOverlay}
-        >
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Join Group</Text>
-
-            <Text style={styles.label}>Invite Code</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter 8-character code"
-              placeholderTextColor={COLORS.gray[400]}
-              value={joinCode}
-              onChangeText={setJoinCode}
-              autoCapitalize="characters"
-              maxLength={8}
-            />
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => setShowJoinModal(false)}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.submitButton, joinCode.length !== 8 && styles.submitButtonDisabled]}
-                onPress={() => joinGroup.mutate()}
-                disabled={joinCode.length !== 8 || joinGroup.isPending}
-              >
-                <Text style={styles.submitButtonText}>
-                  {joinGroup.isPending ? 'Joining...' : 'Join'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-    </View>
+          </Card>
+        </ScrollView>
+      )}
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    backgroundColor: COLORS.gray[50],
+    backgroundColor: colors.background,
   },
-  content: {
-    padding: 16,
-  },
-  actions: {
+  header: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 24,
-  },
-  actionButton: {
-    flex: 1,
-    backgroundColor: COLORS.primary,
-    borderRadius: 12,
-    padding: 16,
+    justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
   },
-  actionButtonSecondary: {
-    backgroundColor: COLORS.white,
-    borderWidth: 2,
-    borderColor: COLORS.primary,
-  },
-  actionEmoji: {
-    fontSize: 24,
-    marginBottom: 4,
-  },
-  actionText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.white,
-  },
-  actionTextSecondary: {
-    color: COLORS.primary,
-  },
-  groupList: {
-    gap: 12,
-  },
-  groupCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    padding: 16,
+  newPill: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 7,
+    backgroundColor: colors.ink,
+    borderRadius: radii.pill,
+    paddingVertical: 9,
+    paddingLeft: 12,
+    paddingRight: 15,
   },
-  groupInfo: {
+  newPlus: {
+    fontSize: 17,
+    lineHeight: 19,
+    fontFamily: fonts.bodySemiBold,
+  },
+  newLabel: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontFamily: fonts.bodyBold,
+  },
+  pressed: {
+    opacity: 0.8,
+  },
+  loading: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  list: {
     flex: 1,
   },
-  groupName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.gray[900],
-    marginBottom: 4,
+  listContent: {
+    paddingHorizontal: spacing.xl,
+    paddingBottom: 120,
   },
-  groupDescription: {
-    fontSize: 14,
-    color: COLORS.gray[500],
-    marginBottom: 8,
+  sectionLabel: {
+    marginBottom: spacing.md,
   },
-  groupMeta: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 13,
+    paddingVertical: 14,
+    paddingHorizontal: spacing.lg,
   },
-  memberCount: {
-    fontSize: 12,
-    color: COLORS.gray[500],
+  rowDivider: {
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
   },
-  adminBadge: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
+  rowPressed: {
+    backgroundColor: colors.surfaceSunken,
   },
-  adminBadgeText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: COLORS.white,
-  },
-  chevron: {
-    fontSize: 24,
-    color: COLORS.gray[400],
-  },
-  emptyState: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    padding: 32,
-    alignItems: 'center',
-  },
-  emptyEmoji: {
-    fontSize: 48,
-    marginBottom: 12,
-  },
-  emptyText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.gray[700],
-    marginBottom: 4,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: COLORS.gray[500],
-    textAlign: 'center',
-  },
-  modalOverlay: {
+  rowBody: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
+    gap: spacing.xxs,
   },
-  modalContent: {
-    backgroundColor: COLORS.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: 40,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: COLORS.gray[900],
-    marginBottom: 24,
-    textAlign: 'center',
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.gray[700],
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: COLORS.gray[50],
-    borderWidth: 1,
-    borderColor: COLORS.gray[200],
-    borderRadius: 12,
-    padding: 16,
+  rowName: {
     fontSize: 16,
-    color: COLORS.gray[900],
-    marginBottom: 16,
+    lineHeight: 20,
   },
-  textArea: {
-    height: 100,
-    textAlignVertical: 'top',
-  },
-  modalActions: {
+  rowMeta: {
     flexDirection: 'row',
-    gap: 12,
-    marginTop: 8,
-  },
-  cancelButton: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.gray[300],
     alignItems: 'center',
   },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.gray[600],
-  },
-  submitButton: {
+  empty: {
     flex: 1,
-    backgroundColor: COLORS.primary,
-    padding: 16,
-    borderRadius: 12,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+    paddingBottom: 120,
+    gap: spacing.sm,
+  },
+  emptyArt: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  emptyTile: {
+    width: 52,
+    height: 52,
+    borderRadius: 17,
+  },
+  emptyTileDashed: {
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: colors.borderStrong,
+  },
+  emptyTitle: {
+    paddingTop: spacing.xs,
+  },
+  joinRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
+    borderRadius: 20,
+    paddingVertical: spacing.sm,
+    paddingLeft: spacing.lg,
+    paddingRight: spacing.sm,
+    marginTop: spacing.lg,
   },
-  submitButtonDisabled: {
-    opacity: 0.5,
-  },
-  submitButtonText: {
+  joinInput: {
+    flex: 1,
+    fontFamily: fonts.body,
     fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.white,
+    color: colors.textPrimary,
+    paddingVertical: spacing.sm,
+  },
+  joinButton: {
+    backgroundColor: colors.surfaceSunken,
+    borderRadius: radii.pill,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: 14,
+  },
+  joinButtonReady: {
+    backgroundColor: colors.accent,
+  },
+  joinButtonLabel: {
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  orRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: spacing.xxs,
+  },
+  orLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.tabBarBorder,
   },
 });

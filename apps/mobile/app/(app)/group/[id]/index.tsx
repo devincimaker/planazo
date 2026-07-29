@@ -1,494 +1,302 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Share, Alert } from 'react-native';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMemo } from 'react';
+import {
+  View,
+  ScrollView,
+  StyleSheet,
+  Pressable,
+  ActivityIndicator,
+  RefreshControl,
+  Share,
+} from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../../../lib/supabase';
 import { useAuthStore } from '../../../../stores/authStore';
-import { COLORS } from '../../../../constants/colors';
-import type { Group, Plan, GroupMember } from '@planazo/shared';
-import {
-  countAvailabilityByDate,
-  earliestViableDate,
-  flattenNestedOptions,
-  getYesCount,
-  isPlanConfirmed,
-} from '@planazo/shared';
+import { ThemedText, Card, Button, AvatarStack, GroupTile } from '../../../../components/ui';
+import { colors, spacing } from '../../../../theme/tokens';
+
+const fmtDay = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+const fmtTime = (iso: string) =>
+  new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+export function shareInviteLink(groupName: string, inviteCode: string) {
+  return Share.share({
+    message: `Join ${groupName} on Planazo: planazo://join/${inviteCode}`,
+  }).catch(() => {});
+}
 
 export default function GroupDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const queryClient = useQueryClient();
   const { user } = useAuthStore();
 
-  const { data: group, isLoading: groupLoading, refetch } = useQuery({
+  const { data: group, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['group', id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('groups')
-        .select('*')
+        .select(
+          `id, name, description, color, invite_code,
+          group_members(user_id, role, profile:profiles(id, display_name, avatar_url)),
+          plans(id, title, plan_type, status, event_date, locked_date, min_people, created_at,
+            rsvps(user_id, response), plan_date_options(id, date, date_availability(user_id)))`
+        )
         .eq('id', id)
         .single();
-
       if (error) throw error;
-      return data as Group;
+      return data as any;
     },
     enabled: !!id,
   });
 
-  const { data: membership } = useQuery({
-    queryKey: ['group-membership', id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('group_members')
-        .select('*')
-        .eq('group_id', id)
-        .eq('user_id', user?.id)
-        .single();
+  const members = group?.group_members ?? [];
+  const myRole = members.find((m: any) => m.user_id === user?.id)?.role;
+  const memberNames = members.map((m: any) => m.profile?.display_name ?? '?');
 
-      if (error) throw error;
-      return data as GroupMember;
-    },
-    enabled: !!id && !!user,
-  });
+  const planRows = useMemo(() => {
+    return (group?.plans ?? [])
+      .filter((p: any) => p.status !== 'cancelled')
+      .map((p: any) => {
+        let going: number;
+        if (p.plan_type === 'fixed' || p.status === 'locked') {
+          // Locking a flexible plan seeds yes-RSVPs, so rsvps are the truth here
+          going = (p.rsvps ?? []).filter((r: any) => r.response === 'yes').length;
+        } else {
+          const seen = new Set<string>();
+          (p.plan_date_options ?? []).forEach((opt: any) =>
+            (opt.date_availability ?? []).forEach((a: any) => seen.add(a.user_id))
+          );
+          going = seen.size;
+        }
 
-  const { data: plans, isLoading: plansLoading } = useQuery({
-    queryKey: ['group-plans', id],
-    queryFn: async () => {
-      // Fetch plans with RSVP counts and date availabilities
-      const { data, error } = await supabase
-        .from('plans')
-        .select(`
-          *,
-          rsvps(response),
-          plan_date_options(id, date, date_availability(id, user_id))
-        `)
-        .eq('group_id', id)
-        .order('created_at', { ascending: false });
+        const optionCount = (p.plan_date_options ?? []).length;
+        const when = p.locked_date
+          ? `${fmtDay(p.locked_date)} · ${fmtTime(p.locked_date)}`
+          : p.event_date
+            ? `${fmtDay(p.event_date)} · ${fmtTime(p.event_date)}`
+            : `${optionCount} date${optionCount === 1 ? '' : 's'} on the table`;
 
-      if (error) throw error;
+        const meta =
+          going < p.min_people ? `${going} of ${p.min_people} needed` : `${going} going`;
 
-      // Calculate confirmed status for each plan
-      return (data || []).map((plan: any) => {
-        const { dateOptions, availabilities } = flattenNestedOptions(plan.plan_date_options);
-        const counts = Object.values(countAvailabilityByDate(dateOptions, availabilities));
-        const bestDateCount = counts.reduce((max, c) => Math.max(max, c.count), 0);
-
-        return {
-          ...plan,
-          yes_count: plan.plan_type === 'fixed' ? getYesCount(plan.rsvps) : bestDateCount,
-          is_confirmed: isPlanConfirmed({
-            plan_type: plan.plan_type,
-            status: plan.status,
-            min_people: plan.min_people,
-            rsvps: plan.rsvps,
-            dateOptions,
-            availabilities,
-          }),
-        };
-      }) as (Plan & { yes_count: number; is_confirmed: boolean })[];
-    },
-    enabled: !!id,
-  });
-
-  const { data: memberCount } = useQuery({
-    queryKey: ['group-member-count', id],
-    queryFn: async () => {
-      const { count, error } = await supabase
-        .from('group_members')
-        .select('*', { count: 'exact', head: true })
-        .eq('group_id', id);
-
-      if (error) throw error;
-      return count || 0;
-    },
-    enabled: !!id,
-  });
-
-  const isAdmin = membership?.role === 'admin';
-
-  const getBestDate = (plan: any) => {
-    if (plan.locked_date) return plan.locked_date;
-    if (plan.event_date) return plan.event_date;
-
-    // For flexible plans, find earliest date meeting minimum
-    const { dateOptions, availabilities } = flattenNestedOptions(plan.plan_date_options);
-    return earliestViableDate(
-      countAvailabilityByDate(dateOptions, availabilities),
-      plan.min_people
-    );
-  };
-
-  async function shareInviteCode() {
-    if (!group) return;
-    try {
-      await Share.share({
-        message: `Join my group "${group.name}" on Planazo! Use code: ${group.invite_code}`,
+        return { id: p.id, title: p.title, when, meta, open: p.status === 'open' };
       });
-    } catch (error) {
-      console.error(error);
-    }
-  }
+  }, [group?.plans]);
 
-  const leaveGroup = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase
-        .from('group_members')
-        .delete()
-        .eq('group_id', id)
-        .eq('user_id', user?.id);
+  const waiting = planRows.filter((p: any) => p.open);
+  const locked = planRows.filter((p: any) => !p.open);
 
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['groups'] });
-      router.replace('/(app)/(tabs)/groups');
-    },
-    onError: (error: any) => {
-      Alert.alert('Error', error.message);
-    },
-  });
-
-  function confirmLeave() {
-    Alert.alert(
-      'Leave Group',
-      'Are you sure you want to leave this group?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Leave',
-          style: 'destructive',
-          onPress: () => leaveGroup.mutate(),
-        },
-      ]
+  if (isLoading || !group) {
+    return (
+      <SafeAreaView style={styles.screen} edges={['top']}>
+        <View style={styles.loading}>
+          <ActivityIndicator size="large" color={colors.accent} />
+        </View>
+      </SafeAreaView>
     );
   }
 
-  // Split plans: confirmed (min reached but still open), open (not yet confirmed), cancelled
-  const confirmedPlans = plans?.filter((p) => p.status === 'open' && p.is_confirmed) || [];
-  const openPlans = plans?.filter((p) => p.status === 'open' && !p.is_confirmed) || [];
-  const cancelledPlans = plans?.filter((p) => p.status === 'cancelled') || [];
+  const renderPlanRow = (p: any, tone: 'waiting' | 'locked') => (
+    <Card key={p.id}>
+      <Pressable onPress={() => router.push(`/(app)/plan/${p.id}`)} testID={`plan-row-${p.id}`}>
+        <ThemedText variant="cardTitle" style={styles.planTitle} numberOfLines={1}>
+          {p.title}
+        </ThemedText>
+        <ThemedText variant="sub">{p.when}</ThemedText>
+        <ThemedText
+          variant="caption"
+          color={tone === 'waiting' ? colors.accentPressed : colors.textMuted}
+          style={styles.planMeta}
+        >
+          {p.meta}
+        </ThemedText>
+      </Pressable>
+    </Card>
+  );
 
   return (
-    <>
-      <Stack.Screen
-        options={{
-          title: group?.name || 'Group',
-          headerTitleStyle: { color: COLORS.gray[900] },
-          headerLeft: () => (
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-              <Text style={styles.backButtonText}>‹ Back</Text>
-            </TouchableOpacity>
-          ),
-          headerRight: () =>
-            isAdmin ? (
-              <TouchableOpacity onPress={() => router.push(`/(app)/group/${id}/settings`)}>
-                <Text style={styles.headerButton}>⚙️</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity onPress={confirmLeave}>
-                <Text style={styles.leaveButton}>Leave</Text>
-              </TouchableOpacity>
-            ),
-        }}
-      />
-      <View style={styles.container}>
-        <ScrollView
-          contentContainerStyle={styles.content}
-          refreshControl={
-            <RefreshControl
-              refreshing={groupLoading || plansLoading}
-              onRefresh={refetch}
-              tintColor={COLORS.primary}
-            />
-          }
+    <SafeAreaView style={styles.screen} edges={['top']}>
+      <View style={styles.navRow}>
+        <Pressable onPress={() => router.back()} accessibilityRole="button" testID="back">
+          <ThemedText variant="bodyStrong" color={colors.accent}>
+            ‹ Groups
+          </ThemedText>
+        </Pressable>
+        <Pressable
+          onPress={() => router.push(`/(app)/group/${id}/manage`)}
+          accessibilityRole="button"
+          testID="manage"
         >
-          {/* Group Header */}
-          <View style={styles.header}>
-            {group?.description && (
-              <Text style={styles.description}>{group.description}</Text>
-            )}
-            <View style={styles.headerActions}>
-              <TouchableOpacity
-                style={styles.headerAction}
-                onPress={() => router.push(`/(app)/group/${id}/members`)}
-              >
-                <Text style={styles.headerActionEmoji}>👥</Text>
-                <Text style={styles.headerActionText}>{memberCount} members</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.headerAction} onPress={shareInviteCode}>
-                <Text style={styles.headerActionEmoji}>🔗</Text>
-                <Text style={styles.headerActionText}>Invite</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Create Plan Button */}
-          <TouchableOpacity
-            style={styles.createButton}
-            onPress={() => router.push({ pathname: '/(app)/plan/create', params: { groupId: id } })}
-          >
-            <Text style={styles.createButtonEmoji}>➕</Text>
-            <Text style={styles.createButtonText}>Create Plan</Text>
-          </TouchableOpacity>
-
-          {/* Confirmed Plans - Show first since they're most important */}
-          {confirmedPlans.length > 0 && (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitleConfirmed}>Confirmed Plans</Text>
-                <View style={styles.confirmedBadge}>
-                  <Text style={styles.confirmedBadgeText}>{confirmedPlans.length}</Text>
-                </View>
-              </View>
-              <View style={styles.planList}>
-                {confirmedPlans.map((plan) => (
-                  <TouchableOpacity
-                    key={plan.id}
-                    style={styles.planCardConfirmed}
-                    onPress={() => router.push(`/(app)/plan/${plan.id}`)}
-                  >
-                    <View style={styles.confirmedIndicator} />
-                    <View style={styles.planCardContent}>
-                      <View style={styles.planHeader}>
-                        <Text style={styles.planType}>🎉</Text>
-                        <Text style={styles.planTitle}>{plan.title}</Text>
-                      </View>
-                      <Text style={styles.planDateConfirmed}>
-                        {getBestDate(plan)
-                          ? new Date(getBestDate(plan)).toLocaleDateString('en-US', {
-                              weekday: 'short',
-                              month: 'short',
-                              day: 'numeric',
-                            })
-                          : 'Date TBD'}
-                      </Text>
-                      {plan.location && (
-                        <Text style={styles.planLocation}>📍 {plan.location}</Text>
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          )}
-
-          {/* Open Plans */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Open Plans ({openPlans.length})</Text>
-            {openPlans.length > 0 ? (
-              <View style={styles.planList}>
-                {openPlans.map((plan) => (
-                  <TouchableOpacity
-                    key={plan.id}
-                    style={styles.planCard}
-                    onPress={() => router.push(`/(app)/plan/${plan.id}`)}
-                  >
-                    <View style={styles.planHeader}>
-                      <Text style={styles.planType}>
-                        {plan.plan_type === 'fixed' ? '📅' : '🗓️'}
-                      </Text>
-                      <Text style={styles.planTitle}>{plan.title}</Text>
-                    </View>
-                    {plan.event_date && (
-                      <Text style={styles.planDate}>
-                        {new Date(plan.event_date).toLocaleDateString()}
-                      </Text>
-                    )}
-                    {plan.location && (
-                      <Text style={styles.planLocation}>📍 {plan.location}</Text>
-                    )}
-                    <Text style={styles.planMeta}>
-                      Min {plan.min_people} people
-                      {plan.max_people && ` • Max ${plan.max_people}`}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            ) : (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyText}>No open plans</Text>
-              </View>
-            )}
-          </View>
-        </ScrollView>
+          <ThemedText variant="bodyStrong" color={colors.textSecondary}>
+            Manage
+          </ThemedText>
+        </Pressable>
       </View>
-    </>
+
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} />}
+      >
+        <View style={styles.headerBlock}>
+          <View style={styles.identityRow}>
+            <GroupTile name={group.name} color={group.color} size={52} />
+            <View style={styles.identityText}>
+              <ThemedText variant="headerTitle">{group.name}</ThemedText>
+              <ThemedText variant="caption">
+                {myRole === 'admin' ? 'You run this group' : 'You’re a member here'}
+              </ThemedText>
+            </View>
+          </View>
+
+          {group.description ? (
+            <ThemedText variant="body" color={colors.textSecondary}>
+              {group.description}
+            </ThemedText>
+          ) : null}
+
+          <View style={styles.facesRow}>
+            <AvatarStack
+              names={memberNames}
+              label={`${members.length} ${members.length === 1 ? 'person' : 'people'}`}
+            />
+            <Pressable
+              onPress={() => shareInviteLink(group.name, group.invite_code)}
+              accessibilityRole="button"
+              testID="invite"
+            >
+              <ThemedText variant="bodyStrong" color={colors.accent}>
+                Invite
+              </ThemedText>
+            </Pressable>
+          </View>
+        </View>
+
+        {planRows.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <ThemedText variant="body" color={colors.textSecondary} style={styles.emptyText}>
+              Nothing on yet — start something and it posts straight to {group.name}.
+            </ThemedText>
+            <Button
+              label="Start a plan"
+              size="md"
+              onPress={() => router.push(`/(app)/plan/create?groupId=${id}`)}
+              style={styles.emptyCta}
+              testID="start-plan"
+            />
+          </View>
+        ) : (
+          <>
+            {waiting.length > 0 ? (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <View style={[styles.dot, { backgroundColor: colors.accent }]} />
+                  <ThemedText variant="sectionLabel" color={colors.accent}>
+                    Waiting on answers · {waiting.length}
+                  </ThemedText>
+                </View>
+                {waiting.map((p: any) => renderPlanRow(p, 'waiting'))}
+              </View>
+            ) : null}
+
+            {locked.length > 0 ? (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <View style={[styles.dot, { backgroundColor: colors.confirmed }]} />
+                  <ThemedText variant="sectionLabel" color={colors.confirmed}>
+                    Locked in · {locked.length}
+                  </ThemedText>
+                </View>
+                {locked.map((p: any) => renderPlanRow(p, 'locked'))}
+              </View>
+            ) : null}
+          </>
+        )}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    backgroundColor: COLORS.gray[50],
+    backgroundColor: colors.background,
+  },
+  flex: {
+    flex: 1,
+  },
+  loading: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  navRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+    paddingTop: 14,
+    paddingBottom: 6,
   },
   content: {
-    padding: 16,
+    paddingHorizontal: spacing.xl,
+    paddingTop: 6,
+    paddingBottom: 120,
+    gap: spacing.lg,
   },
-  headerButton: {
-    fontSize: 20,
-    padding: 8,
+  headerBlock: {
+    gap: spacing.md,
+    marginBottom: spacing.xs,
   },
-  leaveButton: {
-    fontSize: 16,
-    color: COLORS.error,
-    fontWeight: '500',
-    padding: 8,
-  },
-  backButton: {
-    paddingVertical: 8,
-    paddingRight: 16,
-  },
-  backButtonText: {
-    fontSize: 17,
-    color: COLORS.primary,
-  },
-  header: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  description: {
-    fontSize: 14,
-    color: COLORS.gray[600],
-    marginBottom: 16,
-  },
-  headerActions: {
+  identityRow: {
     flexDirection: 'row',
-    gap: 12,
+    alignItems: 'center',
+    gap: spacing.md,
   },
-  headerAction: {
+  identityText: {
     flex: 1,
+    gap: spacing.xxs,
+  },
+  facesRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.gray[50],
-    padding: 12,
-    borderRadius: 8,
-    gap: 8,
+    justifyContent: 'space-between',
   },
-  headerActionEmoji: {
-    fontSize: 16,
-  },
-  headerActionText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: COLORS.gray[700],
-  },
-  createButton: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 12,
-    padding: 16,
-    flexDirection: 'row',
+  emptyCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.borderStrong,
+    borderRadius: 22,
+    padding: 22,
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginBottom: 24,
+    gap: spacing.md,
   },
-  createButtonEmoji: {
-    fontSize: 20,
+  emptyText: {
+    textAlign: 'center',
   },
-  createButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.white,
+  emptyCta: {
+    paddingHorizontal: spacing.xxl,
   },
   section: {
-    marginBottom: 24,
+    gap: 10,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
-    gap: 8,
+    gap: spacing.sm,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.gray[900],
-    marginBottom: 12,
-  },
-  sectionTitleConfirmed: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.success,
-  },
-  confirmedBadge: {
-    backgroundColor: COLORS.success,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  confirmedBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.white,
-  },
-  planList: {
-    gap: 12,
-  },
-  planCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    padding: 16,
-  },
-  planCardConfirmed: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    flexDirection: 'row',
-    overflow: 'hidden',
-  },
-  confirmedIndicator: {
-    width: 4,
-    backgroundColor: COLORS.success,
-  },
-  planCardContent: {
-    flex: 1,
-    padding: 16,
-  },
-  planDateConfirmed: {
-    fontSize: 14,
-    color: COLORS.success,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  planHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-  },
-  planType: {
-    fontSize: 20,
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   planTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.gray[900],
-    flex: 1,
-  },
-  planDate: {
-    fontSize: 14,
-    color: COLORS.primary,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  planLocation: {
-    fontSize: 14,
-    color: COLORS.gray[500],
-    marginBottom: 4,
+    marginBottom: spacing.xxs,
   },
   planMeta: {
-    fontSize: 12,
-    color: COLORS.gray[400],
-  },
-  emptyState: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    padding: 24,
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 14,
-    color: COLORS.gray[500],
+    marginTop: spacing.xs,
   },
 });

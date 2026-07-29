@@ -3,7 +3,7 @@ import * as Haptics from 'expo-haptics';
 import { ThemedText } from './ThemedText';
 import { colors, fonts, radii } from '../../theme/tokens';
 
-type ButtonVariant = 'primary' | 'secondary' | 'outline';
+type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ink';
 type ButtonSize = 'md' | 'lg';
 
 interface ButtonProps {
@@ -21,6 +21,7 @@ const textColor: Record<ButtonVariant, string> = {
   primary: colors.textOnAccent,
   secondary: colors.textSecondary,
   outline: colors.textSecondary,
+  ink: colors.background,
 };
 
 export function Button({
@@ -89,6 +90,9 @@ const styles = StyleSheet.create({
   },
   primaryPressed: {
     backgroundColor: colors.accentPressed,
+  },
+  ink: {
+    backgroundColor: colors.ink,
   },
   secondary: {
     backgroundColor: colors.surfaceSunken,
