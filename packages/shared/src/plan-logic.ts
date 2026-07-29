@@ -204,3 +204,49 @@ export function needsUserResponse(
   if (userRsvp?.response === 'no') return false;
   return !(data.availabilities ?? []).some((a) => a.user_id === userId);
 }
+
+export interface PlanDates {
+  event_date?: string | null;
+  locked_date?: string | null;
+}
+
+/**
+ * The last date a plan could still happen on: the locked date, the fixed
+ * date, or the latest of an open vote's options. Null when undated.
+ */
+export function planLastDate(
+  plan: PlanDates,
+  optionDates: string[] = []
+): string | null {
+  if (plan.locked_date) return plan.locked_date;
+  if (plan.event_date) return plan.event_date;
+  if (optionDates.length === 0) return null;
+  return optionDates.reduce((a, b) =>
+    new Date(a).getTime() >= new Date(b).getTime() ? a : b
+  );
+}
+
+/**
+ * Local midnight after the day the timestamp falls on. Built from date
+ * components — never from a naive string (Hermes parses those as UTC).
+ */
+export function endOfLocalDay(iso: string): Date {
+  const d = new Date(iso);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 0, 0);
+}
+
+/**
+ * Endings rule (design 19c–19e): a plan is past once the end of its last
+ * possible day has gone by, in the viewer's timezone. Undated plans never
+ * expire. Whether a past plan "happened" or "didn't happen" is a separate
+ * question answered by isPlanConfirmed.
+ */
+export function isPlanPast(
+  plan: PlanDates,
+  optionDates: string[] = [],
+  now: Date = new Date()
+): boolean {
+  const last = planLastDate(plan, optionDates);
+  if (!last) return false;
+  return now.getTime() >= endOfLocalDay(last).getTime();
+}

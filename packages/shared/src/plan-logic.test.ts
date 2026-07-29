@@ -10,6 +10,9 @@ import {
   isPlanConfirmed,
   isUserParticipating,
   needsUserResponse,
+  planLastDate,
+  endOfLocalDay,
+  isPlanPast,
   DateOption,
   Availability,
 } from './plan-logic';
@@ -438,5 +441,54 @@ describe('needsUserResponse', () => {
       )
     ).toBe(false);
     expect(needsUserResponse({ ...base }, 'user-1')).toBe(true);
+  });
+});
+
+describe('endings — planLastDate / endOfLocalDay / isPlanPast', () => {
+  it('planLastDate prefers locked, then fixed, then the latest option', () => {
+    expect(
+      planLastDate(
+        { locked_date: '2026-08-13T20:00:00Z', event_date: null },
+        ['2026-08-20T20:00:00Z']
+      )
+    ).toBe('2026-08-13T20:00:00Z');
+    expect(planLastDate({ event_date: '2026-08-08T19:00:00Z' })).toBe('2026-08-08T19:00:00Z');
+    expect(
+      planLastDate({ event_date: null, locked_date: null }, [
+        '2026-08-07T20:00:00Z',
+        '2026-08-14T20:00:00Z',
+        '2026-08-09T20:00:00Z',
+      ])
+    ).toBe('2026-08-14T20:00:00Z');
+    expect(planLastDate({ event_date: null, locked_date: null }, [])).toBeNull();
+  });
+
+  it('endOfLocalDay is midnight after the local day of the stamp', () => {
+    const eod = endOfLocalDay(new Date(2026, 7, 8, 19, 0).toISOString());
+    expect(eod.getFullYear()).toBe(2026);
+    expect(eod.getMonth()).toBe(7);
+    expect(eod.getDate()).toBe(9);
+    expect(eod.getHours()).toBe(0);
+  });
+
+  it('a plan stays live through its whole day and expires at local midnight', () => {
+    const evening = new Date(2026, 7, 8, 19, 0).toISOString();
+    const plan = { event_date: evening, locked_date: null };
+    // Later the same night — still not past
+    expect(isPlanPast(plan, [], new Date(2026, 7, 8, 23, 30))).toBe(false);
+    // Next morning — past
+    expect(isPlanPast(plan, [], new Date(2026, 7, 9, 0, 1))).toBe(true);
+  });
+
+  it('an open vote lives until the end of its latest option', () => {
+    const plan = { event_date: null, locked_date: null };
+    const opts = [
+      new Date(2026, 7, 7, 20, 0).toISOString(),
+      new Date(2026, 7, 14, 20, 0).toISOString(),
+    ];
+    expect(isPlanPast(plan, opts, new Date(2026, 7, 10, 12, 0))).toBe(false);
+    expect(isPlanPast(plan, opts, new Date(2026, 7, 15, 0, 1))).toBe(true);
+    // Undated plans never expire
+    expect(isPlanPast(plan, [], new Date(2030, 0, 1))).toBe(false);
   });
 });

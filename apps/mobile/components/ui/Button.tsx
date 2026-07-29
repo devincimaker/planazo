@@ -3,7 +3,7 @@ import * as Haptics from 'expo-haptics';
 import { ThemedText } from './ThemedText';
 import { colors, fonts, radii } from '../../theme/tokens';
 
-type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ink';
+type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ink' | 'accentOutline' | 'danger';
 type ButtonSize = 'md' | 'lg';
 
 interface ButtonProps {
@@ -22,6 +22,8 @@ const textColor: Record<ButtonVariant, string> = {
   secondary: colors.textSecondary,
   outline: colors.textSecondary,
   ink: colors.background,
+  accentOutline: colors.accent,
+  danger: colors.textOnAccent,
 };
 
 export function Button({
@@ -103,6 +105,16 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1.5,
     borderColor: colors.borderStrong,
+  },
+  // The quiet undo (19b/19c): an outline in the accent, never the filled ember.
+  accentOutline: {
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: colors.accent,
+  },
+  // The loud act, once already chosen (20b's filled "Call it off").
+  danger: {
+    backgroundColor: colors.accentPressed,
   },
   otherPressed: {
     opacity: 0.7,

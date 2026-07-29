@@ -25,6 +25,14 @@ export const palette = {
   parchment: '#F3EBE4',
   oat: '#EADFD5',
   mist: '#EFE6DE',
+
+  // Endings family ("Planazo Endings" design doc, 19a–19e): flat stone
+  // surfaces for plans that stopped being plans.
+  putty: '#F0EAE4',
+  pebble: '#E3D9D1',
+  dust: '#E9E1DA',
+  ash: '#C9BDB4',
+  bone: '#F4EEE8',
 } as const;
 
 export const colors = {
@@ -51,6 +59,14 @@ export const colors = {
 
   surfaceSunken: palette.linen,
   tabInactive: palette.mushroom,
+
+  // Ended plans (called off / didn't happen): the stone status card, its
+  // border, the state pill, and the frozen slot bar / strikethrough grey.
+  endedCard: palette.putty,
+  endedBorder: palette.pebble,
+  endedBadge: palette.dust,
+  endedMuted: palette.ash,
+  pastCard: palette.bone,
 
   tabBarBackground: 'rgba(252,248,244,0.94)',
   tabBarBorder: palette.mist,

@@ -83,6 +83,9 @@ export interface Plan {
   status: PlanStatus;
   locked_date: string | null; // ISO string, for flexible plans when locked
   locked_at: string | null;
+  cancelled_at: string | null;
+  cancelled_by: string | null;
+  cancel_reason: string | null;
   deadline: string | null; // ISO string
   created_at: string;
   updated_at: string;
@@ -134,6 +137,7 @@ export type NotificationType =
   | 'plan_created'
   | 'plan_locked'
   | 'plan_cancelled'
+  | 'plan_reopened'
   | 'invited_to_group'
   | 'kicked_from_group';
 
