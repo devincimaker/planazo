@@ -9,6 +9,8 @@ import { feedbackSheetOpen } from '../lib/feedbackState';
  * the app is open opens the feedback sheet with that moment attached. iOS
  * only reports THAT a screenshot happened, never the image — so re-capture
  * the screen the instant the event fires: same pixels, no photo permission.
+ * The OS notification never fires in the Simulator (host-side capture), so
+ * this hop is verifiable only on a physical device.
  */
 export function ScreenshotFeedback() {
   const router = useRouter();

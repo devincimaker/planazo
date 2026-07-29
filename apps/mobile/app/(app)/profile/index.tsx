@@ -119,7 +119,15 @@ export default function ProfileSheet() {
             }
           />
           <ListRow title="Account" value={profile?.email} divider />
-          <ListRow title="Sign out" destructive divider onPress={confirmSignOut} testID="sign-out" />
+          {/* right: design 12b's sign-out row has no chevron */}
+          <ListRow
+            title="Sign out"
+            destructive
+            divider
+            onPress={confirmSignOut}
+            right={<></>}
+            testID="sign-out"
+          />
         </Card>
 
         <Pressable
