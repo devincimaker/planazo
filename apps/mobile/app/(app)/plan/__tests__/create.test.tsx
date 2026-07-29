@@ -269,7 +269,7 @@ describe('CreatePlanScreen', () => {
         created_by: 'me',
         title: 'Padel + pizza',
         plan_type: 'fixed',
-        event_date: new Date('2026-08-07T20:30:00').toISOString(),
+        event_date: new Date(2026, 7, 7, 20, 30).toISOString(),
         min_people: 4,
         max_people: null,
         status: 'open',

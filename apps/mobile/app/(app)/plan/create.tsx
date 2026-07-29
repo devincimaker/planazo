@@ -101,6 +101,22 @@ export default function CreatePlanScreen() {
   const capUp = () => setCap((c) => Math.min(40, (c ?? min) + 1));
   const capDown = () => setCap((c) => (c === null || c - 1 <= min ? null : c - 1));
 
+  // Build Dates from components, never by parsing strings: Hermes and the
+  // native picker can disagree on the UTC offset of a parsed date-time,
+  // which showed up as the wheel sitting an hour off the pill.
+  const timeAsDate = () => {
+    const [h, m] = time.split(':').map(Number);
+    const d = new Date();
+    d.setHours(h, m, 0, 0);
+    return d;
+  };
+
+  const eventDateIso = () => {
+    const [y, mo, d] = dates[0].split('-').map(Number);
+    const [h, m] = time.split(':').map(Number);
+    return new Date(y, mo - 1, d, h, m).toISOString();
+  };
+
   const onTimeChange = (_event: unknown, picked?: Date) => {
     if (Platform.OS !== 'ios') setShowTimePicker(false);
     if (picked) {
@@ -133,7 +149,7 @@ export default function CreatePlanScreen() {
           description: notes.trim() || null,
           location: location.trim() || null,
           plan_type: fixed ? 'fixed' : 'flexible',
-          event_date: fixed ? new Date(`${dates[0]}T${time}:00`).toISOString() : null,
+          event_date: fixed ? eventDateIso() : null,
           min_people: min,
           max_people: cap,
           status: 'open',
@@ -280,7 +296,7 @@ export default function CreatePlanScreen() {
                 </View>
                 {showTimePicker ? (
                   <DateTimePicker
-                    value={new Date(`2000-01-01T${time}:00`)}
+                    value={timeAsDate()}
                     mode="time"
                     display="spinner"
                     onChange={onTimeChange}
