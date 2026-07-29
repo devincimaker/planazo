@@ -163,7 +163,7 @@ export default function GroupDetailScreen() {
               label={`${members.length} ${members.length === 1 ? 'person' : 'people'}`}
             />
             <Pressable
-              onPress={() => shareInviteLink(group.name, group.invite_code)}
+              onPress={() => router.push(`/(app)/group/${id}/invite`)}
               accessibilityRole="button"
               testID="invite"
             >

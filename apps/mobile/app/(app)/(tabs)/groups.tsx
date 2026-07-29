@@ -15,7 +15,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { flattenNestedOptions, needsUserResponse } from '@planazo/shared';
 import { supabase } from '../../../lib/supabase';
 import { useAuthStore } from '../../../stores/authStore';
-import { ThemedText, Card, Button, GroupTile } from '../../../components/ui';
+import { usePendingInvites } from '../../../lib/usePendingInvites';
+import { useFriends } from '../../../lib/useFriends';
+import { ThemedText, Card, Button, Avatar, AvatarStack, GroupTile } from '../../../components/ui';
 import { colors, fonts, radii, spacing, groupColors } from '../../../theme/tokens';
 
 /** Invite codes travel as links; accept a raw code or anything containing one. */
@@ -37,6 +39,8 @@ export default function GroupsScreen() {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const [joinText, setJoinText] = useState('');
+  const { groupInvites, friendRequests, count: inviteCount } = usePendingInvites();
+  const { friends } = useFriends();
 
   const { data: rows, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['groups', user?.id],
@@ -130,6 +134,15 @@ export default function GroupsScreen() {
   const hasGroups = (rows ?? []).length > 0;
   const joinCode = inviteCodeFrom(joinText);
 
+  // Faces + "Padel Dilluns, Aina Roig and 1 more" for the collapsed row (18a)
+  const inviteLabels = [
+    ...groupInvites.map((i) => i.groupName),
+    ...friendRequests.map((r) => r.personName),
+  ];
+  const inviteLine =
+    inviteLabels.slice(0, 2).join(', ') +
+    (inviteLabels.length > 2 ? ` and ${inviteLabels.length - 2} more` : '');
+
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <View style={styles.header}>
@@ -137,15 +150,16 @@ export default function GroupsScreen() {
         {hasGroups ? (
           <Pressable
             accessibilityRole="button"
-            onPress={() => router.push('/(app)/group/new')}
-            style={({ pressed }) => [styles.newPill, pressed && styles.pressed]}
-            testID="new-group"
+            onPress={() => router.push('/(app)/find-people')}
+            style={({ pressed }) => [styles.findPill, pressed && styles.pressed]}
+            testID="find-people"
           >
-            <ThemedText variant="bodyStrong" color={colors.background} style={styles.newPlus}>
-              +
-            </ThemedText>
-            <ThemedText variant="bodyStrong" color={colors.background} style={styles.newLabel}>
-              New group
+            <View style={styles.findIcon}>
+              <View style={styles.findCircle} />
+              <View style={styles.findHandle} />
+            </View>
+            <ThemedText variant="bodyStrong" style={styles.findLabel}>
+              Find people
             </ThemedText>
           </Pressable>
         ) : null}
@@ -219,9 +233,46 @@ export default function GroupsScreen() {
           contentContainerStyle={styles.listContent}
           refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} />}
         >
-          <ThemedText variant="sectionLabel" style={styles.sectionLabel}>
-            Your groups
-          </ThemedText>
+          {inviteCount > 0 ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push('/(app)/invites')}
+              style={({ pressed }) => [styles.invitesRow, pressed && styles.pressed]}
+              testID="invites-row"
+            >
+              <View style={styles.invitesFaces}>
+                {inviteLabels.slice(0, 3).map((name, i) => (
+                  <View key={`${name}-${i}`} style={[styles.invitesFace, i > 0 && styles.invitesFaceOverlap]}>
+                    <Avatar name={name} size={30} />
+                  </View>
+                ))}
+              </View>
+              <View style={styles.invitesBody}>
+                <ThemedText variant="bodyStrong" color={colors.background}>
+                  {inviteCount} invite{inviteCount === 1 ? '' : 's'}
+                </ThemedText>
+                <ThemedText variant="caption" color={colors.textFaint} numberOfLines={1}>
+                  {inviteLine}
+                </ThemedText>
+              </View>
+              <ThemedText variant="body" color={colors.tabInactive}>
+                ›
+              </ThemedText>
+            </Pressable>
+          ) : null}
+
+          <View style={styles.sectionHeader}>
+            <ThemedText variant="sectionLabel">Your groups</ThemedText>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push('/(app)/group/new')}
+              testID="new-group"
+            >
+              <ThemedText variant="bodyStrong" color={colors.accent}>
+                New
+              </ThemedText>
+            </Pressable>
+          </View>
           <Card padded={false}>
             {(rows ?? []).map((g, i) => (
               <Pressable
@@ -258,6 +309,30 @@ export default function GroupsScreen() {
               </Pressable>
             ))}
           </Card>
+
+          {friends.length > 0 ? (
+            <View style={styles.peopleSection}>
+              <ThemedText variant="sectionLabel" style={styles.sectionLabel}>
+                Your people
+              </ThemedText>
+              <Card padded={false}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => router.push('/(app)/find-people')}
+                  style={({ pressed }) => [styles.peopleRow, pressed && styles.rowPressed]}
+                  testID="your-people"
+                >
+                  <AvatarStack names={friends.map((f) => f.name)} max={4} size={30} />
+                  <ThemedText variant="bodyStrong" style={styles.peopleLabel}>
+                    {friends.length} friend{friends.length === 1 ? '' : 's'}
+                  </ThemedText>
+                  <ThemedText variant="body" color={colors.textFaint}>
+                    ›
+                  </ThemedText>
+                </Pressable>
+              </Card>
+            </View>
+          ) : null}
         </ScrollView>
       )}
     </SafeAreaView>
@@ -277,25 +352,88 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     paddingBottom: spacing.md,
   },
-  newPill: {
+  findPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
-    backgroundColor: colors.ink,
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
     borderRadius: radii.pill,
-    paddingVertical: 9,
-    paddingLeft: 12,
-    paddingRight: 15,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: 14,
   },
-  newPlus: {
-    fontSize: 17,
-    lineHeight: 19,
-    fontFamily: fonts.bodySemiBold,
+  findIcon: {
+    width: 15,
+    height: 14,
   },
-  newLabel: {
+  findCircle: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    width: 11,
+    height: 11,
+    borderRadius: radii.pill,
+    borderWidth: 1.5,
+    borderColor: colors.ink,
+  },
+  findHandle: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    width: 8,
+    height: 2,
+    backgroundColor: colors.ink,
+    transform: [{ rotate: '45deg' }],
+  },
+  findLabel: {
     fontSize: 14,
     lineHeight: 18,
     fontFamily: fonts.bodyBold,
+  },
+  invitesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 13,
+    backgroundColor: colors.ink,
+    borderRadius: 20,
+    paddingVertical: 14,
+    paddingHorizontal: spacing.lg,
+    marginBottom: 22,
+  },
+  invitesFaces: {
+    flexDirection: 'row',
+  },
+  invitesFace: {
+    borderWidth: 2,
+    borderColor: colors.ink,
+    borderRadius: radii.pill,
+  },
+  invitesFaceOverlap: {
+    marginLeft: -11,
+  },
+  invitesBody: {
+    flex: 1,
+    gap: spacing.xxs,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  peopleSection: {
+    marginTop: 22,
+  },
+  peopleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: 14,
+    paddingHorizontal: spacing.lg,
+  },
+  peopleLabel: {
+    flex: 1,
   },
   pressed: {
     opacity: 0.8,

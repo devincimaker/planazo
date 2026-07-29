@@ -10,10 +10,11 @@ import {
   Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../../lib/supabase';
 import { useAuthStore } from '../../../stores/authStore';
+import { useFriends } from '../../../lib/useFriends';
 import { ThemedText, Card, Button, Avatar, GroupTile } from '../../../components/ui';
 import { colors, fonts, groupColors, radii, spacing, type } from '../../../theme/tokens';
 
@@ -24,13 +25,6 @@ function generateInviteCode(): string {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return result;
-}
-
-interface Friend {
-  id: string;
-  name: string;
-  handle: string | null;
-  avatarUrl: string | null;
 }
 
 export default function NewGroupScreen() {
@@ -55,33 +49,7 @@ export default function NewGroupScreen() {
   const [picks, setPicks] = useState<string[]>([]);
 
   // 17c "Your people": accepted friendships, either direction.
-  const { data: friends } = useQuery({
-    queryKey: ['friends', user?.id],
-    queryFn: async (): Promise<Friend[]> => {
-      const { data, error } = await supabase
-        .from('friendships')
-        .select(
-          `requester_id, addressee_id,
-          requester:requester_id(id, display_name, handle, avatar_url),
-          addressee:addressee_id(id, display_name, handle, avatar_url)`
-        )
-        .eq('status', 'accepted')
-        .or(`requester_id.eq.${user?.id},addressee_id.eq.${user?.id}`);
-      if (error) throw error;
-
-      return (data ?? [])
-        .map((f: any) => (f.requester_id === user?.id ? f.addressee : f.requester))
-        .filter(Boolean)
-        .map((p: any) => ({
-          id: p.id,
-          name: p.display_name,
-          handle: p.handle,
-          avatarUrl: p.avatar_url,
-        }))
-        .sort((a: Friend, b: Friend) => a.name.localeCompare(b.name));
-    },
-    enabled: !!user,
-  });
+  const { friends } = useFriends();
 
   const togglePick = (id: string) =>
     setPicks((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
