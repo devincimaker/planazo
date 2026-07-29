@@ -24,11 +24,24 @@ const mockFrom = supabase.from as jest.Mock;
 /** Chainable, awaitable Supabase query-builder stub. */
 function chain(result: unknown) {
   const c: any = {};
-  ['select', 'eq', 'in', 'neq', 'order', 'upsert', 'delete'].forEach((m) => {
+  ['select', 'eq', 'in', 'neq', 'gte', 'order', 'upsert', 'update', 'delete'].forEach((m) => {
     c[m] = jest.fn(() => c);
   });
   c.then = (resolve: (v: unknown) => void) => Promise.resolve(result).then(resolve);
   return c;
+}
+
+/** ISO timestamp N days from today at the given hour, local time. */
+function iso(daysFromNow: number, hour = 19) {
+  const now = new Date();
+  return new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() + daysFromNow,
+    hour,
+    0,
+    0
+  ).toISOString();
 }
 
 const GROUP = { id: 'g1', name: 'Domingueros' };
@@ -81,13 +94,29 @@ let plansChain: ReturnType<typeof chain>;
 let rsvpsChain: ReturnType<typeof chain>;
 let availChain: ReturnType<typeof chain>;
 
-function primeSupabase(plans: unknown[]) {
+let noticesChain: ReturnType<typeof chain>;
+
+function primeSupabase(
+  plans: unknown[],
+  {
+    notices = [],
+    cancelledPlans = [],
+  }: { notices?: unknown[]; cancelledPlans?: unknown[] } = {}
+) {
   plansChain = chain({ data: plans, error: null });
   rsvpsChain = chain({ error: null });
   availChain = chain({ error: null });
+  noticesChain = chain({ data: notices, error: null });
   mockFrom.mockImplementation((table: string) => {
     if (table === 'group_members') return chain({ data: [{ group_id: 'g1' }], error: null });
-    if (table === 'plans') return plansChain;
+    if (table === 'plans') {
+      // The home query filters cancelled via .neq; the 19e notice fetch
+      // doesn't — that call gets the cancelled rows.
+      const c = chain({ data: cancelledPlans, error: null });
+      c.neq = jest.fn(() => plansChain);
+      return c;
+    }
+    if (table === 'notifications') return noticesChain;
     if (table === 'rsvps') return rsvpsChain;
     if (table === 'date_availability') return availChain;
     return chain({ data: null, error: null });
@@ -191,5 +220,64 @@ describe('FeedScreen', () => {
     await waitFor(() => expect(screen.getByText('Nothing on the table')).toBeTruthy());
     await fireEvent.press(screen.getByText('Start a plan'));
     expect(mockPush).toHaveBeenCalledWith('/(app)/plan/create');
+  });
+
+  it('19e: past plans leave the feed silently at the end of their day', async () => {
+    const pastPlan = { ...fixedOpen, id: 'p-past', title: 'Last week thing', event_date: iso(-3) };
+    primeSupabase([fixedOpen, pastPlan]);
+    await renderFeed();
+
+    await waitFor(() => expect(screen.getByText('Padel + pizza')).toBeTruthy());
+    expect(screen.queryByText('Last week thing')).toBeNull();
+  });
+
+  it('19e: a cancellation pins one dismissable notice above the feed', async () => {
+    primeSupabase([fixedOpen], {
+      notices: [{ id: 'n1', data: { plan_id: 'pc' }, created_at: iso(0, 9) }],
+      cancelledPlans: [
+        {
+          id: 'pc',
+          title: 'Five-a-side at Powerleague',
+          status: 'cancelled',
+          event_date: iso(10),
+          locked_date: null,
+          cancel_reason: 'Pitch flooded',
+          canceller: { display_name: 'Marcus' },
+        },
+      ],
+    });
+    await renderFeed();
+
+    await waitFor(() => expect(screen.getByText('Called off')).toBeTruthy());
+    expect(screen.getByText('Five-a-side at Powerleague')).toBeTruthy();
+    expect(screen.getByText(new RegExp('is off — Marcus says “Pitch flooded”'))).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('see-plan-pc'));
+    expect(mockPush).toHaveBeenCalledWith('/(app)/plan/pc');
+
+    await fireEvent.press(screen.getByTestId('got-it-pc'));
+    await waitFor(() => expect(noticesChain.update).toHaveBeenCalledWith({ read: true }));
+    expect(noticesChain.eq).toHaveBeenCalledWith('id', 'n1');
+  });
+
+  it('19e: a restored plan takes its notice with it', async () => {
+    primeSupabase([fixedOpen], {
+      notices: [{ id: 'n1', data: { plan_id: 'pc' }, created_at: iso(0, 9) }],
+      cancelledPlans: [
+        {
+          id: 'pc',
+          title: 'Five-a-side at Powerleague',
+          status: 'open',
+          event_date: iso(10),
+          locked_date: null,
+          cancel_reason: null,
+          canceller: null,
+        },
+      ],
+    });
+    await renderFeed();
+
+    await waitFor(() => expect(screen.getByText('Padel + pizza')).toBeTruthy());
+    expect(screen.queryByText('Called off')).toBeNull();
   });
 });

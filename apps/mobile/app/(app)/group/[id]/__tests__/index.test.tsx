@@ -109,7 +109,7 @@ describe('GroupDetailScreen', () => {
     expect(mockPush).toHaveBeenCalledWith('/(app)/plan/p1');
   });
 
-  it('member role note reads member, cancelled plans stay hidden', async () => {
+  it('member role note reads member, cancelled plans fall through to Past', async () => {
     group.group_members = [
       { user_id: 'me', role: 'member', profile: { id: 'me', display_name: 'Rocío' } },
     ];
@@ -122,6 +122,8 @@ describe('GroupDetailScreen', () => {
         event_date: '2026-08-07T20:30:00',
         locked_date: null,
         min_people: 2,
+        cancelled_by: 'u2',
+        canceller: { display_name: 'Aina' },
         rsvps: [],
         plan_date_options: [],
       },
@@ -130,9 +132,55 @@ describe('GroupDetailScreen', () => {
     await renderDetail();
 
     expect(await screen.findByText('You’re a member here')).toBeTruthy();
+    // Closed by default — it costs one line until you want it
     expect(screen.queryByText('Cancelled thing')).toBeNull();
-    // Every visible plan gone → empty card
+    // No live plans → empty card still invites a start
     expect(screen.getByTestId('start-plan')).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('past-toggle'));
+    expect(screen.getByText('Cancelled thing')).toBeTruthy();
+    expect(screen.getByText('Called off by Aina')).toBeTruthy();
+  });
+
+  it('19d: one Past section, three endings', async () => {
+    const iso = (days: number) => {
+      const now = new Date();
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate() + days, 19, 0, 0).toISOString();
+    };
+    const base = { plan_type: 'fixed', locked_date: null, plan_date_options: [] };
+    group.plans = [
+      { ...base, id: 'pl', title: 'Upcoming padel', status: 'open', event_date: iso(5), min_people: 2, rsvps: [] },
+      {
+        ...base, id: 'pc', title: 'Five-a-side', status: 'cancelled', event_date: iso(3),
+        min_people: 3, cancelled_by: 'me', canceller: { display_name: 'Rocío' }, rsvps: [],
+      },
+      {
+        ...base, id: 'pe', title: 'Pub quiz', status: 'open', event_date: iso(-4), min_people: 4,
+        rsvps: [{ user_id: 'me', response: 'yes', profile: { display_name: 'Rocío' } }],
+      },
+      {
+        ...base, id: 'ph', title: 'Went well', status: 'open', event_date: iso(-10), min_people: 2,
+        rsvps: [
+          { user_id: 'me', response: 'yes', profile: { display_name: 'Rocío' } },
+          { user_id: 'u2', response: 'yes', profile: { display_name: 'Aina' } },
+          { user_id: 'u3', response: 'yes', profile: { display_name: 'Pau' } },
+        ],
+      },
+    ];
+
+    await renderDetail();
+
+    expect(await screen.findByText('Upcoming padel')).toBeTruthy();
+    expect(screen.getByText('Past')).toBeTruthy();
+    expect(screen.getByText('3')).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('past-toggle'));
+    expect(screen.getByText('Called off by you')).toBeTruthy();
+    expect(screen.getByText("Didn't happen · 1 of 4")).toBeTruthy();
+    expect(screen.getByText('You and 2 others went')).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('past-row-ph'));
+    expect(mockPush).toHaveBeenCalledWith('/(app)/plan/ph');
   });
 
   it('empty group points the start-plan CTA at this group', async () => {

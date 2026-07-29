@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   View,
   ScrollView,
@@ -11,10 +11,11 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { isPlanPast, planLastDate } from '@planazo/shared';
 import { supabase } from '../../../../lib/supabase';
 import { useAuthStore } from '../../../../stores/authStore';
 import { ThemedText, Card, Button, AvatarStack, GroupTile } from '../../../../components/ui';
-import { colors, spacing } from '../../../../theme/tokens';
+import { colors, fonts, spacing } from '../../../../theme/tokens';
 
 const fmtDay = (iso: string) =>
   new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
@@ -31,6 +32,8 @@ export default function GroupDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { user } = useAuthStore();
+  // 19d: Past is closed by default — it costs one line until you want it
+  const [showPast, setShowPast] = useState(false);
 
   const { data: group, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['group', id],
@@ -41,7 +44,10 @@ export default function GroupDetailScreen() {
           `id, name, description, color, invite_code,
           group_members(user_id, role, profile:profiles(id, display_name, avatar_url)),
           plans(id, title, plan_type, status, event_date, locked_date, min_people, created_at,
-            rsvps(user_id, response), plan_date_options(id, date, date_availability(user_id)))`
+            cancelled_at, cancelled_by, cancel_reason,
+            canceller:profiles!plans_cancelled_by_fkey(display_name),
+            rsvps(user_id, response, profile:profiles(display_name)),
+            plan_date_options(id, date, date_availability(user_id)))`
         )
         .eq('id', id)
         .single();
@@ -56,37 +62,86 @@ export default function GroupDetailScreen() {
   const memberNames = members.map((m: any) => m.profile?.display_name ?? '?');
 
   const planRows = useMemo(() => {
-    return (group?.plans ?? [])
-      .filter((p: any) => p.status !== 'cancelled')
-      .map((p: any) => {
-        let going: number;
-        if (p.plan_type === 'fixed' || p.status === 'locked') {
-          // Locking a flexible plan seeds yes-RSVPs, so rsvps are the truth here
-          going = (p.rsvps ?? []).filter((r: any) => r.response === 'yes').length;
-        } else {
-          const seen = new Set<string>();
-          (p.plan_date_options ?? []).forEach((opt: any) =>
-            (opt.date_availability ?? []).forEach((a: any) => seen.add(a.user_id))
-          );
-          going = seen.size;
-        }
+    return (group?.plans ?? []).map((p: any) => {
+      let going: number;
+      if (p.plan_type === 'fixed' || p.status === 'locked') {
+        // Locking a flexible plan seeds yes-RSVPs, so rsvps are the truth here
+        going = (p.rsvps ?? []).filter((r: any) => r.response === 'yes').length;
+      } else {
+        const seen = new Set<string>();
+        (p.plan_date_options ?? []).forEach((opt: any) =>
+          (opt.date_availability ?? []).forEach((a: any) => seen.add(a.user_id))
+        );
+        going = seen.size;
+      }
 
-        const optionCount = (p.plan_date_options ?? []).length;
-        const when = p.locked_date
-          ? `${fmtDay(p.locked_date)} · ${fmtTime(p.locked_date)}`
-          : p.event_date
-            ? `${fmtDay(p.event_date)} · ${fmtTime(p.event_date)}`
-            : `${optionCount} date${optionCount === 1 ? '' : 's'} on the table`;
+      const optionCount = (p.plan_date_options ?? []).length;
+      const when = p.locked_date
+        ? `${fmtDay(p.locked_date)} · ${fmtTime(p.locked_date)}`
+        : p.event_date
+          ? `${fmtDay(p.event_date)} · ${fmtTime(p.event_date)}`
+          : `${optionCount} date${optionCount === 1 ? '' : 's'} on the table`;
 
-        const meta =
-          going < p.min_people ? `${going} of ${p.min_people} needed` : `${going} going`;
+      const meta =
+        going < p.min_people ? `${going} of ${p.min_people} needed` : `${going} going`;
 
-        return { id: p.id, title: p.title, when, meta, open: p.status === 'open' };
-      });
-  }, [group?.plans]);
+      // 19d: three endings, one Past section. A plan that happened keeps its
+      // white card and the faces of who was there; the two non-events sink
+      // into flat stone with one line of explanation.
+      const optionDates = (p.plan_date_options ?? []).map((o: any) => o.date);
+      const cancelled = p.status === 'cancelled';
+      const past = cancelled || isPlanPast(p, optionDates);
+      let ending: 'cancelled' | 'expired' | 'happened' | null = null;
+      let endingLine = '';
+      if (cancelled) {
+        ending = 'cancelled';
+        const who =
+          p.cancelled_by === user?.id ? 'you' : p.canceller?.display_name ?? 'the host';
+        endingLine = `Called off by ${who}`;
+      } else if (past) {
+        const happened = p.status === 'locked' || going >= p.min_people;
+        ending = happened ? 'happened' : 'expired';
+        if (!happened) endingLine = `Didn't happen · ${going} of ${p.min_people}`;
+      }
 
-  const waiting = planRows.filter((p: any) => p.open);
-  const locked = planRows.filter((p: any) => !p.open);
+      const wentNames = (p.rsvps ?? [])
+        .filter((r: any) => r.response === 'yes')
+        .map((r: any) =>
+          r.user_id === user?.id ? 'You' : r.profile?.display_name ?? '?'
+        )
+        .sort((a: string, b: string) => (a === 'You' ? -1 : b === 'You' ? 1 : 0));
+      const youWent = wentNames[0] === 'You';
+      const wentLabel = youWent
+        ? wentNames.length === 1
+          ? 'You went'
+          : `You and ${wentNames.length - 1} other${wentNames.length === 2 ? '' : 's'} went`
+        : `${wentNames.length || going} went`;
+
+      const endDate = planLastDate(p, optionDates);
+
+      return {
+        id: p.id,
+        title: p.title,
+        when,
+        meta,
+        open: p.status === 'open',
+        past,
+        ending,
+        endingLine,
+        wentNames,
+        wentLabel,
+        endDate,
+        sortKey: endDate ? new Date(endDate).getTime() : 0,
+      };
+    });
+  }, [group?.plans, user?.id]);
+
+  const live = planRows.filter((p: any) => !p.past);
+  const waiting = live.filter((p: any) => p.open);
+  const locked = live.filter((p: any) => !p.open);
+  const pastRows = planRows
+    .filter((p: any) => p.past)
+    .sort((a: any, b: any) => b.sortKey - a.sortKey);
 
   if (isLoading || !group) {
     return (
@@ -97,6 +152,46 @@ export default function GroupDetailScreen() {
       </SafeAreaView>
     );
   }
+
+  const renderPastRow = (p: any) => {
+    const d = p.endDate ? new Date(p.endDate) : null;
+    const stone = p.ending !== 'happened';
+    return (
+      <Pressable
+        key={p.id}
+        onPress={() => router.push(`/(app)/plan/${p.id}`)}
+        style={[styles.pastCard, stone && styles.pastCardStone]}
+        testID={`past-row-${p.id}`}
+      >
+        <View style={[styles.dateTile, stone && styles.dateTileStone]}>
+          <ThemedText variant="tag" color={stone ? colors.textMuted : colors.textSecondary} style={styles.dateTileMonth}>
+            {d ? d.toLocaleDateString('en-GB', { month: 'short' }) : '—'}
+          </ThemedText>
+          <ThemedText variant="rowValue" color={stone ? colors.textMuted : colors.textSecondary} style={styles.dateTileDay}>
+            {d ? d.getDate() : ''}
+          </ThemedText>
+        </View>
+        <View style={styles.pastBody}>
+          <ThemedText
+            variant="rowValue"
+            color={stone ? colors.textSecondary : colors.textPrimary}
+            numberOfLines={1}
+          >
+            {p.title}
+          </ThemedText>
+          {p.ending === 'happened' ? (
+            <View style={styles.wentRow}>
+              <AvatarStack names={p.wentNames} label={p.wentLabel} />
+            </View>
+          ) : (
+            <ThemedText variant="caption" color={colors.textMuted} style={styles.pastLine}>
+              {p.endingLine}
+            </ThemedText>
+          )}
+        </View>
+      </Pressable>
+    );
+  };
 
   const renderPlanRow = (p: any, tone: 'waiting' | 'locked') => (
     <Card key={p.id}>
@@ -174,7 +269,7 @@ export default function GroupDetailScreen() {
           </View>
         </View>
 
-        {planRows.length === 0 ? (
+        {live.length === 0 ? (
           <View style={styles.emptyCard}>
             <ThemedText variant="body" color={colors.textSecondary} style={styles.emptyText}>
               Nothing on yet — start something and it posts straight to {group.name}.
@@ -214,6 +309,28 @@ export default function GroupDetailScreen() {
             ) : null}
           </>
         )}
+
+        {pastRows.length > 0 ? (
+          <View style={styles.section}>
+            <Pressable
+              onPress={() => setShowPast((s) => !s)}
+              accessibilityRole="button"
+              style={styles.pastHeader}
+              testID="past-toggle"
+            >
+              <View style={styles.sectionHeader}>
+                <ThemedText variant="sectionLabel">Past</ThemedText>
+                <ThemedText variant="sectionLabel" color={colors.endedMuted}>
+                  {pastRows.length}
+                </ThemedText>
+              </View>
+              <ThemedText variant="caption" color={colors.textMuted}>
+                {showPast ? 'Hide ⌃' : 'Show ⌄'}
+              </ThemedText>
+            </Pressable>
+            {showPast ? pastRows.map((p: any) => renderPastRow(p)) : null}
+          </View>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -298,5 +415,57 @@ const styles = StyleSheet.create({
   },
   planMeta: {
     marginTop: spacing.xs,
+  },
+  pastHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  // 19d past cards: a happened plan keeps its white card and the faces of
+  // who was there; called off and never-quite sink into flat stone.
+  pastCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg - 2,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 22,
+    padding: spacing.lg - 2,
+  },
+  pastCardStone: {
+    backgroundColor: colors.pastCard,
+    borderColor: colors.endedBadge,
+  },
+  dateTile: {
+    width: 54,
+    height: 58,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.tabBarBorder,
+  },
+  dateTileStone: {
+    backgroundColor: colors.endedBadge,
+  },
+  dateTileMonth: {
+    textTransform: 'uppercase',
+    letterSpacing: 0.66,
+    opacity: 0.75,
+  },
+  dateTileDay: {
+    fontFamily: fonts.display,
+    fontSize: 22,
+    lineHeight: 24,
+  },
+  pastBody: {
+    flex: 1,
+    gap: 3,
+  },
+  wentRow: {
+    marginTop: spacing.xxs,
+  },
+  pastLine: {
+    fontFamily: fonts.body,
   },
 });
