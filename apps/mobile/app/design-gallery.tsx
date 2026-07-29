@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { ScrollView, View, StyleSheet } from 'react-native';
 import { Redirect, useLocalSearchParams } from 'expo-router';
 import {
@@ -13,6 +14,7 @@ import {
   AnswerFooter,
   ListRow,
   EmptyState,
+  MonthCalendar,
 } from '../components/ui';
 import { colors, groupColors, spacing } from '../theme/tokens';
 
@@ -33,6 +35,7 @@ export default function DesignGallery() {
   // Screenshot-tooling affordances (simctl cannot scroll): ?tail=1 renders
   // sections bottom-up; ?y=<px> starts the scroll at an offset.
   const { tail, y } = useLocalSearchParams<{ tail?: string; y?: string }>();
+  const [calDays, setCalDays] = useState<string[]>([]);
 
   if (!__DEV__) {
     return <Redirect href="/" />;
@@ -103,6 +106,15 @@ export default function DesignGallery() {
           <View style={styles.gap} />
           <SlotBar going={4} min={3} cap={6} />
         </Card>
+      </Section>
+
+      <Section title="Month calendar">
+        <MonthCalendar
+          selected={calDays}
+          onToggleDay={(iso) =>
+            setCalDays((d) => (d.includes(iso) ? d.filter((x) => x !== iso) : [...d, iso].sort()))
+          }
+        />
       </Section>
 
       <Section title="Date options">
