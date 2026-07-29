@@ -51,7 +51,7 @@ export default function PlanDetailScreen() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('plans')
-        .select('*, creator:profiles!plans_created_by_fkey(display_name), groups(id, name)')
+        .select('*, creator:profiles!plans_created_by_fkey(display_name), groups(id, name, color)')
         .eq('id', id)
         .single();
       if (error) throw error;
@@ -328,7 +328,7 @@ export default function PlanDetailScreen() {
 
   const d = derived;
   const groupName = plan.groups?.name ?? 'Group';
-  const groupColor = colorForName(groupName);
+  const groupColor = plan.groups?.color ?? colorForName(groupName);
   const editing = d.isOpenFlexible && (editingPicks !== null || d.myAvail.length === 0) && !d.userRsvp;
   const picked = editingPicks ?? d.myAvail.map((a) => a.date_option_id);
 

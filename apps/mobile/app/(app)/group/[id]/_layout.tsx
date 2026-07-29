@@ -1,17 +1,11 @@
 import { Stack } from 'expo-router';
-import { COLORS } from '../../../../constants/colors';
 
 export default function GroupLayout() {
   return (
-    <Stack
-      screenOptions={{
-        headerTintColor: COLORS.primary,
-        headerBackTitle: 'Back',
-      }}
-    >
+    <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
-      <Stack.Screen name="members" options={{ title: 'Members' }} />
-      <Stack.Screen name="settings" options={{ title: 'Settings' }} />
+      <Stack.Screen name="manage" />
+      <Stack.Screen name="edit" options={{ presentation: 'modal' }} />
     </Stack>
   );
 }

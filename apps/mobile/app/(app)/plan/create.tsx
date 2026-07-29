@@ -71,12 +71,12 @@ export default function CreatePlanScreen() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('group_members')
-        .select('groups:group_id (id, name)')
+        .select('groups:group_id (id, name, color)')
         .eq('user_id', user!.id);
       if (error) throw error;
       return (data ?? [])
-        .map((row) => row.groups as unknown as { id: string; name: string } | null)
-        .filter(Boolean) as { id: string; name: string }[];
+        .map((row) => row.groups as unknown as { id: string; name: string; color: string | null } | null)
+        .filter(Boolean) as { id: string; name: string; color: string | null }[];
     },
     enabled: !!user,
   });
@@ -246,7 +246,7 @@ export default function CreatePlanScreen() {
                     testID={`group-${g.id}`}
                     style={[styles.groupChip, active && styles.groupChipActive]}
                   >
-                    <View style={[styles.groupDot, { backgroundColor: colorForName(g.name) }]} />
+                    <View style={[styles.groupDot, { backgroundColor: g.color ?? colorForName(g.name) }]} />
                     <ThemedText
                       variant="bodyStrong"
                       style={styles.chipLabel}

@@ -12,6 +12,11 @@ export default function AppLayout() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="profile" options={{ title: 'Profile' }} />
       <Stack.Screen name="group/[id]" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="group/new"
+        getId={({ params }) => JSON.stringify(params ?? {})}
+        options={{ presentation: 'modal', headerShown: false }}
+      />
       {/* getId: a deep link with different params mounts a fresh sheet instead
           of reusing a stale one (the params preseed sheet state in dev) */}
       <Stack.Screen

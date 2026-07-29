@@ -4,6 +4,7 @@ export { Card } from './Card';
 export { Chip } from './Chip';
 export { Badge } from './Badge';
 export { Avatar, colorForName } from './Avatar';
+export { GroupTile, groupInitial } from './GroupTile';
 export { AvatarStack } from './AvatarStack';
 export { SlotBar } from './SlotBar';
 export { MonthCalendar } from './MonthCalendar';

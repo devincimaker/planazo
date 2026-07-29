@@ -66,7 +66,7 @@ export default function FeedScreen() {
         .from('plans')
         .select(
           `*,
-          groups(id, name),
+          groups(id, name, color),
           rsvps(user_id, response, profile:profiles(display_name)),
           plan_date_options(id, date, date_availability(user_id, profile:profiles(display_name)))`
         )
@@ -357,7 +357,7 @@ export default function FeedScreen() {
           ) : (
             visible.map((d) => {
               const groupName = d.plan.groups?.name ?? 'Group';
-              const groupColor = colorForName(groupName);
+              const groupColor = d.plan.groups?.color ?? colorForName(groupName);
               return (
                 <Card key={d.plan.id} stripeColor={groupColor} testID={`plan-card-${d.plan.id}`}>
                   <Pressable onPress={() => openPlan(d.plan.id)}>
