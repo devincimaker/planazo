@@ -3,7 +3,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { ThemedText } from '../ui/ThemedText';
-import { colors, radii } from '../../theme/tokens';
+import { colors, fonts, radii } from '../../theme/tokens';
+import { usePendingInvites } from '../../lib/usePendingInvites';
 
 // Minimal slice of react-navigation's BottomTabBarProps — typed locally so we
 // don't import from a transitive package.
@@ -45,6 +46,7 @@ function GroupsIcon({ color }: { color: string }) {
 export function TabBar({ state, navigation }: TabBarProps) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { count: pendingCount } = usePendingInvites();
 
   const renderTab = (route: { key: string; name: string }, index: number) => {
     const focused = state.index === index;
@@ -74,6 +76,13 @@ export function TabBar({ state, navigation }: TabBarProps) {
         <ThemedText variant="tabLabel" color={focused ? colors.accent : colors.tabInactive}>
           {label}
         </ThemedText>
+        {route.name === 'groups' && pendingCount > 0 ? (
+          <View style={styles.badge} testID="groups-tab-badge">
+            <ThemedText style={styles.badgeText} color={colors.textOnAccent}>
+              {pendingCount}
+            </ThemedText>
+          </View>
+        ) : null}
       </Pressable>
     );
   };
@@ -177,5 +186,25 @@ const styles = StyleSheet.create({
   plus: {
     fontSize: 30,
     lineHeight: 34,
+  },
+  badge: {
+    position: 'absolute',
+    top: 0,
+    left: '50%',
+    marginLeft: 10,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 5,
+    borderRadius: radii.pill,
+    backgroundColor: colors.accent,
+    borderWidth: 2,
+    borderColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: {
+    fontFamily: fonts.bodyBold,
+    fontSize: 11,
+    lineHeight: 13,
   },
 });

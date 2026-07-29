@@ -14,7 +14,6 @@ import { supabase } from '../../../../lib/supabase';
 import { useAuthStore } from '../../../../stores/authStore';
 import { ThemedText, Card, Avatar } from '../../../../components/ui';
 import { colors, fonts, radii, spacing } from '../../../../theme/tokens';
-import { shareInviteLink } from './index';
 
 export default function ManageGroupScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -181,7 +180,7 @@ export default function ManageGroupScreen() {
           <View style={styles.sectionHeader}>
             <ThemedText variant="sectionLabel">People</ThemedText>
             <Pressable
-              onPress={() => shareInviteLink(group.name, group.invite_code)}
+              onPress={() => router.push(`/(app)/group/${id}/invite`)}
               accessibilityRole="button"
               testID="invite"
             >

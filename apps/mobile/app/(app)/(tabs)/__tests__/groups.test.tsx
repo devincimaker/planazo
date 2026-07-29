@@ -25,20 +25,29 @@ const mockRpc = supabase.rpc as jest.Mock;
 let memberships: any[] = [];
 let counts: any[] = [];
 let plans: any[] = [];
+let groupInvites: any[] = [];
+let pendingRequests: any[] = [];
+let acceptedFriendships: any[] = [];
 let gmInserts: jest.Mock[] = [];
 
 /**
  * group_members serves three queries on this screen; which result a chain
  * resolves to depends on how it was built (eq user_id = memberships,
- * in group_id = counts, insert = join).
+ * in group_id = counts, insert = join). friendships resolves by the
+ * status filter (pending = requests, accepted = friends).
  */
 function primeSupabase() {
   gmInserts = [];
   mockFrom.mockImplementation((table: string) => {
     const c: any = {};
     let kind = table;
-    ['select', 'eq', 'order', 'single'].forEach((m) => {
+    let status: string | null = null;
+    ['select', 'order', 'single', 'or'].forEach((m) => {
       c[m] = jest.fn(() => c);
+    });
+    c.eq = jest.fn((col: string, val: string) => {
+      if (col === 'status') status = val;
+      return c;
     });
     c.in = jest.fn(() => {
       if (table === 'group_members') kind = 'counts';
@@ -55,9 +64,13 @@ function primeSupabase() {
           ? { error: null }
           : kind === 'counts'
             ? { data: counts, error: null }
-            : kind === 'group_members'
-              ? { data: memberships, error: null }
-              : { data: plans, error: null };
+            : table === 'group_invites'
+              ? { data: groupInvites, error: null }
+              : table === 'friendships'
+                ? { data: status === 'pending' ? pendingRequests : acceptedFriendships, error: null }
+                : kind === 'group_members'
+                  ? { data: memberships, error: null }
+                  : { data: plans, error: null };
       return Promise.resolve(result).then(resolve);
     };
     return c;
@@ -78,6 +91,9 @@ beforeEach(() => {
   memberships = [];
   counts = [];
   plans = [];
+  groupInvites = [];
+  pendingRequests = [];
+  acceptedFriendships = [];
   primeSupabase();
   mockRpc.mockResolvedValue({ data: null, error: null });
   useAuthStore.setState({
@@ -178,6 +194,69 @@ describe('GroupsScreen', () => {
 
     await fireEvent.press(screen.getByTestId('create-group'));
     expect(mockPush).toHaveBeenCalledWith('/(app)/group/new');
+  });
+
+  it('collapsed invites row counts both kinds and opens the sheet', async () => {
+    memberships = [
+      {
+        group_id: 'g1',
+        role: 'member',
+        groups: { id: 'g1', name: 'Piso Gràcia', color: null, created_at: '2026-01-01' },
+      },
+    ];
+    counts = [{ group_id: 'g1' }];
+    groupInvites = [
+      {
+        id: 'i1',
+        created_at: '2026-07-29T10:00:00Z',
+        group_id: 'gx',
+        groups: { id: 'gx', name: 'Padel Dilluns', color: null, group_members: [] },
+        inviter: { display_name: 'Marta' },
+      },
+    ];
+    pendingRequests = [
+      {
+        id: 'fr1',
+        created_at: '2026-07-28T10:00:00Z',
+        requester: { id: 'p9', display_name: 'Aina Roig', handle: 'ainaroig', avatar_url: null },
+      },
+    ];
+
+    await renderGroups();
+
+    expect(await screen.findByText('2 invites')).toBeTruthy();
+    expect(screen.getByText('Padel Dilluns, Aina Roig')).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('invites-row'));
+    expect(mockPush).toHaveBeenCalledWith('/(app)/invites');
+  });
+
+  it('your-people row shows the friend count and opens find people', async () => {
+    memberships = [
+      {
+        group_id: 'g1',
+        role: 'member',
+        groups: { id: 'g1', name: 'Piso Gràcia', color: null, created_at: '2026-01-01' },
+      },
+    ];
+    counts = [{ group_id: 'g1' }];
+    acceptedFriendships = [
+      {
+        requester_id: 'me',
+        addressee_id: 'f1',
+        requester: { id: 'me', display_name: 'Rocío', handle: 'rovidal', avatar_url: null },
+        addressee: { id: 'f1', display_name: 'Aina Roig', handle: 'ainaroig', avatar_url: null },
+      },
+    ];
+
+    await renderGroups();
+
+    expect(await screen.findByText('1 friend')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('your-people'));
+    expect(mockPush).toHaveBeenCalledWith('/(app)/find-people');
+
+    await fireEvent.press(screen.getByTestId('find-people'));
+    expect(mockPush).toHaveBeenCalledTimes(2);
   });
 
   it('joins from a pasted invite link', async () => {
