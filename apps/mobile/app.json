@@ -16,6 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.planazo.app",
+      "appleTeamId": "D4ADFZ3XZL",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
