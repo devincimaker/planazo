@@ -302,6 +302,7 @@ export type Database = {
           created_at: string | null
           data: Json | null
           id: string
+          pushed_at: string | null
           read: boolean | null
           title: string
           type: string
@@ -312,6 +313,7 @@ export type Database = {
           created_at?: string | null
           data?: Json | null
           id?: string
+          pushed_at?: string | null
           read?: boolean | null
           title: string
           type: string
@@ -322,6 +324,7 @@ export type Database = {
           created_at?: string | null
           data?: Json | null
           id?: string
+          pushed_at?: string | null
           read?: boolean | null
           title?: string
           type?: string
@@ -463,6 +466,7 @@ export type Database = {
           email: string
           handle: string | null
           id: string
+          push_enabled: boolean
           push_token: string | null
           updated_at: string | null
         }
@@ -474,6 +478,7 @@ export type Database = {
           email: string
           handle?: string | null
           id: string
+          push_enabled?: boolean
           push_token?: string | null
           updated_at?: string | null
         }
@@ -485,6 +490,7 @@ export type Database = {
           email?: string
           handle?: string | null
           id?: string
+          push_enabled?: boolean
           push_token?: string | null
           updated_at?: string | null
         }

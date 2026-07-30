@@ -31,6 +31,8 @@ export interface Profile {
   /** Permanent — invite links resolve through it, so it never changes. */
   handle: string | null;
   push_token: string | null;
+  /** The 12b "Notify me" toggle — gates push delivery only, never feed rows. */
+  push_enabled: boolean;
   add_to_calendar: boolean;
   created_at: string;
   updated_at: string;
@@ -149,6 +151,8 @@ export interface Notification {
   body: string;
   data: Record<string, string> | null;
   read: boolean;
+  /** When push delivery was handed off (or deliberately skipped). */
+  pushed_at: string | null;
   created_at: string;
 }
 

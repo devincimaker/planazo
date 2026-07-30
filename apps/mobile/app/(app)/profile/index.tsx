@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Constants from 'expo-constants';
 import { supabase } from '../../../lib/supabase';
+import { clearPushToken } from '../../../lib/push';
 import { useAuthStore } from '../../../stores/authStore';
 import { Avatar, Card, ListRow, ThemedText } from '../../../components/ui';
 import { colors, fonts, spacing } from '../../../theme/tokens';
@@ -46,6 +47,21 @@ export default function ProfileSheet() {
     onError: (error: Error) => Alert.alert('Error', error.message),
   });
 
+  const setPush = useMutation({
+    mutationFn: async (on: boolean) => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .update({ push_enabled: on })
+        .eq('id', profile!.id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => setProfile(data),
+    onError: (error: Error) => Alert.alert('Error', error.message),
+  });
+
   const confirmSignOut = () => {
     Alert.alert('Sign out', 'You can sign back in any time.', [
       { text: 'Cancel', style: 'cancel' },
@@ -53,6 +69,11 @@ export default function ProfileSheet() {
         text: 'Sign out',
         style: 'destructive',
         onPress: async () => {
+          try {
+            if (user) await clearPushToken(user.id);
+          } catch {
+            // best-effort — never block sign-out
+          }
           await supabase.auth.signOut();
           queryClient.clear();
           logout();
@@ -106,7 +127,21 @@ export default function ProfileSheet() {
 
         <Card padded={false}>
           <ListRow
+            title="Notify me"
+            right={
+              <Switch
+                value={!!profile?.push_enabled}
+                disabled={setPush.isPending}
+                onValueChange={(on) => setPush.mutate(on)}
+                trackColor={{ false: colors.borderStrong, true: colors.accent }}
+                ios_backgroundColor={colors.borderStrong}
+                testID="pref-push"
+              />
+            }
+          />
+          <ListRow
             title="Add to my calendar"
+            divider
             right={
               <Switch
                 value={!!profile?.add_to_calendar}

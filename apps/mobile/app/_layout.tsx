@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Slot } from 'expo-router';
+import { Slot, useRouter, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
@@ -16,6 +17,7 @@ import {
   InstrumentSans_700Bold,
 } from '@expo-google-fonts/instrument-sans';
 import { supabase } from '../lib/supabase';
+import { initNotificationPresentation, registerPushToken } from '../lib/push';
 import { useAuthStore } from '../stores/authStore';
 import { COLORS } from '../constants/colors';
 
@@ -24,8 +26,12 @@ SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
 
 function InitialLayout() {
-  const { isLoading, setSession, setIsLoading, setProfile } = useAuthStore();
+  const { session, isLoading, setSession, setIsLoading, setProfile } = useAuthStore();
   const [isReady, setIsReady] = useState(false);
+  // Plan id from a tapped push, held until the navigator can take us there.
+  const [pushedPlanId, setPushedPlanId] = useState<string | null>(null);
+  const router = useRouter();
+  const navReady = !!useRootNavigationState()?.key;
 
   useEffect(() => {
     let isMounted = true;
@@ -54,6 +60,7 @@ function InitialLayout() {
         setSession(session);
         if (session?.user) {
           await syncProfile(session.user.id);
+          void registerPushToken(session.user.id);
         } else {
           setProfile(null);
         }
@@ -89,6 +96,7 @@ function InitialLayout() {
 
       try {
         await syncProfile(session.user.id);
+        void registerPushToken(session.user.id);
       } catch (error) {
         console.error(
           'Failed to load Supabase profile after auth change. Check EXPO_PUBLIC_SUPABASE_URL and that the host is reachable from the simulator.',
@@ -111,6 +119,28 @@ function InitialLayout() {
       subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    initNotificationPresentation();
+
+    // Both the warm-tap listener and the cold-start check land in state; the
+    // effect below navigates once auth and the navigator are ready.
+    const grab = (response: Notifications.NotificationResponse | null) => {
+      const planId = response?.notification.request.content.data?.plan_id;
+      if (typeof planId === 'string') {
+        setPushedPlanId(planId);
+      }
+    };
+    void Notifications.getLastNotificationResponseAsync().then(grab);
+    const subscription = Notifications.addNotificationResponseReceivedListener(grab);
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    if (!pushedPlanId || isLoading || !session || !navReady) return;
+    setPushedPlanId(null);
+    router.push(`/(app)/plan/${pushedPlanId}`);
+  }, [pushedPlanId, isLoading, session, navReady, router]);
 
   if (!isReady || isLoading) {
     return (
