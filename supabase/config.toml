@@ -380,3 +380,9 @@ s3_region = "env(S3_REGION)"
 s3_access_key = "env(S3_ACCESS_KEY)"
 # Configures AWS_SECRET_ACCESS_KEY for S3 bucket
 s3_secret_key = "env(S3_SECRET_KEY)"
+
+# send-push is invoked by a pg_net trigger, which cannot sign a JWT — the
+# function authenticates via its x-push-secret header instead (see the
+# 20260730000001 migration and supabase/functions/send-push/index.ts).
+[functions.send-push]
+verify_jwt = false

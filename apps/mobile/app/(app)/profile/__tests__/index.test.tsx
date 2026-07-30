@@ -16,6 +16,11 @@ jest.mock('../../../../lib/supabase', () => ({
   },
 }));
 
+const mockClearPushToken: jest.Mock = jest.fn(() => Promise.resolve());
+jest.mock('../../../../lib/push', () => ({
+  clearPushToken: (...args: unknown[]) => mockClearPushToken(...args),
+}));
+
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, back: mockBack, replace: mockReplace }),
 }));
@@ -44,6 +49,7 @@ const ME = {
   handle: 'rovidal',
   avatar_url: null,
   add_to_calendar: false,
+  push_enabled: true,
 };
 
 let profileUpdate: jest.Mock;
@@ -112,6 +118,19 @@ describe('ProfileSheet', () => {
     expect(mockPush).toHaveBeenCalledWith('/(app)/feedback');
   });
 
+  it('flipping the Notify me toggle persists it to the profile', async () => {
+    await renderSheet();
+
+    await fireEvent(screen.getByTestId('pref-push'), 'valueChange', false);
+
+    await waitFor(() => {
+      expect(profileUpdate).toHaveBeenCalledWith({ push_enabled: false });
+    });
+    await waitFor(() => {
+      expect(useAuthStore.getState().profile?.push_enabled).toBe(false);
+    });
+  });
+
   it('flipping the calendar toggle persists it to the profile', async () => {
     await renderSheet();
 
@@ -137,6 +156,7 @@ describe('ProfileSheet', () => {
     await confirm?.onPress?.();
 
     await waitFor(() => {
+      expect(mockClearPushToken).toHaveBeenCalledWith('me');
       expect(supabase.auth.signOut).toHaveBeenCalled();
       expect(mockReplace).toHaveBeenCalledWith('/(auth)/login');
     });
