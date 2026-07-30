@@ -45,6 +45,7 @@ export default function CreatePlanScreen() {
     min?: string;
     cap?: string;
     details?: string;
+    location?: string;
     y?: string;
   }>();
   const router = useRouter();
@@ -63,7 +64,8 @@ export default function CreatePlanScreen() {
     Number(params.cap) > 0 ? Number(params.cap) : null
   );
   const [detailsOpen, setDetailsOpen] = useState(params.details === '1');
-  const [location, setLocation] = useState('');
+  // 19c "Try again with a new date" preseeds everything but the date
+  const [location, setLocation] = useState(params.location ?? '');
   const [notes, setNotes] = useState('');
 
   const { data: groups } = useQuery({

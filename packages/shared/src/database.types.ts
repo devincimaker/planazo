@@ -368,6 +368,9 @@ export type Database = {
       }
       plans: {
         Row: {
+          cancel_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
           created_at: string | null
           created_by: string
           deadline: string | null
@@ -386,6 +389,9 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           created_at?: string | null
           created_by: string
           deadline?: string | null
@@ -404,6 +410,9 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           created_at?: string | null
           created_by?: string
           deadline?: string | null
@@ -422,6 +431,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "plans_cancelled_by_fkey"
+            columns: ["cancelled_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "plans_created_by_fkey"
             columns: ["created_by"]
@@ -521,7 +537,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      cancel_plan: { Args: { p_plan_id: string }; Returns: Json }
+      cancel_plan: {
+        Args: { p_plan_id: string; p_reason?: string }
+        Returns: Json
+      }
       color_for_name: { Args: { p_name: string }; Returns: string }
       generate_handle: { Args: { p_base: string }; Returns: string }
       generate_invite_code: { Args: never; Returns: string }
@@ -552,6 +571,7 @@ export type Database = {
         Args: { p_accept: boolean; p_invite_id: string }
         Returns: Json
       }
+      restore_plan: { Args: { p_plan_id: string }; Returns: Json }
       send_friend_request: { Args: { p_addressee: string }; Returns: Json }
       set_group_notify: {
         Args: { p_group_id: string; p_notify: boolean }

@@ -10,6 +10,7 @@ To-Do:
 [ ] Launch it for Android
 [ ] Add quick actions to the events, the ones where it's easy to do at least.
 [ ] Add a photo album to each event so people can attach and view shared photos.
+[ ] Let the host edit a plan's details (title, place, description). The 20a host menu reserves an "Edit the details" row for this — needs a designed screen first.
 [ ] Add groupless events.
 [ ] Add friends
 

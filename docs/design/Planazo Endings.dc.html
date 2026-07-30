@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#EDE7E0; font-family:'Instrument Sans',system-ui,sans-serif; }
+  a { color:#F2542D; text-decoration:none; }
+  a:hover { color:#C43B18; }
+  ::-webkit-scrollbar { width:0; height:0; }
+</style>
+</helmet>
+
+<section style="display:flex;flex-direction:column;gap:28px;padding:56px 56px 20px;font-family:'Instrument Sans',system-ui,sans-serif">
+  <div style="display:flex;flex-direction:column;gap:6px;max-width:1040px">
+    <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:34px;font-weight:800;color:#171215;letter-spacing:-0.02em">Calling it off — the act itself</div>
+    <div style="font-size:16px;color:#6B5F58;line-height:1.5">Correct, it was missing. The trigger lives behind the <strong>···</strong> already in the plan header — never a button on the surface, because cancelling should take a deliberate second tap, and a host looking at their own plan is usually there to check on it, not kill it. Two steps: the host menu (<a href="#20a">20a</a>), then a confirm that makes the cost visible and asks for a reason (<a href="#20b">20b</a>). After that the plan becomes <a href="#19b">19b</a>.</div>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:44px;align-items:flex-start">
+
+    <div id="20a" style="display:flex;flex-direction:column;gap:14px;width:410px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="background:#F2542D;color:#FFFFFF;font-size:13px;font-weight:700;padding:4px 10px;border-radius:999px">20a</div>
+        <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:19px;font-weight:700;color:#171215">The host menu</div>
+      </div>
+      <div style="font-size:14px;color:#6B5F58;line-height:1.45;min-height:76px">Tapping <strong>···</strong> on a plan you host raises three things and no more. Call it off sits last, separated by a gap rather than a red block — the weight comes from the confirm step, not from shouting on the menu. Guests get the same menu minus the first and last row.</div>
+
+      <div style="padding:10px;background:#171215;border-radius:52px;box-shadow:0 30px 60px -20px rgba(23,18,21,0.45)">
+        <div style="position:relative;width:390px;height:844px;background:#FCF8F4;border-radius:42px;overflow:hidden;display:flex;flex-direction:column">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 30px 4px;font-size:15px;font-weight:600;color:#171215">
+            <span>9:41</span>
+            <span style="letter-spacing:2px;font-size:12px">▮▮▮ ⌁ ▰</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px 6px">
+            <div style="font-size:15px;font-weight:600;color:#F2542D;cursor:pointer">‹ Sunday League</div>
+            <div style="font-size:19px;color:#171215;cursor:pointer;letter-spacing:0.1em;background:#EFE7E0;border-radius:999px;padding:0 10px 6px;line-height:1">···</div>
+          </div>
+
+          <div style="flex:1;overflow:hidden;padding:6px 20px 0;display:flex;flex-direction:column;gap:20px">
+            <div style="display:flex;flex:0 0 auto;flex-direction:column;gap:10px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;background:#E6F6EF;color:#0E7A50;letter-spacing:0.03em;text-transform:uppercase">Confirmed</div>
+                <div style="display:flex;align-items:center;gap:7px">
+                  <div style="width:14px;height:14px;border-radius:5px;background:#3B7BD8"></div>
+                  <div style="font-size:13px;font-weight:600;color:#6B5F58">Sunday League</div>
+                </div>
+              </div>
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:30px;font-weight:800;color:#171215;letter-spacing:-0.02em;line-height:1.1;text-wrap:pretty">Five-a-side at Powerleague</div>
+              <div style="font-size:15px;color:#6B5F58;line-height:1.45">Pitch 3, bring both shirts. Cash on the night.</div>
+            </div>
+
+            <div style="background:#FFFFFF;border:1px solid #F0E8E1;border-radius:24px;padding:18px;display:flex;flex:0 0 auto;flex-direction:column;gap:14px">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px">
+                <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700;color:#0E7A50;letter-spacing:-0.01em">It's on</div>
+                <div style="font-size:13px;font-weight:600;color:#9A8C84">8 going</div>
+              </div>
+              <div style="display:flex;gap:5px;align-items:center">
+                <div style="flex:1;height:12px;border-radius:999px;background:#14A06B"></div>
+                <div style="flex:1;height:12px;border-radius:999px;background:#14A06B"></div>
+                <div style="flex:1;height:12px;border-radius:999px;background:#14A06B"></div>
+                <div style="flex:1;height:12px;border-radius:999px;background:#14A06B"></div>
+                <div style="flex:1;height:12px;border-radius:999px;background:#14A06B"></div>
+                <div style="flex:1;height:12px;border-radius:999px;background:#14A06B"></div>
+                <div style="flex:1;height:12px;border-radius:999px;background:#14A06B"></div>
+                <div style="flex:1;height:12px;border-radius:999px;background:#14A06B"></div>
+                <div style="flex:1;height:12px;box-sizing:border-box;border-radius:999px;background:transparent;border:1.5px dashed #C9BDB4"></div>
+              </div>
+              <div style="font-size:13px;font-weight:600;color:#0E7A50">1 spot left of 9</div>
+            </div>
+          </div>
+
+          <div style="position:absolute;inset:0;background:rgba(23,18,21,0.42);backdrop-filter:blur(1.5px)"></div>
+
+          <div style="position:absolute;left:0;right:0;bottom:0;padding:0 10px 12px;display:flex;flex-direction:column;gap:9px">
+            <div style="background:#FCF8F4;border-radius:22px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 50px -14px rgba(23,18,21,0.5)">
+              <div style="padding:19px 20px;font-size:17px;font-weight:600;color:#171215;cursor:pointer">Edit the details</div>
+              <div style="padding:19px 20px;border-top:1px solid #EFE6DE;font-size:17px;font-weight:600;color:#171215;cursor:pointer">Copy invite link</div>
+              <div style="padding:19px 20px;border-top:1px solid #EFE6DE;font-size:17px;font-weight:600;color:#171215;cursor:pointer">Nudge the 3 who haven't answered</div>
+            </div>
+            <div style="background:#FCF8F4;border-radius:22px;padding:19px 20px;text-align:center;font-size:17px;font-weight:700;color:#C43B18;cursor:pointer;box-shadow:0 24px 50px -14px rgba(23,18,21,0.5)">Call it off</div>
+            <div style="background:#FFFFFF;border-radius:22px;padding:19px 20px;text-align:center;font-size:17px;font-weight:700;color:#171215;cursor:pointer;margin-bottom:18px;box-shadow:0 24px 50px -14px rgba(23,18,21,0.5)">Cancel</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="20b" style="display:flex;flex-direction:column;gap:14px;width:410px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="background:#F2542D;color:#FFFFFF;font-size:13px;font-weight:700;padding:4px 10px;border-radius:999px">20b</div>
+        <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:19px;font-weight:700;color:#171215">The confirm, with a reason</div>
+      </div>
+      <div style="font-size:14px;color:#6B5F58;line-height:1.45;min-height:76px">Not an OS alert — a sheet, because it has a job an alert can't do: collect the reason that <a href="#19a">19a</a> and the push both carry. It's <strong>optional but pre-focused</strong>, so the keyboard is already up and typing is the path of least resistance; skip it and the notice just reads "Marcus called this off". The count is named out loud — <em>8 people</em> — and the destructive button is the filled one, since by this screen you've already chosen.</div>
+
+      <div style="padding:10px;background:#171215;border-radius:52px;box-shadow:0 30px 60px -20px rgba(23,18,21,0.45)">
+        <div style="position:relative;width:390px;height:844px;background:#FCF8F4;border-radius:42px;overflow:hidden;display:flex;flex-direction:column">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 30px 4px;font-size:15px;font-weight:600;color:#171215">
+            <span>9:41</span>
+            <span style="letter-spacing:2px;font-size:12px">▮▮▮ ⌁ ▰</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px 6px">
+            <div style="font-size:15px;font-weight:600;color:#F2542D;cursor:pointer">‹ Sunday League</div>
+            <div style="font-size:19px;color:#9A8C84;cursor:pointer;letter-spacing:0.1em">···</div>
+          </div>
+
+          <div style="flex:1;overflow:hidden;padding:6px 20px 0;display:flex;flex-direction:column;gap:20px">
+            <div style="display:flex;flex:0 0 auto;flex-direction:column;gap:10px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;background:#E6F6EF;color:#0E7A50;letter-spacing:0.03em;text-transform:uppercase">Confirmed</div>
+                <div style="display:flex;align-items:center;gap:7px">
+                  <div style="width:14px;height:14px;border-radius:5px;background:#3B7BD8"></div>
+                  <div style="font-size:13px;font-weight:600;color:#6B5F58">Sunday League</div>
+                </div>
+              </div>
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:30px;font-weight:800;color:#171215;letter-spacing:-0.02em;line-height:1.1;text-wrap:pretty">Five-a-side at Powerleague</div>
+            </div>
+          </div>
+
+          <div style="position:absolute;inset:0;background:rgba(23,18,21,0.5);backdrop-filter:blur(2px)"></div>
+
+          <div style="position:absolute;left:0;right:0;bottom:0;background:#FCF8F4;border-radius:30px 30px 0 0;padding:10px 20px 0;display:flex;flex-direction:column;gap:16px;box-shadow:0 -20px 50px -14px rgba(23,18,21,0.45)">
+            <div style="width:40px;height:5px;border-radius:999px;background:#E3D9D1;align-self:center;margin:0 0 2px"></div>
+
+            <div style="display:flex;flex-direction:column;gap:7px">
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:26px;font-weight:800;color:#171215;letter-spacing:-0.02em;line-height:1.15;text-wrap:pretty">Call off Saturday's five-a-side?</div>
+              <div style="font-size:15px;color:#6B5F58;line-height:1.45">8 people said they're coming. They'll all get a notification straight away, and the plan moves to Past.</div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="font-size:13px;font-weight:700;color:#9A8C84;letter-spacing:0.05em;text-transform:uppercase">Say why <span style="text-transform:none;letter-spacing:0;font-weight:600;color:#C9BDB4">— optional</span></div>
+              <div style="background:#FFFFFF;border:1.5px solid #F2542D;border-radius:18px;padding:14px 16px;min-height:74px;display:flex;flex-direction:column;gap:2px">
+                <div style="font-size:16px;color:#171215;line-height:1.45">Pitch flooded, they've shut the whole site till Monday.<span style="color:#F2542D;font-weight:400">|</span></div>
+              </div>
+              <div style="font-size:13px;color:#9A8C84;line-height:1.4">This goes in the notification and stays on the plan.</div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:9px;padding-bottom:14px">
+              <div style="padding:16px 0;border-radius:18px;text-align:center;font-size:16px;font-weight:700;cursor:pointer;background:#C43B18;color:#FFFFFF">Call it off</div>
+              <div style="padding:16px 0;border-radius:18px;text-align:center;font-size:16px;font-weight:700;cursor:pointer;background:transparent;color:#6B5F58">Keep it</div>
+            </div>
+
+            <div style="background:#EFE7E0;height:270px;margin:0 -20px;border-top:1px solid #E3D9D1;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:8px">
+              <div style="font-size:13px;font-weight:600;color:#B3A69C;letter-spacing:0.04em;text-transform:uppercase">Keyboard</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:28px;padding:36px 56px 20px;border-top:1px solid #DCD2C9;font-family:'Instrument Sans',system-ui,sans-serif">
+  <div style="display:flex;flex-direction:column;gap:6px;max-width:1040px">
+    <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:34px;font-weight:800;color:#171215;letter-spacing:-0.02em">When a plan stops being a plan</div>
+    <div style="font-size:16px;color:#6B5F58;line-height:1.5">Three endings, one shape. A plan leaves the live app by exactly one door — the circle's <strong>Past</strong> section — and the only difference between called off, didn't happen, and happened is one word on the card. The rules I'm proposing: <strong>Plans only ever holds things that still need you</strong>, so all three drop out of the feed the moment they end; the one exception is a cancellation of a plan you'd said yes to, which earns a single dismissable notice because you were counting on it. <strong>Reopen lives on the host's cancelled detail screen only, and only while the date is still ahead</strong> — after the date there is nothing to reopen. And for a plan that simply happened: <strong>nothing changes for MVP</strong> — no recap, no photos, no attendance. It greys out and files itself.</div>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:44px;align-items:flex-start">
+
+    <div id="19a" style="display:flex;flex-direction:column;gap:14px;width:410px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="background:#F2542D;color:#FFFFFF;font-size:13px;font-weight:700;padding:4px 10px;border-radius:999px">19a</div>
+        <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:19px;font-weight:700;color:#171215">Called off — what everyone sees</div>
+      </div>
+      <div style="font-size:14px;color:#6B5F58;line-height:1.45;min-height:76px">The slot bar goes, entirely — a count is a question, and there's no question left. In its place a flat stone card carrying the two facts that matter: it's off, and why. The footer <strong>empties and is removed</strong>, not disabled: a greyed-out "I'm in" is a button lying about being tappable. Nothing replaces it either — the cancellation already pushed to everyone involved, so there's no message to send. The screen is now purely a record.</div>
+
+      <div style="padding:10px;background:#171215;border-radius:52px;box-shadow:0 30px 60px -20px rgba(23,18,21,0.45)">
+        <div style="position:relative;width:390px;height:844px;background:#FCF8F4;border-radius:42px;overflow:hidden;display:flex;flex-direction:column">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 30px 4px;font-size:15px;font-weight:600;color:#171215">
+            <span>9:41</span>
+            <span style="letter-spacing:2px;font-size:12px">▮▮▮ ⌁ ▰</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px 6px">
+            <div style="font-size:15px;font-weight:600;color:#F2542D;cursor:pointer">‹ Sunday League</div>
+            <div style="font-size:19px;color:#9A8C84;cursor:pointer;letter-spacing:0.1em">···</div>
+          </div>
+
+          <div style="flex:1;overflow-y:auto;padding:6px 20px 28px;display:flex;flex-direction:column;gap:20px">
+            <div style="display:flex;flex:0 0 auto;flex-direction:column;gap:10px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;background:#E9E1DA;color:#6B5F58;letter-spacing:0.03em;text-transform:uppercase">Called off</div>
+                <div style="display:flex;align-items:center;gap:7px">
+                  <div style="width:14px;height:14px;border-radius:5px;background:#3B7BD8"></div>
+                  <div style="font-size:13px;font-weight:600;color:#6B5F58">Sunday League</div>
+                </div>
+              </div>
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:30px;font-weight:800;color:#6B5F58;letter-spacing:-0.02em;line-height:1.1;text-wrap:pretty">Five-a-side at Powerleague</div>
+              <div style="font-size:15px;color:#9A8C84;line-height:1.45">Pitch 3, bring both shirts. Cash on the night.</div>
+            </div>
+
+            <div style="background:#F0EAE4;border:1px solid #E3D9D1;border-radius:24px;padding:18px;display:flex;flex:0 0 auto;flex-direction:column;gap:8px">
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700;color:#171215;letter-spacing:-0.01em">Marcus called this off</div>
+              <div style="font-size:15px;color:#6B5F58;line-height:1.45">“Pitch flooded, they've shut the whole site till Monday.”</div>
+              <div style="font-size:13px;font-weight:600;color:#9A8C84;padding-top:2px">Cancelled Thursday, 18:20</div>
+            </div>
+
+            <div style="background:#FFFFFF;border:1px solid #F0E8E1;border-radius:24px;overflow:hidden;display:flex;flex:0 0 auto;flex-direction:column;opacity:0.7">
+              <div style="padding:16px;display:flex;justify-content:space-between;align-items:center;gap:12px">
+                <div style="font-size:15px;color:#6B5F58;text-decoration:line-through;text-decoration-color:#C9BDB4">Sat 8 Aug</div>
+                <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:18px;font-weight:700;color:#6B5F58;text-decoration:line-through;text-decoration-color:#C9BDB4">19:00</div>
+              </div>
+              <div style="padding:16px;border-top:1px solid #F3EBE4;display:flex;justify-content:space-between;align-items:center;gap:12px">
+                <div style="font-size:15px;color:#6B5F58">Powerleague Shoreditch</div>
+              </div>
+              <div style="padding:14px 16px;border-top:1px solid #F3EBE4;font-size:13px;color:#9A8C84">Marcus set this up</div>
+            </div>
+
+            <div style="display:flex;flex:0 0 auto;flex-direction:column;gap:10px">
+              <div style="font-size:13px;font-weight:700;color:#9A8C84;letter-spacing:0.05em;text-transform:uppercase">Was going</div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px">
+                <div style="display:flex;align-items:center;gap:8px;padding:7px 13px 7px 7px;border-radius:999px;background:#F6F0EA;border:1.5px solid #E3D9D1">
+                  <div style="width:26px;height:26px;border-radius:999px;background:#171215;color:#FCF8F4;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">R</div>
+                  <div style="font-size:15px;font-weight:600;color:#6B5F58">You</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;padding:7px 13px 7px 7px;border-radius:999px;background:#F6F0EA;border:1.5px solid #E3D9D1">
+                  <div style="width:26px;height:26px;border-radius:999px;background:#D8E3F5;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#171215">M</div>
+                  <div style="font-size:15px;font-weight:600;color:#6B5F58">Marcus</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;padding:7px 13px 7px 7px;border-radius:999px;background:#F6F0EA;border:1.5px solid #E3D9D1">
+                  <div style="width:26px;height:26px;border-radius:999px;background:#F6DFD3;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#171215">P</div>
+                  <div style="font-size:15px;font-weight:600;color:#6B5F58">Priya</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;padding:7px 13px 7px 7px;border-radius:999px;background:#F6F0EA;border:1.5px solid #E3D9D1">
+                  <div style="width:26px;height:26px;border-radius:999px;background:#DCEFE4;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#171215">T</div>
+                  <div style="font-size:15px;font-weight:600;color:#6B5F58">Tom</div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="19b" style="display:flex;flex-direction:column;gap:14px;width:410px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="background:#F2542D;color:#FFFFFF;font-size:13px;font-weight:700;padding:4px 10px;border-radius:999px">19b</div>
+        <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:19px;font-weight:700;color:#171215">Called off — the host's view</div>
+      </div>
+      <div style="font-size:14px;color:#6B5F58;line-height:1.45;min-height:76px">Reopen exists, so put it where the footer already was — but as an outline, never the filled ember. Cancelling is the loud act; undoing it quietly is the point. Two rules attached: it only shows to the host, and it disappears once the date passes. And on your point about answers — agreed, <strong>reopening keeps everyone who was in</strong>. Clearing the list would punish eight people for one flooded pitch, and anyone whose plans changed can back out in a tap, which is the same escape hatch they always had.</div>
+
+      <div style="padding:10px;background:#171215;border-radius:52px;box-shadow:0 30px 60px -20px rgba(23,18,21,0.45)">
+        <div style="position:relative;width:390px;height:844px;background:#FCF8F4;border-radius:42px;overflow:hidden;display:flex;flex-direction:column">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 30px 4px;font-size:15px;font-weight:600;color:#171215">
+            <span>9:41</span>
+            <span style="letter-spacing:2px;font-size:12px">▮▮▮ ⌁ ▰</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px 6px">
+            <div style="font-size:15px;font-weight:600;color:#F2542D;cursor:pointer">‹ Sunday League</div>
+            <div style="font-size:19px;color:#9A8C84;cursor:pointer;letter-spacing:0.1em">···</div>
+          </div>
+
+          <div style="flex:1;overflow-y:auto;padding:6px 20px 170px;display:flex;flex-direction:column;gap:20px">
+            <div style="display:flex;flex:0 0 auto;flex-direction:column;gap:10px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;background:#E9E1DA;color:#6B5F58;letter-spacing:0.03em;text-transform:uppercase">Called off</div>
+                <div style="display:flex;align-items:center;gap:7px">
+                  <div style="width:14px;height:14px;border-radius:5px;background:#3B7BD8"></div>
+                  <div style="font-size:13px;font-weight:600;color:#6B5F58">Sunday League</div>
+                </div>
+              </div>
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:30px;font-weight:800;color:#6B5F58;letter-spacing:-0.02em;line-height:1.1;text-wrap:pretty">Five-a-side at Powerleague</div>
+              <div style="font-size:15px;color:#9A8C84;line-height:1.45">Pitch 3, bring both shirts. Cash on the night.</div>
+            </div>
+
+            <div style="background:#F0EAE4;border:1px solid #E3D9D1;border-radius:24px;padding:18px;display:flex;flex:0 0 auto;flex-direction:column;gap:8px">
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700;color:#171215;letter-spacing:-0.01em">You called this off</div>
+              <div style="font-size:15px;color:#6B5F58;line-height:1.45">“Pitch flooded, they've shut the whole site till Monday.”</div>
+              <div style="font-size:13px;font-weight:600;color:#9A8C84;padding-top:2px">Thursday, 18:20</div>
+            </div>
+
+            <div style="background:#FFFFFF;border:1px solid #F0E8E1;border-radius:24px;overflow:hidden;display:flex;flex:0 0 auto;flex-direction:column;opacity:0.7">
+              <div style="padding:16px;display:flex;justify-content:space-between;align-items:center;gap:12px">
+                <div style="font-size:15px;color:#6B5F58;text-decoration:line-through;text-decoration-color:#C9BDB4">Sat 8 Aug</div>
+                <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:18px;font-weight:700;color:#6B5F58;text-decoration:line-through;text-decoration-color:#C9BDB4">19:00</div>
+              </div>
+              <div style="padding:16px;border-top:1px solid #F3EBE4;display:flex;justify-content:space-between;align-items:center;gap:12px">
+                <div style="font-size:15px;color:#6B5F58">Powerleague Shoreditch</div>
+              </div>
+              <div style="padding:14px 16px;border-top:1px solid #F3EBE4;font-size:13px;color:#9A8C84">You set this up</div>
+            </div>
+
+            <div style="display:flex;flex:0 0 auto;flex-direction:column;gap:10px">
+              <div style="font-size:13px;font-weight:700;color:#9A8C84;letter-spacing:0.05em;text-transform:uppercase">Was going</div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px">
+                <div style="display:flex;align-items:center;gap:8px;padding:7px 13px 7px 7px;border-radius:999px;background:#F6F0EA;border:1.5px solid #E3D9D1">
+                  <div style="width:26px;height:26px;border-radius:999px;background:#D8E3F5;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#171215">M</div>
+                  <div style="font-size:15px;font-weight:600;color:#6B5F58">You</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;padding:7px 13px 7px 7px;border-radius:999px;background:#F6F0EA;border:1.5px solid #E3D9D1">
+                  <div style="width:26px;height:26px;border-radius:999px;background:#F6DFD3;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#171215">P</div>
+                  <div style="font-size:15px;font-weight:600;color:#6B5F58">Priya</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;padding:7px 13px 7px 7px;border-radius:999px;background:#F6F0EA;border:1.5px solid #E3D9D1">
+                  <div style="width:26px;height:26px;border-radius:999px;background:#DCEFE4;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#171215">T</div>
+                  <div style="font-size:15px;font-weight:600;color:#6B5F58">Tom</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;padding:7px 13px 7px 7px;border-radius:999px;background:#F6F0EA;border:1.5px solid #E3D9D1">
+                  <div style="width:26px;height:26px;border-radius:999px;background:#EFE0F2;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#171215">R</div>
+                  <div style="font-size:15px;font-weight:600;color:#6B5F58">Rina</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="position:absolute;left:0;right:0;bottom:0;background:rgba(252,248,244,0.94);backdrop-filter:blur(12px);border-top:1px solid #EFE6DE;padding:14px 20px 30px;display:flex;flex-direction:column;gap:9px">
+            <div style="padding:16px 0;border-radius:18px;text-align:center;font-size:16px;font-weight:700;cursor:pointer;background:transparent;border:1.5px solid #F2542D;color:#F2542D">Reopen this plan</div>
+            <div style="font-size:13px;color:#9A8C84;text-align:center;line-height:1.4">Everyone who was in stays in — they just get told it’s back on. Only you see this, and only until Sat 8 Aug.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="19c" style="display:flex;flex-direction:column;gap:14px;width:410px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="background:#F2542D;color:#FFFFFF;font-size:13px;font-weight:700;padding:4px 10px;border-radius:999px">19c</div>
+        <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:19px;font-weight:700;color:#171215">Didn't happen — expired</div>
+      </div>
+      <div style="font-size:14px;color:#6B5F58;line-height:1.45;min-height:76px">Nobody cancelled this; the date just arrived and the floor never filled. So the slot bar <strong>stays</strong> — frozen at where it stopped — because here the count <em>is</em> the explanation. No reopen: the date is gone, there's nothing to return to. <strong>Try again</strong> instead — and not host-only, which was the wrong instinct: the person most motivated to make it happen is whoever is disappointed, not whoever happened to post it first. Anyone in the circle can tap it, any number of them, and the sheet opens pre-filled with everything but the date. It’s a copy, not a handover — two people picking two dates just makes two plans, and the circle answers whichever it likes.</div>
+
+      <div style="padding:10px;background:#171215;border-radius:52px;box-shadow:0 30px 60px -20px rgba(23,18,21,0.45)">
+        <div style="position:relative;width:390px;height:844px;background:#FCF8F4;border-radius:42px;overflow:hidden;display:flex;flex-direction:column">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 30px 4px;font-size:15px;font-weight:600;color:#171215">
+            <span>9:41</span>
+            <span style="letter-spacing:2px;font-size:12px">▮▮▮ ⌁ ▰</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px 6px">
+            <div style="font-size:15px;font-weight:600;color:#F2542D;cursor:pointer">‹ Sunday League</div>
+            <div style="font-size:19px;color:#9A8C84;cursor:pointer;letter-spacing:0.1em">···</div>
+          </div>
+
+          <div style="flex:1;overflow-y:auto;padding:6px 20px 170px;display:flex;flex-direction:column;gap:20px">
+            <div style="display:flex;flex:0 0 auto;flex-direction:column;gap:10px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;background:#E9E1DA;color:#6B5F58;letter-spacing:0.03em;text-transform:uppercase">Didn't happen</div>
+                <div style="display:flex;align-items:center;gap:7px">
+                  <div style="width:14px;height:14px;border-radius:5px;background:#3B7BD8"></div>
+                  <div style="font-size:13px;font-weight:600;color:#6B5F58">Sunday League</div>
+                </div>
+              </div>
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:30px;font-weight:800;color:#6B5F58;letter-spacing:-0.02em;line-height:1.1;text-wrap:pretty">Thursday night pub quiz</div>
+              <div style="font-size:15px;color:#9A8C84;line-height:1.45">The Sebright Arms, teams of four minimum.</div>
+            </div>
+
+            <div style="background:#F0EAE4;border:1px solid #E3D9D1;border-radius:24px;padding:18px;display:flex;flex:0 0 auto;flex-direction:column;gap:14px">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px">
+                <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700;color:#171215;letter-spacing:-0.01em">Two short on the night</div>
+                <div style="font-size:13px;font-weight:600;color:#9A8C84">2 of 4</div>
+              </div>
+              <div style="display:flex;gap:5px;align-items:center">
+                <div style="flex:1;height:12px;box-sizing:border-box;border-radius:999px;background:#C9BDB4"></div>
+                <div style="flex:1;height:12px;box-sizing:border-box;border-radius:999px;background:#C9BDB4"></div>
+                <div style="flex:1;height:12px;box-sizing:border-box;border-radius:999px;background:transparent;border:1.5px dashed #C9BDB4"></div>
+                <div style="flex:1;height:12px;box-sizing:border-box;border-radius:999px;background:transparent;border:1.5px dashed #C9BDB4"></div>
+              </div>
+              <div style="font-size:13px;font-weight:600;color:#9A8C84">The date passed before it reached its minimum</div>
+            </div>
+
+            <div style="background:#FFFFFF;border:1px solid #F0E8E1;border-radius:24px;overflow:hidden;display:flex;flex:0 0 auto;flex-direction:column;opacity:0.7">
+              <div style="padding:16px;display:flex;justify-content:space-between;align-items:center;gap:12px">
+                <div style="font-size:15px;color:#6B5F58">Thu 24 Jul</div>
+                <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:18px;font-weight:700;color:#6B5F58">20:00</div>
+              </div>
+              <div style="padding:16px;border-top:1px solid #F3EBE4;display:flex;justify-content:space-between;align-items:center;gap:12px">
+                <div style="font-size:15px;color:#6B5F58">The Sebright Arms</div>
+              </div>
+              <div style="padding:14px 16px;border-top:1px solid #F3EBE4;font-size:13px;color:#9A8C84">You set this up</div>
+            </div>
+
+            <div style="display:flex;flex:0 0 auto;flex-direction:column;gap:10px">
+              <div style="font-size:13px;font-weight:700;color:#9A8C84;letter-spacing:0.05em;text-transform:uppercase">Were in</div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px">
+                <div style="display:flex;align-items:center;gap:8px;padding:7px 13px 7px 7px;border-radius:999px;background:#F6F0EA;border:1.5px solid #E3D9D1">
+                  <div style="width:26px;height:26px;border-radius:999px;background:#171215;color:#FCF8F4;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">R</div>
+                  <div style="font-size:15px;font-weight:600;color:#6B5F58">You</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;padding:7px 13px 7px 7px;border-radius:999px;background:#F6F0EA;border:1.5px solid #E3D9D1">
+                  <div style="width:26px;height:26px;border-radius:999px;background:#F6DFD3;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#171215">P</div>
+                  <div style="font-size:15px;font-weight:600;color:#6B5F58">Priya</div>
+                </div>
+              </div>
+              <div style="font-size:13px;color:#9A8C84">4 never answered · 1 couldn't make it</div>
+            </div>
+          </div>
+
+          <div style="position:absolute;left:0;right:0;bottom:0;background:rgba(252,248,244,0.94);backdrop-filter:blur(12px);border-top:1px solid #EFE6DE;padding:14px 20px 30px;display:flex;flex-direction:column;gap:9px">
+            <div style="padding:16px 0;border-radius:18px;text-align:center;font-size:16px;font-weight:700;cursor:pointer;background:transparent;border:1.5px solid #F2542D;color:#F2542D">Try again with a new date</div>
+            <div style="font-size:13px;color:#9A8C84;text-align:center;line-height:1.4">Opens a fresh plan with the same title, place and minimum.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="19d" style="display:flex;flex-direction:column;gap:14px;width:410px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="background:#F2542D;color:#FFFFFF;font-size:13px;font-weight:700;padding:4px 10px;border-radius:999px">19d</div>
+        <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:19px;font-weight:700;color:#171215">One Past section, three endings</div>
+      </div>
+      <div style="font-size:14px;color:#6B5F58;line-height:1.45;min-height:76px">Yes — cancelled plans stay in the circle, as the old app did, but not mixed into what's coming up. They fall through into <strong>Past</strong>, below the live list, closed by default with a count so it costs one line until you want it. Inside, though, the two non-events and the real one aren't equals: a plan that <em>happened</em> keeps its white card, its ink title and the faces of who was there — it's a memory, not a failure. The called-off and the never-quite ones sink into flat stone with a grey title and one line of explanation.</div>
+
+      <div style="padding:10px;background:#171215;border-radius:52px;box-shadow:0 30px 60px -20px rgba(23,18,21,0.45)">
+        <div style="position:relative;width:390px;height:844px;background:#FCF8F4;border-radius:42px;overflow:hidden;display:flex;flex-direction:column">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 30px 4px;font-size:15px;font-weight:600;color:#171215">
+            <span>9:41</span>
+            <span style="letter-spacing:2px;font-size:12px">▮▮▮ ⌁ ▰</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;padding:14px 20px 14px">
+            <div style="width:26px;height:26px;border-radius:9px;background:#3B7BD8"></div>
+            <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:20px;font-weight:700;color:#171215;letter-spacing:-0.01em">Sunday League</div>
+          </div>
+
+          <div style="flex:1;overflow-y:auto;padding:0 20px 28px;display:flex;flex-direction:column;gap:22px">
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <div style="font-size:13px;font-weight:700;color:#9A8C84;letter-spacing:0.05em;text-transform:uppercase">What's coming up</div>
+              <div style="background:#FFFFFF;border:1px solid #F0E8E1;border-radius:22px;padding:14px;display:flex;gap:14px;align-items:center">
+                <div style="flex:0 0 54px;height:58px;border-radius:16px;background:#171215;color:#FCF8F4;display:flex;flex-direction:column;align-items:center;justify-content:center">
+                  <div style="font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;opacity:0.75">Aug</div>
+                  <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700;line-height:1">15</div>
+                </div>
+                <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+                  <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:18px;font-weight:700;color:#171215;letter-spacing:-0.01em">Six-a-side, Haggerston</div>
+                  <div style="font-size:13px;color:#6B5F58">19:30</div>
+                  <div style="font-size:13px;font-weight:600;color:#14A06B">Locked in · 8 going</div>
+                </div>
+              </div>
+              <div style="background:#FFFFFF;border:1px solid #F0E8E1;border-radius:22px;padding:14px;display:flex;gap:14px;align-items:center">
+                <div style="flex:0 0 54px;height:58px;border-radius:16px;background:#FDEFE9;color:#C43B18;display:flex;flex-direction:column;align-items:center;justify-content:center">
+                  <div style="font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;opacity:0.75">Aug</div>
+                  <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700;line-height:1">22</div>
+                </div>
+                <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+                  <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:18px;font-weight:700;color:#171215;letter-spacing:-0.01em">Astroturf, London Fields</div>
+                  <div style="font-size:13px;color:#6B5F58">18:00</div>
+                  <div style="font-size:13px;font-weight:600;color:#C43B18">2 more and it's on</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <div style="font-size:13px;font-weight:700;color:#9A8C84;letter-spacing:0.05em;text-transform:uppercase">Past</div>
+                  <div style="font-size:13px;font-weight:700;color:#C9BDB4">3</div>
+                </div>
+                <div style="font-size:13px;font-weight:700;color:#9A8C84">Hide ⌃</div>
+              </div>
+
+              <div style="background:#F4EEE8;border:1px solid #E9E1DA;border-radius:22px;padding:14px;display:flex;gap:14px;align-items:center">
+                <div style="flex:0 0 54px;height:58px;border-radius:16px;background:#E9E1DA;color:#9A8C84;display:flex;flex-direction:column;align-items:center;justify-content:center">
+                  <div style="font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;opacity:0.75">Aug</div>
+                  <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700;line-height:1">8</div>
+                </div>
+                <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+                  <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:18px;font-weight:700;color:#6B5F58;letter-spacing:-0.01em">Five-a-side at Powerleague</div>
+                  <div style="font-size:13px;color:#9A8C84">Called off by Marcus</div>
+                </div>
+              </div>
+
+              <div style="background:#F4EEE8;border:1px solid #E9E1DA;border-radius:22px;padding:14px;display:flex;gap:14px;align-items:center">
+                <div style="flex:0 0 54px;height:58px;border-radius:16px;background:#E9E1DA;color:#9A8C84;display:flex;flex-direction:column;align-items:center;justify-content:center">
+                  <div style="font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;opacity:0.75">Jul</div>
+                  <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700;line-height:1">24</div>
+                </div>
+                <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+                  <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:18px;font-weight:700;color:#6B5F58;letter-spacing:-0.01em">Thursday night pub quiz</div>
+                  <div style="font-size:13px;color:#9A8C84">Didn't happen · 2 of 4</div>
+                </div>
+              </div>
+
+              <div style="background:#FFFFFF;border:1px solid #F0E8E1;border-radius:22px;padding:14px;display:flex;gap:14px;align-items:center">
+                <div style="flex:0 0 54px;height:58px;border-radius:16px;background:#EFE7E0;color:#6B5F58;display:flex;flex-direction:column;align-items:center;justify-content:center">
+                  <div style="font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;opacity:0.75">Jul</div>
+                  <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700;line-height:1">11</div>
+                </div>
+                <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+                  <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:18px;font-weight:700;color:#171215;letter-spacing:-0.01em">Five-a-side at Powerleague</div>
+                  <div style="display:flex;align-items:center;gap:7px">
+                    <div style="display:flex;align-items:center">
+                      <div style="width:20px;height:20px;border-radius:999px;background:#D8E3F5;border:1.5px solid #FFFFFF;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#171215">M</div>
+                      <div style="width:20px;height:20px;border-radius:999px;background:#F6DFD3;border:1.5px solid #FFFFFF;margin-left:-7px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#171215">P</div>
+                      <div style="width:20px;height:20px;border-radius:999px;background:#DCEFE4;border:1.5px solid #FFFFFF;margin-left:-7px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#171215">T</div>
+                    </div>
+                    <div style="font-size:13px;font-weight:600;color:#6B5F58">You and 8 others went</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="19e" style="display:flex;flex-direction:column;gap:14px;width:410px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="background:#F2542D;color:#FFFFFF;font-size:13px;font-weight:700;padding:4px 10px;border-radius:999px">19e</div>
+        <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:19px;font-weight:700;color:#171215">Plans — the one thing that survives</div>
+      </div>
+      <div style="font-size:14px;color:#6B5F58;line-height:1.45;min-height:76px">Expired and past-confirmed plans <strong>leave Plans silently</strong> at the end of their day — you didn't need telling that a thing you attended is over. A cancellation is different: you'd cleared your Saturday. So it stays one more beat as a notice pinned above the feed, in stone not red, with <strong>Got it</strong> to remove it — and it only appears for people who had answered <em>I'm in</em>. Nobody who ignored the plan ever sees it. Auto-clears after 24h either way.</div>
+
+      <div style="padding:10px;background:#171215;border-radius:52px;box-shadow:0 30px 60px -20px rgba(23,18,21,0.45)">
+        <div style="position:relative;width:390px;height:844px;background:#FCF8F4;border-radius:42px;overflow:hidden;display:flex;flex-direction:column">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 30px 4px;font-size:15px;font-weight:600;color:#171215">
+            <span>9:41</span>
+            <span style="letter-spacing:2px;font-size:12px">▮▮▮ ⌁ ▰</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:flex-end;padding:12px 20px 14px">
+            <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:28px;font-weight:800;color:#171215;letter-spacing:-0.02em">Plans</div>
+            <div style="width:34px;height:34px;border-radius:999px;background:#171215;color:#FCF8F4;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700">R</div>
+          </div>
+
+          <div style="flex:1;overflow-y:auto;padding:0 20px 100px;display:flex;flex-direction:column;gap:12px">
+            <div style="background:#F0EAE4;border:1px solid #E3D9D1;border-radius:22px;padding:15px 16px;display:flex;flex-direction:column;gap:9px">
+              <div style="display:flex;flex-direction:column;gap:3px">
+                <div style="font-size:12px;font-weight:700;color:#9A8C84;letter-spacing:0.04em;text-transform:uppercase">Called off</div>
+                <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:19px;font-weight:700;color:#171215;letter-spacing:-0.01em">Five-a-side at Powerleague</div>
+                <div style="font-size:14px;color:#6B5F58;line-height:1.45">Sat 8 Aug is off — Marcus says the pitch is flooded.</div>
+              </div>
+              <div style="display:flex;gap:9px;align-items:center">
+                <div style="flex:1;padding:11px 0;border-radius:14px;text-align:center;font-size:14px;font-weight:700;cursor:pointer;background:#FFFFFF;border:1.5px solid #E3D9D1;color:#171215">Got it</div>
+                <div style="flex:1;padding:11px 0;border-radius:14px;text-align:center;font-size:14px;font-weight:700;cursor:pointer;background:transparent;color:#6B5F58">See the plan</div>
+              </div>
+            </div>
+
+            <div style="height:1px;background:#EFE6DE;margin:6px 0"></div>
+
+            <div style="background:#FFFFFF;border:1px solid #F0E8E1;border-radius:22px;padding:15px 16px;display:flex;flex-direction:column;gap:6px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="width:8px;height:8px;border-radius:999px;background:#F2542D"></div>
+                <div style="font-size:12px;font-weight:700;color:#C43B18;letter-spacing:0.03em;text-transform:uppercase">2 more and it's on</div>
+              </div>
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:19px;font-weight:700;color:#171215;letter-spacing:-0.01em">Astroturf, London Fields</div>
+              <div style="font-size:14px;color:#6B5F58">Fri 22 Aug · 18:00 · Sunday League</div>
+              <div style="display:flex;gap:9px;padding-top:6px">
+                <div style="flex:0 0 116px;padding:11px 0;border-radius:14px;text-align:center;font-size:14px;font-weight:700;cursor:pointer;background:#F6F0EA;border:1.5px solid #EADFD5;color:#6B5F58">Can't</div>
+                <div style="flex:1;padding:11px 0;border-radius:14px;text-align:center;font-size:15px;font-weight:700;cursor:pointer;background:#F2542D;color:#FFFFFF">I'm in</div>
+              </div>
+            </div>
+
+            <div style="background:#FFFFFF;border:1px solid #F0E8E1;border-radius:22px;padding:15px 16px;display:flex;flex-direction:column;gap:6px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="width:8px;height:8px;border-radius:999px;background:#14A06B"></div>
+                <div style="font-size:12px;font-weight:700;color:#0E7A50;letter-spacing:0.03em;text-transform:uppercase">Locked in</div>
+              </div>
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:19px;font-weight:700;color:#171215;letter-spacing:-0.01em">Six-a-side, Haggerston</div>
+              <div style="font-size:14px;color:#6B5F58">Fri 15 Aug · 19:30 · Sunday League</div>
+              <div style="font-size:13px;font-weight:600;color:#9A8C84">You're going · 8 in</div>
+            </div>
+
+            <div style="padding:14px 4px 0;font-size:13px;color:#9A8C84;line-height:1.45;text-align:center">Nothing else needs you. Past plans live in their circle.</div>
+          </div>
+
+          <div style="position:absolute;left:0;right:0;bottom:0;background:rgba(252,248,244,0.94);backdrop-filter:blur(12px);border-top:1px solid #EFE6DE;padding:12px 30px 28px;display:flex;align-items:center;justify-content:space-between">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:3px">
+              <div style="font-size:19px">◆</div>
+              <div style="font-size:11px;font-weight:700;color:#171215">Plans</div>
+            </div>
+            <div style="width:52px;height:52px;border-radius:999px;background:#F2542D;color:#FFFFFF;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:600;margin-top:-26px;box-shadow:0 10px 20px -6px rgba(242,84,45,0.6)">+</div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:3px;opacity:0.45">
+              <div style="font-size:19px">◎</div>
+              <div style="font-size:11px;font-weight:700;color:#171215">Circles</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:960,&quot;height&quot;:1100}}">
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
-import { Alert } from 'react-native';
+import { ActionSheetIOS, Alert } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import PlanDetailScreen from '../index';
 import { useAuthStore } from '../../../../../stores/authStore';
@@ -9,10 +9,20 @@ jest.mock('../../../../../lib/supabase', () => ({
   supabase: { from: jest.fn(), rpc: jest.fn() },
 }));
 
+const mockPush = jest.fn();
+const mockReplace = jest.fn();
+let mockCanGoBack = true;
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ id: 'plan-1' }),
-  useRouter: () => ({ push: jest.fn(), back: jest.fn() }),
+  useRouter: () => ({
+    push: mockPush,
+    back: jest.fn(),
+    replace: mockReplace,
+    canGoBack: () => mockCanGoBack,
+  }),
 }));
+
+jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn() }));
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
@@ -64,12 +74,15 @@ function prime({
   options = [],
   avail = [],
   role = 'member',
+  members = [],
 }: {
   plan: Record<string, unknown>;
   rsvps?: unknown[];
   options?: unknown[];
   avail?: unknown[];
   role?: string;
+  /** user_ids in the group — drives the nudge count and "never answered" */
+  members?: string[];
 }) {
   rsvpsChain = chain({ error: null });
   availChain = chain({ error: null });
@@ -88,10 +101,29 @@ function prime({
       c.delete = availChain.delete;
       return c;
     }
-    if (table === 'group_members') return chain({ data: { role }, error: null });
+    if (table === 'group_members') {
+      // Two callers share the table: membership (.single() → own role) and
+      // the member-id list (no .single()).
+      const c = chain({ data: members.map((uid) => ({ user_id: uid })), error: null });
+      c.single = jest.fn(() => chain({ data: { role }, error: null }));
+      return c;
+    }
     return chain({ data: null, error: null });
   });
   mockRpc.mockResolvedValue({ data: {}, error: null });
+}
+
+/** ISO timestamp N days from today at the given hour, local time. */
+function iso(daysFromNow: number, hour = 19) {
+  const now = new Date();
+  return new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() + daysFromNow,
+    hour,
+    0,
+    0
+  ).toISOString();
 }
 
 function renderDetail() {
@@ -105,9 +137,18 @@ function renderDetail() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockCanGoBack = true;
   jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  jest.spyOn(ActionSheetIOS, 'showActionSheetWithOptions').mockImplementation(() => {});
   useAuthStore.setState({ user: { id: 'me' } as any, profile: { id: 'me' } as any });
 });
+
+/** Open the ··· menu and return the option labels + the row-select callback. */
+async function openMenu() {
+  await fireEvent.press(screen.getByTestId('plan-menu'));
+  const call = (ActionSheetIOS.showActionSheetWithOptions as jest.Mock).mock.calls.at(-1);
+  return { options: call[0].options as string[], pick: call[1] as (i: number) => void };
+}
 
 describe('PlanDetailScreen — fixed plans', () => {
   it('tells the gap below minimum and answers via upsert', async () => {
@@ -242,27 +283,170 @@ describe('PlanDetailScreen — flexible plans', () => {
     );
   });
 
-  it('host cancel flows through the cancel_plan RPC', async () => {
+});
+
+describe('PlanDetailScreen — the 20a menu', () => {
+  it("host menu carries Call it off and routes to the confirm sheet; nudge counts the silent", async () => {
     prime({
       plan: {
         ...basePlan,
         plan_type: 'fixed',
         status: 'open',
-        event_date: '2026-08-06T19:30:00Z',
+        event_date: iso(8),
         created_by: 'me',
       },
+      rsvps: [{ user_id: 'me', response: 'yes', profile: { display_name: 'Me' } }],
+      members: ['me', 'u-marta', 'u-jordi', 'u-aina'],
     });
     await renderDetail();
     await waitFor(() => expect(screen.getByTestId('plan-menu')).toBeTruthy());
 
-    await fireEvent.press(screen.getByTestId('plan-menu'));
-    let buttons = (Alert.alert as jest.Mock).mock.calls.at(-1)[2];
-    buttons.find((b: any) => b.text === 'Cancel plan').onPress();
-    buttons = (Alert.alert as jest.Mock).mock.calls.at(-1)[2];
-    buttons.find((b: any) => b.text === 'Cancel plan').onPress();
+    const { options, pick } = await openMenu();
+    expect(options).toEqual([
+      'Copy invite link',
+      "Nudge the 3 who haven't answered",
+      'Call it off',
+      'Cancel',
+    ]);
 
+    pick(2);
+    expect(mockPush).toHaveBeenCalledWith('/plan/plan-1/cancel');
+  });
+
+  it('back falls back to the group screen after a deep link', async () => {
+    prime({
+      plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(8) },
+    });
+    await renderDetail();
+    await waitFor(() => expect(screen.getByTestId('back')).toBeTruthy());
+
+    mockCanGoBack = false;
+    await fireEvent.press(screen.getByTestId('back'));
+    expect(mockReplace).toHaveBeenCalledWith('/(app)/group/g1');
+  });
+
+  it('guests get the same menu minus Call it off', async () => {
+    prime({
+      plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(8) },
+      members: ['me', 'u-marta'],
+    });
+    await renderDetail();
+    await waitFor(() => expect(screen.getByTestId('plan-menu')).toBeTruthy());
+
+    const { options } = await openMenu();
+    expect(options).not.toContain('Call it off');
+    expect(options).toContain('Copy invite link');
+  });
+});
+
+describe('PlanDetailScreen — endings', () => {
+  const cancelledPlan = {
+    ...basePlan,
+    plan_type: 'fixed',
+    status: 'cancelled',
+    event_date: iso(10),
+    cancelled_at: iso(-1, 18),
+    cancelled_by: 'u-marta',
+    cancel_reason: 'Pitch flooded, they’ve shut the whole site till Monday.',
+    canceller: { display_name: 'Marta' },
+  };
+
+  it('19a: called off shows the stone card and removes the footer entirely', async () => {
+    prime({
+      plan: cancelledPlan,
+      rsvps: [
+        { user_id: 'me', response: 'yes', profile: { display_name: 'Me' } },
+        { user_id: 'u-jordi', response: 'yes', profile: { display_name: 'Jordi' } },
+      ],
+      members: ['me', 'u-marta', 'u-jordi'],
+    });
+    await renderDetail();
+
+    await waitFor(() => expect(screen.getByText('Called off')).toBeTruthy());
+    expect(screen.getByText('Marta called this off')).toBeTruthy();
+    expect(
+      screen.getByText('“Pitch flooded, they’ve shut the whole site till Monday.”')
+    ).toBeTruthy();
+    expect(screen.getByText('Was going')).toBeTruthy();
+    // Footer gone — no answer buttons, no reopen for a guest
+    expect(screen.queryByText("I'm in")).toBeNull();
+    expect(screen.queryByTestId('restore')).toBeNull();
+    // The count is a question and there's no question left
+    expect(screen.queryByTestId('slot-filled')).toBeNull();
+  });
+
+  it('19b: the host sees Reopen while the date is ahead, wired to restore_plan', async () => {
+    prime({
+      plan: { ...cancelledPlan, created_by: 'me', cancelled_by: 'me', canceller: null },
+      rsvps: [{ user_id: 'u-jordi', response: 'yes', profile: { display_name: 'Jordi' } }],
+      members: ['me', 'u-jordi'],
+    });
+    await renderDetail();
+
+    await waitFor(() => expect(screen.getByText('You called this off')).toBeTruthy());
+    await fireEvent.press(screen.getByTestId('restore'));
     await waitFor(() =>
-      expect(mockRpc).toHaveBeenCalledWith('cancel_plan', { p_plan_id: 'plan-1' })
+      expect(mockRpc).toHaveBeenCalledWith('restore_plan', { p_plan_id: 'plan-1' })
     );
+  });
+
+  it('19b: reopen disappears once the date has passed', async () => {
+    prime({
+      plan: { ...cancelledPlan, created_by: 'me', cancelled_by: 'me', event_date: iso(-3) },
+      members: ['me'],
+    });
+    await renderDetail();
+
+    await waitFor(() => expect(screen.getByText('You called this off')).toBeTruthy());
+    expect(screen.queryByTestId('restore')).toBeNull();
+  });
+
+  it("19c: didn't happen — frozen count, the explanation line, and try again", async () => {
+    prime({
+      plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(-2) },
+      rsvps: [
+        { user_id: 'me', response: 'yes', profile: { display_name: 'Me' } },
+        { user_id: 'u-pau', response: 'no', profile: { display_name: 'Pau' } },
+      ],
+      members: ['me', 'u-marta', 'u-jordi', 'u-pau'],
+    });
+    await renderDetail();
+
+    await waitFor(() => expect(screen.getByText("Didn't happen")).toBeTruthy());
+    expect(screen.getByText('Two short on the night')).toBeTruthy();
+    expect(screen.getByText('1 of 3')).toBeTruthy();
+    expect(screen.getByText('The date passed before it reached its minimum')).toBeTruthy();
+    expect(screen.getByText('Were in')).toBeTruthy();
+    expect(screen.getByText("2 never answered · 1 couldn't make it")).toBeTruthy();
+    expect(screen.queryByText("I'm in")).toBeNull();
+
+    await fireEvent.press(screen.getByTestId('try-again'));
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/plan/create',
+      params: {
+        groupId: 'g1',
+        title: 'Padel + pizza',
+        min: '3',
+        cap: '6',
+        location: 'Padel Indoor Gràcia',
+        details: '1',
+      },
+    });
+  });
+
+  it('a past plan that reached its minimum simply happened — detail unchanged', async () => {
+    prime({
+      plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(-2) },
+      rsvps: [
+        { user_id: 'me', response: 'yes', profile: { display_name: 'Me' } },
+        { user_id: 'u-marta', response: 'yes', profile: { display_name: 'Marta' } },
+        { user_id: 'u-jordi', response: 'yes', profile: { display_name: 'Jordi' } },
+      ],
+      members: ['me', 'u-marta', 'u-jordi'],
+    });
+    await renderDetail();
+
+    await waitFor(() => expect(screen.getByText("It's on")).toBeTruthy());
+    expect(screen.queryByText("Didn't happen")).toBeNull();
   });
 });

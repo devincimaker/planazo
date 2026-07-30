@@ -8,6 +8,8 @@ interface SlotBarProps {
   min: number;
   /** The ceiling — optional cap; defaults to min when absent */
   cap?: number | null;
+  /** Frozen at where it stopped (19c "Didn't happen"): all grey, empties dashed */
+  frozen?: boolean;
   testID?: string;
 }
 
@@ -17,10 +19,10 @@ interface SlotBarProps {
  * unfilled slots up to the floor are outlined (they're required), and slots
  * between floor and cap are quiet placeholders.
  */
-export function SlotBar({ going, min, cap, testID }: SlotBarProps) {
+export function SlotBar({ going, min, cap, frozen = false, testID }: SlotBarProps) {
   const total = Math.max(cap ?? min, min, going, 1);
   const confirmed = going >= min;
-  const fillColor = confirmed ? colors.confirmed : colors.accent;
+  const fillColor = frozen ? colors.endedMuted : confirmed ? colors.confirmed : colors.accent;
 
   return (
     <View
@@ -39,9 +41,11 @@ export function SlotBar({ going, min, cap, testID }: SlotBarProps) {
               styles.slot,
               filled
                 ? { backgroundColor: fillColor }
-                : required
-                  ? styles.required
-                  : styles.optional,
+                : frozen
+                  ? styles.frozenEmpty
+                  : required
+                    ? styles.required
+                    : styles.optional,
             ]}
           />
         );
@@ -68,5 +72,11 @@ const styles = StyleSheet.create({
   },
   optional: {
     backgroundColor: colors.surfaceSunken,
+  },
+  frozenEmpty: {
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: colors.endedMuted,
   },
 });

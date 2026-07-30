@@ -16,6 +16,7 @@ import {
   earliestViableDate,
   flattenNestedOptions,
   isPlanConfirmed,
+  isPlanPast,
   needsUserResponse,
 } from '@planazo/shared';
 import { supabase } from '../../../lib/supabase';
@@ -81,6 +82,55 @@ export default function FeedScreen() {
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['home-plans'] });
+
+  // 19e: a cancellation of a plan you'd said yes to earns one dismissable
+  // notice above the feed. The unread plan_cancelled row *is* the pin — the
+  // RPC only writes them for people who were in, and 24h clears it either way.
+  const { data: cancelNotices } = useQuery({
+    queryKey: ['cancel-notices', user?.id],
+    queryFn: async () => {
+      const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+      const { data: notes, error } = await supabase
+        .from('notifications')
+        .select('id, data, created_at')
+        .eq('user_id', user!.id)
+        .eq('type', 'plan_cancelled')
+        .eq('read', false)
+        .gte('created_at', since)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      const planIds = [
+        ...new Set((notes ?? []).map((n: any) => n.data?.plan_id).filter(Boolean)),
+      ];
+      if (planIds.length === 0) return [];
+      const { data: cancelledPlans, error: planError } = await supabase
+        .from('plans')
+        .select(
+          'id, title, status, event_date, locked_date, cancel_reason, canceller:profiles!plans_cancelled_by_fkey(display_name)'
+        )
+        .in('id', planIds);
+      if (planError) throw planError;
+      const byId = new Map((cancelledPlans ?? []).map((p: any) => [p.id, p]));
+      return (notes ?? [])
+        .map((n: any) => ({ noticeId: n.id as string, plan: byId.get(n.data?.plan_id) }))
+        // A restored plan takes its notice with it
+        .filter((n: any) => n.plan && n.plan.status === 'cancelled');
+    },
+    enabled: !!user,
+  });
+
+  const dismissNotice = useMutation({
+    mutationFn: async (noticeId: string) => {
+      const { error } = await supabase
+        .from('notifications')
+        .update({ read: true })
+        .eq('id', noticeId);
+      if (error) throw error;
+    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['cancel-notices'] }),
+    onError: (error: Error) => Alert.alert('Error', error.message),
+  });
 
   const answerFixed = useMutation({
     mutationFn: async ({ planId, response }: { planId: string; response: 'yes' | 'no' }) => {
@@ -191,8 +241,13 @@ export default function FeedScreen() {
       const sortDate =
         plan.locked_date ?? plan.event_date ?? earliestViableDate(countByDate, plan.min_people);
 
+      // 19e: Plans only ever holds things that still need you — expired and
+      // past-confirmed plans leave silently at the end of their day.
+      const isPast = isPlanPast(plan, dateOptions.map((o) => o.date));
+
       return {
         plan,
+        isPast,
         confirmed,
         needs,
         userRsvp,
@@ -208,8 +263,9 @@ export default function FeedScreen() {
   }, [plans, user?.id]);
 
   const visible = useMemo(() => {
-    const filtered = decorated.filter((d) =>
-      filter === 'needs' ? d.needs : filter === 'happening' ? d.confirmed : true
+    const filtered = decorated.filter(
+      (d) =>
+        !d.isPast && (filter === 'needs' ? d.needs : filter === 'happening' ? d.confirmed : true)
     );
     return filtered.sort((a, b) =>
       a.needs !== b.needs ? (a.needs ? -1 : 1) : a.sortKey - b.sortKey
@@ -343,6 +399,50 @@ export default function FeedScreen() {
           contentContainerStyle={styles.listContent}
           refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} />}
         >
+          {(cancelNotices ?? []).length > 0 ? (
+            <View style={styles.notices}>
+              {(cancelNotices ?? []).map(({ noticeId, plan }: any) => {
+                const name = plan.canceller?.display_name ?? 'The host';
+                const date = plan.locked_date ?? plan.event_date;
+                const line = plan.cancel_reason
+                  ? `${date ? `${fmtDay(date)} is off — ` : ''}${name} says “${plan.cancel_reason}”`
+                  : `${name} called this off.`;
+                return (
+                  <View key={noticeId} style={styles.notice} testID={`cancel-notice-${plan.id}`}>
+                    <ThemedText variant="tag" color={colors.textMuted} style={styles.noticeLabel}>
+                      Called off
+                    </ThemedText>
+                    <ThemedText variant="cardTitle">{plan.title}</ThemedText>
+                    <ThemedText variant="sub" style={styles.noticeLine}>
+                      {line}
+                    </ThemedText>
+                    <View style={styles.noticeActions}>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => dismissNotice.mutate(noticeId)}
+                        style={styles.gotIt}
+                        testID={`got-it-${plan.id}`}
+                      >
+                        <ThemedText variant="bodyStrong">Got it</ThemedText>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => openPlan(plan.id)}
+                        style={styles.seePlan}
+                        testID={`see-plan-${plan.id}`}
+                      >
+                        <ThemedText variant="bodyStrong" color={colors.textSecondary}>
+                          See the plan
+                        </ThemedText>
+                      </Pressable>
+                    </View>
+                  </View>
+                );
+              })}
+              <View style={styles.noticeDivider} />
+            </View>
+          ) : null}
+
           {visible.length === 0 ? (
             <EmptyState
               title={filter === 'needs' ? 'Nothing to answer' : 'Nothing on the table'}
@@ -440,6 +540,51 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingBottom: 120,
     gap: spacing.lg,
+  },
+  // 19e cancellation notice: stone, not red — it's news, not an alarm
+  notices: {
+    gap: spacing.md,
+  },
+  notice: {
+    backgroundColor: colors.endedCard,
+    borderWidth: 1,
+    borderColor: colors.endedBorder,
+    borderRadius: 22,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 15,
+    gap: 3,
+  },
+  noticeLabel: {
+    textTransform: 'uppercase',
+    letterSpacing: 0.48,
+  },
+  noticeLine: {
+    marginTop: spacing.xxs,
+  },
+  noticeActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    marginTop: spacing.sm + 1,
+  },
+  gotIt: {
+    flex: 1,
+    paddingVertical: 11,
+    borderRadius: 14,
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.endedBorder,
+  },
+  seePlan: {
+    flex: 1,
+    paddingVertical: 11,
+    alignItems: 'center',
+  },
+  noticeDivider: {
+    height: 1,
+    backgroundColor: colors.tabBarBorder,
+    marginVertical: 6,
   },
   cardTop: {
     flexDirection: 'row',

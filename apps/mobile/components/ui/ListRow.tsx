@@ -11,24 +11,31 @@ interface ListRowProps {
   /** Draw the separator above this row (use on every row but the first) */
   divider?: boolean;
   destructive?: boolean;
+  /** Line-through, muted — a cancelled plan's date (19a) */
+  struck?: boolean;
   testID?: string;
 }
 
 /** Settings/detail row inside a Card (padded={false}). */
-export function ListRow({ title, value, right, onPress, divider = false, destructive = false, testID }: ListRowProps) {
+export function ListRow({ title, value, right, onPress, divider = false, destructive = false, struck = false, testID }: ListRowProps) {
   const content = (
     <>
       <ThemedText
         variant="body"
-        color={destructive ? colors.accentPressed : colors.textPrimary}
-        style={styles.title}
+        color={destructive ? colors.accentPressed : struck ? colors.textSecondary : colors.textPrimary}
+        style={[styles.title, struck && styles.struck]}
         numberOfLines={1}
       >
         {title}
       </ThemedText>
       {right ??
         (value ? (
-          <ThemedText variant="rowValue" numberOfLines={1} style={styles.value}>
+          <ThemedText
+            variant="rowValue"
+            color={struck ? colors.textSecondary : colors.textPrimary}
+            numberOfLines={1}
+            style={[styles.value, struck && styles.struck]}
+          >
             {value}
           </ThemedText>
         ) : onPress ? (
@@ -80,6 +87,10 @@ const styles = StyleSheet.create({
   value: {
     flexShrink: 1,
     textAlign: 'right',
+  },
+  struck: {
+    textDecorationLine: 'line-through',
+    textDecorationColor: colors.endedMuted,
   },
   pressed: {
     backgroundColor: colors.surfaceSunken,
