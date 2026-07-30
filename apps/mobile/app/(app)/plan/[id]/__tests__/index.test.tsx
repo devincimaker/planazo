@@ -10,9 +10,16 @@ jest.mock('../../../../../lib/supabase', () => ({
 }));
 
 const mockPush = jest.fn();
+const mockReplace = jest.fn();
+let mockCanGoBack = true;
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ id: 'plan-1' }),
-  useRouter: () => ({ push: mockPush, back: jest.fn() }),
+  useRouter: () => ({
+    push: mockPush,
+    back: jest.fn(),
+    replace: mockReplace,
+    canGoBack: () => mockCanGoBack,
+  }),
 }));
 
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn() }));
@@ -130,6 +137,7 @@ function renderDetail() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockCanGoBack = true;
   jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   jest.spyOn(ActionSheetIOS, 'showActionSheetWithOptions').mockImplementation(() => {});
   useAuthStore.setState({ user: { id: 'me' } as any, profile: { id: 'me' } as any });
@@ -303,6 +311,18 @@ describe('PlanDetailScreen — the 20a menu', () => {
 
     pick(2);
     expect(mockPush).toHaveBeenCalledWith('/plan/plan-1/cancel');
+  });
+
+  it('back falls back to the group screen after a deep link', async () => {
+    prime({
+      plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(8) },
+    });
+    await renderDetail();
+    await waitFor(() => expect(screen.getByTestId('back')).toBeTruthy());
+
+    mockCanGoBack = false;
+    await fireEvent.press(screen.getByTestId('back'));
+    expect(mockReplace).toHaveBeenCalledWith('/(app)/group/g1');
   });
 
   it('guests get the same menu minus Call it off', async () => {

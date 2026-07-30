@@ -5,13 +5,22 @@ import { useAuthStore } from '../../../../../stores/authStore';
 import { supabase } from '../../../../../lib/supabase';
 
 const mockPush = jest.fn();
+const mockBack = jest.fn();
+const mockReplace = jest.fn();
+let mockCanGoBack = true;
 
 jest.mock('../../../../../lib/supabase', () => ({
   supabase: { from: jest.fn(), rpc: jest.fn() },
 }));
 
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, back: jest.fn(), navigate: jest.fn() }),
+  useRouter: () => ({
+    push: mockPush,
+    back: mockBack,
+    replace: mockReplace,
+    canGoBack: () => mockCanGoBack,
+    navigate: jest.fn(),
+  }),
   useLocalSearchParams: () => ({ id: 'g1' }),
 }));
 
@@ -44,6 +53,7 @@ async function renderDetail() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockCanGoBack = true;
   mockFrom.mockImplementation(() => chain(() => ({ data: group, error: null })));
   useAuthStore.setState({
     user: { id: 'me' } as any,
@@ -188,5 +198,16 @@ describe('GroupDetailScreen', () => {
 
     await fireEvent.press(await screen.findByTestId('start-plan'));
     expect(mockPush).toHaveBeenCalledWith('/(app)/plan/create?groupId=g1');
+  });
+
+  it('back pops history, or falls back to the Groups tab after a deep link', async () => {
+    await renderDetail();
+    await fireEvent.press(await screen.findByTestId('back'));
+    expect(mockBack).toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+
+    mockCanGoBack = false;
+    await fireEvent.press(screen.getByTestId('back'));
+    expect(mockReplace).toHaveBeenCalledWith('/(app)/(tabs)/groups');
   });
 });

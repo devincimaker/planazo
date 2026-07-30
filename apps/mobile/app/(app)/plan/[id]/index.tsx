@@ -579,7 +579,17 @@ export default function PlanDetailScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <View style={styles.topBar}>
-        <Pressable onPress={() => router.back()} accessibilityRole="button" testID="back">
+        {/* Deep links (push, QA) mount this as the first screen — fall back
+            to where the label points */}
+        <Pressable
+          onPress={() =>
+            router.canGoBack()
+              ? router.back()
+              : router.replace(plan.group_id ? `/(app)/group/${plan.group_id}` : '/(app)/(tabs)')
+          }
+          accessibilityRole="button"
+          testID="back"
+        >
           <ThemedText variant="bodyStrong" color={colors.accent}>
             ‹ {groupName}
           </ThemedText>

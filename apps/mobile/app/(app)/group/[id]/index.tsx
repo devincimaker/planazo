@@ -214,7 +214,14 @@ export default function GroupDetailScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <View style={styles.navRow}>
-        <Pressable onPress={() => router.back()} accessibilityRole="button" testID="back">
+        {/* Deep links (push, QA) mount this as the first screen — no history */}
+        <Pressable
+          onPress={() =>
+            router.canGoBack() ? router.back() : router.replace('/(app)/(tabs)/groups')
+          }
+          accessibilityRole="button"
+          testID="back"
+        >
           <ThemedText variant="bodyStrong" color={colors.accent}>
             ‹ Groups
           </ThemedText>
