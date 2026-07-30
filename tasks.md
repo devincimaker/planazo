@@ -13,6 +13,8 @@ To-Do:
 [ ] Let the host edit a plan's details (title, place, description). The 20a host menu reserves an "Edit the details" row for this — needs a designed screen first.
 [ ] Add groupless events.
 [ ] Add friends
+[ ] Build a public homepage / landing page for Planazo — there's no website yet.
+[ ] Give Planazo its own design system — the current fonts/palette are borrowed from another project. The tokens-only rule pays off here: the swap is centralized in theme/tokens.ts + components/ui, but the design files use the borrowed look too, so the designer should produce the new identity first.
 
 Doing:
 
