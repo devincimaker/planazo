@@ -12,6 +12,7 @@ const mockReplace = jest.fn();
 jest.mock('../../../../lib/supabase', () => ({
   supabase: {
     from: jest.fn(),
+    rpc: jest.fn(() => Promise.resolve({ error: null })),
     auth: { signOut: jest.fn(() => Promise.resolve({ error: null })) },
   },
 }));
@@ -160,5 +161,65 @@ describe('ProfileSheet', () => {
       expect(supabase.auth.signOut).toHaveBeenCalled();
       expect(mockReplace).toHaveBeenCalledWith('/(auth)/login');
     });
+  });
+
+  // App Store Review 5.1.1(v): deleting the account has to be reachable from
+  // inside the app, and it must not be one stray tap away either.
+  it('deleting the account asks twice before it calls the RPC', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    await renderSheet();
+
+    await fireEvent.press(screen.getByTestId('delete-account'));
+
+    const first = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    await first.find((b) => b.text === 'Delete')?.onPress?.();
+    expect(supabase.rpc).not.toHaveBeenCalled();
+
+    const second = alertSpy.mock.calls[1][2] as { text: string; onPress?: () => void }[];
+    await second.find((b) => b.text === 'Delete for good')?.onPress?.();
+
+    await waitFor(() => {
+      expect(supabase.rpc).toHaveBeenCalledWith('delete_my_account');
+      expect(supabase.auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
+      expect(mockReplace).toHaveBeenCalledWith('/(auth)/login');
+    });
+  });
+
+  it('backing out of either confirmation leaves the account alone', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    await renderSheet();
+
+    await fireEvent.press(screen.getByTestId('delete-account'));
+    const first = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    await first.find((b) => b.text === 'Cancel')?.onPress?.();
+
+    await fireEvent.press(screen.getByTestId('delete-account'));
+    const reopened = alertSpy.mock.calls[1][2] as { text: string; onPress?: () => void }[];
+    await reopened.find((b) => b.text === 'Delete')?.onPress?.();
+    const second = alertSpy.mock.calls[2][2] as { text: string; onPress?: () => void }[];
+    await second.find((b) => b.text === 'Keep my account')?.onPress?.();
+
+    expect(supabase.rpc).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('keeps the user signed in when the delete fails', async () => {
+    (supabase.rpc as jest.Mock).mockResolvedValueOnce({
+      error: { message: 'network is down' },
+    });
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    await renderSheet();
+
+    await fireEvent.press(screen.getByTestId('delete-account'));
+    const first = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    await first.find((b) => b.text === 'Delete')?.onPress?.();
+    const second = alertSpy.mock.calls[1][2] as { text: string; onPress?: () => void }[];
+    await second.find((b) => b.text === 'Delete for good')?.onPress?.();
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith("Couldn't delete your account", 'network is down');
+    });
+    expect(supabase.auth.signOut).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 });

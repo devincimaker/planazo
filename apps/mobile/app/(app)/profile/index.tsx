@@ -83,6 +83,47 @@ export default function ProfileSheet() {
     ]);
   };
 
+  const deleteAccount = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.rpc('delete_my_account');
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      // The account is already gone, so the token this session holds is dead —
+      // sign out locally rather than asking a server that will refuse.
+      await supabase.auth.signOut({ scope: 'local' });
+      queryClient.clear();
+      logout();
+      router.replace('/(auth)/login');
+    },
+    onError: (error: Error) => Alert.alert("Couldn't delete your account", error.message),
+  });
+
+  // Two taps, because there is no undo and no support inbox that can put it
+  // back. App Store Review 5.1.1(v) wants this reachable, not hidden.
+  const confirmDelete = () => {
+    Alert.alert(
+      'Delete your account?',
+      'Your profile, your photo and every answer you gave go for good. Groups you started pass to whoever has been in them longest.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () =>
+            Alert.alert('Last check', "There's no way back from this one.", [
+              { text: 'Keep my account', style: 'cancel' },
+              {
+                text: 'Delete for good',
+                style: 'destructive',
+                onPress: () => deleteAccount.mutate(),
+              },
+            ]),
+        },
+      ],
+    );
+  };
+
   const subtitle = [
     profile?.handle ? `@${profile.handle}` : null,
     groupCount != null ? `in ${groupCount} ${groupCount === 1 ? 'group' : 'groups'}` : null,
@@ -180,6 +221,23 @@ export default function ProfileSheet() {
           </ThemedText>
         </Pressable>
 
+        {/* Deliberately down here rather than beside "Sign out": the two read
+            alike in a hurry, and only one of them is recoverable. */}
+        <Pressable
+          accessibilityRole="button"
+          disabled={deleteAccount.isPending}
+          onPress={confirmDelete}
+          style={({ pressed }) => [styles.deleteAccount, pressed && styles.pressed]}
+          testID="delete-account"
+        >
+          <ThemedText
+            variant="caption"
+            color={deleteAccount.isPending ? colors.textFaint : colors.accentPressed}
+          >
+            {deleteAccount.isPending ? 'Deleting…' : 'Delete my account'}
+          </ThemedText>
+        </Pressable>
+
         {version ? (
           <ThemedText variant="caption" color={colors.textFaint} style={styles.version}>
             Planazo {version}
@@ -257,6 +315,11 @@ const styles = StyleSheet.create({
   feedbackText: {
     flex: 1,
     gap: 2,
+  },
+  deleteAccount: {
+    alignSelf: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
   version: {
     textAlign: 'center',
