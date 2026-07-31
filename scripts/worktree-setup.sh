@@ -125,6 +125,13 @@ if [ "$db_mode" = "shared" ]; then
       # Clear the name only now: while it is set, teardown still knows to delete.
       wt_upsert_env "$metadata" "PLANAZO_BRANCH_NAME" ""
       wt_upsert_env "$metadata" "PLANAZO_BRANCH_REF" ""
+      # And record shared in the same breath. This is the exact moment it became
+      # safe — the branch is confirmed gone, so there is nothing left for a
+      # stale mode=branch to protect. Waiting until the end of setup instead
+      # means any later failure leaves mode=branch on disk, and the bare
+      # `wt:setup` retry creates a brand new billable branch rather than
+      # finishing the downgrade that was asked for.
+      wt_upsert_env "$metadata" "PLANAZO_DB_MODE" "shared"
       branch_name=""
       branch_ref=""
       wt_info "deleted (billing stops)"
@@ -161,7 +168,9 @@ else
   wt_info "waiting for it to come up..."
   status=""
   for _ in $(seq 1 120); do
-    status=$(wt_branch_status "$branch_name")
+    # `|| true`: a blip in the listing API should retry the poll, not abort a
+    # branch that is provisioning fine.
+    status=$(wt_branch_status "$branch_name" || true)
     case "$status" in
       FUNCTIONS_DEPLOYED|MIGRATIONS_PASSED|ACTIVE_HEALTHY|RUNNING) break ;;
       MIGRATIONS_FAILED|FUNCTIONS_FAILED)

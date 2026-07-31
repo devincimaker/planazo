@@ -79,13 +79,23 @@ fi
 if [ -n "$branch_name" ]; then
   wt_step "Deleting Supabase branch '$branch_name'"
   deleted=""
+  doubt=""
   if supabase branches delete "$branch_name" --project-ref "$WT_PROJECT_REF" --yes 2>/dev/null; then
     deleted=1
     wt_info "deleted (billing stops)"
-  elif ! wt_branch_exists "$branch_name"; then
-    # Already gone — deleted by hand, or by an earlier wt:rm that died later on.
-    deleted=1
-    wt_info "already gone — nothing is billing"
+  else
+    # The delete failed. Only a listing that actually came back, parsed, and did
+    # not contain the branch proves it is gone — deleted by hand, or by an
+    # earlier wt:rm that died later on. If Supabase is simply unreachable the
+    # listing is empty for that reason too, and accepting it would clear the
+    # ledger on a branch that is still billing.
+    presence=0; wt_branch_presence "$branch_name" || presence=$?
+    case $presence in
+      1) deleted=1
+         wt_info "already gone — nothing is billing" ;;
+      0) doubt="It still exists." ;;
+      *) doubt="Supabase did not answer, so it may still exist and still bill." ;;
+    esac
   fi
 
   if [ -n "$deleted" ]; then
@@ -94,7 +104,7 @@ if [ -n "$branch_name" ]; then
     wt_upsert_env "$metadata" "PLANAZO_BRANCH_NAME" ""
     wt_upsert_env "$metadata" "PLANAZO_BRANCH_REF" ""
   else
-    wt_die "Could not delete branch '$branch_name', and it still exists.
+    wt_die "Could not delete branch '$branch_name'. $doubt
 
 Stopping before the worktree is removed — $metadata is the only
 record of this branch, and removing the worktree would take it with it.

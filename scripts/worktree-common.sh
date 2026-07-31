@@ -310,22 +310,55 @@ print(", ".join(sorted(d)) if isinstance(d, dict) else type(d).__name__)
 ' 2>/dev/null || printf '<unreadable>'
 }
 
-# Status lives in `branches list`, not `branches get`.
-wt_branch_status() {
-  supabase branches list --project-ref "$WT_PROJECT_REF" -o json 2>/dev/null | python3 -c '
-import json,sys
-name = sys.argv[1]
-try: data = json.load(sys.stdin)
-except Exception: sys.exit(0)
-data = data if isinstance(data, list) else data.get("branches", [])
+# Every branch as "name<TAB>status", or a non-zero return if the listing could
+# not be fetched or parsed.
+#
+# The non-zero return is the whole point. A project with no branches and a
+# Supabase that never answered produce the same empty output, and teardown
+# decides whether to delete a worktree on exactly that difference — so the two
+# cannot be allowed to look alike. Nothing here may fall back to "" on error.
+wt_branch_table() {
+  local json
+  json=$(supabase branches list --project-ref "$WT_PROJECT_REF" -o json 2>/dev/null) || return 1
+  [ -n "$json" ] || return 1
+  printf '%s' "$json" | python3 -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+if isinstance(data, dict):
+    data = data.get("branches", [])
+if not isinstance(data, list):
+    sys.exit(1)
 for b in data:
-    if b.get("name") == name:
-        print(b.get("status", "")); break
-' "$1" 2>/dev/null || true
+    if isinstance(b, dict):
+        print("{}\t{}".format(b.get("name") or b.get("git_branch") or "", b.get("status", "")))
+'
+}
+
+# 0 = it exists, 1 = it provably does not, 2 = could not tell.
+# Callers that are about to destroy something must treat 2 as 0.
+wt_branch_presence() {
+  local table
+  table=$(wt_branch_table) || return 2
+  printf '%s\n' "$table" | awk -F'\t' -v n="$1" 'BEGIN { missing = 1 } $1 == n { missing = 0 } END { exit missing }' \
+    && return 0
+  return 1
+}
+
+# Status lives in `branches list`, not `branches get`. Empty when the branch is
+# absent OR unreachable — fine for progress polling, never for a delete decision.
+wt_branch_status() {
+  local table
+  table=$(wt_branch_table) || return 1
+  printf '%s\n' "$table" | awk -F'\t' -v n="$1" '$1 == n { print $2 }'
 }
 
 wt_branch_exists() {
-  [ -n "$(wt_branch_status "$1")" ]
+  local presence=0
+  wt_branch_presence "$1" || presence=$?
+  [ "$presence" -eq 0 ]
 }
 
 # --- port ownership ----------------------------------------------------------
