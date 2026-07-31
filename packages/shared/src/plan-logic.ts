@@ -108,6 +108,36 @@ export function getYesCount(rsvps: RsvpLike[] | null | undefined): number {
   return (rsvps ?? []).filter((r) => r.response === 'yes').length;
 }
 
+export interface PlanCapacityData {
+  /** The ceiling. Null is "No limit" in the create sheet, not a missing value. */
+  max_people?: number | null;
+  rsvps?: RsvpLike[] | null;
+}
+
+/**
+ * Places still open, or null when the plan is uncapped.
+ *
+ * Only a yes takes a seat: availability on an open flexible plan is a vote,
+ * not attendance, so a capped plan can legitimately have more people free on
+ * a date than it has room for. The seats become real at the lock.
+ *
+ * Clamped at zero — a plan that predates cap enforcement (PLA-20) can already
+ * be over its ceiling, and "-2 left" is not something to render.
+ */
+export function seatsLeft(data: PlanCapacityData): number | null {
+  if (data.max_people == null) return null;
+  return Math.max(data.max_people - getYesCount(data.rsvps), 0);
+}
+
+/**
+ * Whether another yes would be refused. The database is the authority here
+ * (a trigger raises PT409); this exists so screens can say so before the tap
+ * rather than after the round-trip.
+ */
+export function isPlanFull(data: PlanCapacityData): boolean {
+  return seatsLeft(data) === 0;
+}
+
 /**
  * The earliest date that meets the minimum. Used for display ("when is this
  * happening"), where the soonest viable date is the honest answer.
