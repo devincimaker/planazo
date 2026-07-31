@@ -6,7 +6,8 @@ dist
 .DS_Store
 .env
 .env.local
-# Per-worktree slot: metro port, simulator, database mode. Machine-local.
+# A worktree's own slot — Metro port, simulator, database mode. Tracking it
+# would hand one worktree's resources to the next checkout that reads it.
 .env.worktree
 .idea/
 .worktree/

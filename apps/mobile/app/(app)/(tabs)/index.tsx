@@ -16,12 +16,13 @@ import {
   earliestViableDate,
   flattenNestedOptions,
   isPlanConfirmed,
+  isPlanFull,
   isPlanPast,
   needsUserResponse,
 } from '@planazo/shared';
 import { supabase } from '../../../lib/supabase';
 import { deleteOwnRsvp } from '../../../lib/rsvp';
-import { errorCopy } from '../../../lib/queryErrors';
+import { actionErrorCopy, errorCopy } from '../../../lib/queryErrors';
 import { useAuthStore } from '../../../stores/authStore';
 import {
   ThemedText,
@@ -45,6 +46,13 @@ const fmtDay = (iso: string) =>
   new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 const fmtTime = (iso: string) =>
   new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+// A failed write is never "Error: <raw postgres message>". actionErrorCopy
+// names the cases worth naming — a full plan above all (PLA-20).
+const alertActionError = (error: unknown) => {
+  const { title, body } = actionErrorCopy(error);
+  Alert.alert(title, body);
+};
 
 export default function FeedScreen() {
   const { profile, user } = useAuthStore();
@@ -132,7 +140,7 @@ export default function FeedScreen() {
     },
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['cancel-notices'] }),
-    onError: (error: Error) => Alert.alert('Error', error.message),
+    onError: alertActionError,
   });
 
   const answerFixed = useMutation({
@@ -144,13 +152,13 @@ export default function FeedScreen() {
       if (error) throw error;
     },
     onSuccess: invalidate,
-    onError: (error: Error) => Alert.alert('Error', error.message),
+    onError: alertActionError,
   });
 
   const clearAnswer = useMutation({
     mutationFn: (planId: string) => deleteOwnRsvp(planId, user!.id),
     onSuccess: invalidate,
-    onError: (error: Error) => Alert.alert('Error', error.message),
+    onError: alertActionError,
   });
 
   const sendDates = useMutation({
@@ -170,7 +178,7 @@ export default function FeedScreen() {
       setPickedDates((prev) => ({ ...prev, [planId]: [] }));
       invalidate();
     },
-    onError: (error: Error) => Alert.alert('Error', error.message),
+    onError: alertActionError,
   });
 
   const declineFlexible = useMutation({
@@ -190,7 +198,7 @@ export default function FeedScreen() {
       }
     },
     onSuccess: invalidate,
-    onError: (error: Error) => Alert.alert('Error', error.message),
+    onError: alertActionError,
   });
 
   const decorated = useMemo(() => {
@@ -248,6 +256,10 @@ export default function FeedScreen() {
       // past-confirmed plans leave silently at the end of their day.
       const isPast = isPlanPast(plan, dateOptions.map((o) => o.date));
 
+      // Every place taken (PLA-20). Only asked while a yes is what the plan
+      // wants — a running vote hands out no seats until it locks.
+      const isFull = rsvpDriven && isPlanFull({ max_people: plan.max_people, rsvps: plan.rsvps });
+
       return {
         plan,
         isPast,
@@ -255,6 +267,7 @@ export default function FeedScreen() {
         needs,
         userRsvp,
         rsvpDriven,
+        isFull,
         myDates,
         when,
         goingNames,
@@ -300,6 +313,7 @@ export default function FeedScreen() {
       return (
         <AnswerFooter
           size="md"
+          full={d.isFull}
           onYes={() => answerFixed.mutate({ planId: plan.id, response: 'yes' })}
           onNo={() => answerFixed.mutate({ planId: plan.id, response: 'no' })}
         />

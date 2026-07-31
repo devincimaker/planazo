@@ -5,6 +5,8 @@ import {
   getUsersForDateOption,
   flattenNestedOptions,
   getYesCount,
+  seatsLeft,
+  isPlanFull,
   earliestViableDate,
   bestViableOption,
   isPlanConfirmed,
@@ -209,6 +211,47 @@ describe('getYesCount', () => {
   it('handles null/undefined rsvps', () => {
     expect(getYesCount(null)).toBe(0);
     expect(getYesCount(undefined)).toBe(0);
+  });
+});
+
+describe('seatsLeft / isPlanFull', () => {
+  const yes = (n: number) => Array.from({ length: n }, () => ({ response: 'yes' }));
+
+  it('counts places left against the cap', () => {
+    expect(seatsLeft({ max_people: 6, rsvps: yes(4) })).toBe(2);
+    expect(isPlanFull({ max_people: 6, rsvps: yes(4) })).toBe(false);
+  });
+
+  it('is full at exactly the cap', () => {
+    expect(seatsLeft({ max_people: 6, rsvps: yes(6) })).toBe(0);
+    expect(isPlanFull({ max_people: 6, rsvps: yes(6) })).toBe(true);
+  });
+
+  it('never reports negative room for a plan that predates enforcement', () => {
+    expect(seatsLeft({ max_people: 6, rsvps: yes(8) })).toBe(0);
+    expect(isPlanFull({ max_people: 6, rsvps: yes(8) })).toBe(true);
+  });
+
+  it('treats a null cap as no limit, not as zero', () => {
+    expect(seatsLeft({ max_people: null, rsvps: yes(99) })).toBeNull();
+    expect(seatsLeft({ rsvps: yes(99) })).toBeNull();
+    expect(isPlanFull({ max_people: null, rsvps: yes(99) })).toBe(false);
+  });
+
+  it('only counts a yes as taking a place', () => {
+    const rsvps = [
+      { response: 'yes' },
+      { response: 'no' },
+      { response: 'pending' },
+      { response: null },
+    ];
+    expect(seatsLeft({ max_people: 2, rsvps })).toBe(1);
+    expect(isPlanFull({ max_people: 2, rsvps })).toBe(false);
+  });
+
+  it('is empty-safe', () => {
+    expect(seatsLeft({ max_people: 4, rsvps: null })).toBe(4);
+    expect(isPlanFull({ max_people: 4, rsvps: undefined })).toBe(false);
   });
 });
 

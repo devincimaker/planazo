@@ -19,13 +19,14 @@ import * as Clipboard from 'expo-clipboard';
 import {
   countAvailabilityByDate,
   getYesCount,
+  isPlanFull,
   isPlanPast,
   planLastDate,
   type DateCount,
 } from '@planazo/shared';
 import { supabase } from '../../../../lib/supabase';
 import { deleteOwnRsvp } from '../../../../lib/rsvp';
-import { errorCopy, isNotFoundError } from '../../../../lib/queryErrors';
+import { actionErrorCopy, errorCopy, isNotFoundError } from '../../../../lib/queryErrors';
 import { useAuthStore } from '../../../../stores/authStore';
 import {
   ThemedText,
@@ -58,6 +59,13 @@ const fmtStamp = (iso: string) => {
 // "Two short on the night" (19c) spells small counts out
 const NUM_WORDS = ['No one', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
 const countWord = (n: number) => NUM_WORDS[n] ?? String(n);
+
+// A failed write is never "Error: <raw postgres message>". actionErrorCopy
+// names the cases worth naming — a full plan above all (PLA-20).
+const alertActionError = (error: unknown) => {
+  const { title, body } = actionErrorCopy(error);
+  Alert.alert(title, body);
+};
 
 export default function PlanDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -171,13 +179,13 @@ export default function PlanDetailScreen() {
       if (error) throw error;
     },
     onSuccess: invalidateAll,
-    onError: (error: Error) => Alert.alert('Error', error.message),
+    onError: alertActionError,
   });
 
   const clearRsvp = useMutation({
     mutationFn: () => deleteOwnRsvp(id, user!.id),
     onSuccess: invalidateAll,
-    onError: (error: Error) => Alert.alert('Error', error.message),
+    onError: alertActionError,
   });
 
   const sendDates = useMutation({
@@ -211,7 +219,7 @@ export default function PlanDetailScreen() {
       setEditingPicks(null);
       invalidateAll();
     },
-    onError: (error: Error) => Alert.alert('Error', error.message),
+    onError: alertActionError,
   });
 
   const declineAll = useMutation({
@@ -234,7 +242,7 @@ export default function PlanDetailScreen() {
       setEditingPicks(null);
       invalidateAll();
     },
-    onError: (error: Error) => Alert.alert('Error', error.message),
+    onError: alertActionError,
   });
 
   const lockPlan = useMutation({
@@ -247,7 +255,7 @@ export default function PlanDetailScreen() {
       return data;
     },
     onSuccess: invalidateAll,
-    onError: (error: Error) => Alert.alert('Error', error.message),
+    onError: alertActionError,
   });
 
   const reopenPlan = useMutation({
@@ -256,7 +264,7 @@ export default function PlanDetailScreen() {
       if (error) throw error;
     },
     onSuccess: invalidateAll,
-    onError: (error: Error) => Alert.alert('Error', error.message),
+    onError: alertActionError,
   });
 
   // Un-cancel (19b). The RPC restores locked/open, keeps everyone in, and
@@ -267,7 +275,7 @@ export default function PlanDetailScreen() {
       if (error) throw error;
     },
     onSuccess: invalidateAll,
-    onError: (error: Error) => Alert.alert('Error', error.message),
+    onError: alertActionError,
   });
 
   const derived = useMemo(() => {
@@ -312,11 +320,22 @@ export default function PlanDetailScreen() {
       headline = `${gap} more on ${fmtDay(lead[1].date)}`;
     else headline = `${gap} more and it's on`;
 
+    // Room is counted off `going`, the very number rendered beside it — NOT
+    // off the yes-RSVPs the cap is actually enforced on. On an open flexible
+    // plan `going` is availability on the leading date, so mixing the two
+    // populations reads as a contradiction: "4 in · room for 6 more" on a cap
+    // of 6, because nobody has a yes yet.
+    //
+    // "room for 0 more" was the old wording once a capped plan filled up —
+    // technically true, and a strange way to say the door is shut (PLA-20).
+    const room = plan.max_people ? Math.max(plan.max_people - going, 0) : null;
     const capLine = isExpired
       ? 'The date passed before it reached its minimum'
       : plan.max_people
         ? confirmed
-          ? `${going} in · room for ${Math.max(plan.max_people - going, 0)} more`
+          ? room === 0
+            ? `${going} in · that's everyone`
+            : `${going} in · room for ${room} more`
           : `Happens with ${plan.min_people} · caps at ${plan.max_people}`
         : `Happens with ${plan.min_people}`;
 
@@ -353,6 +372,11 @@ export default function PlanDetailScreen() {
     const isHost = plan.created_by === user?.id || membership?.role === 'admin';
     const viableLead = lead && leadCount >= plan.min_people ? { id: lead[0], ...lead[1] } : null;
 
+    // Every place taken (PLA-20). Only meaningful where a yes is what's being
+    // asked for — on an open flexible plan you're voting on dates, and the
+    // seats aren't handed out until the lock.
+    const isFull = !isOpenFlexible && isPlanFull({ max_people: plan.max_people, rsvps });
+
     return {
       isFlexible,
       isLocked,
@@ -361,6 +385,7 @@ export default function PlanDetailScreen() {
       confirmed,
       headline,
       capLine,
+      isFull,
       going,
       yesCount,
       countByDate,
@@ -548,6 +573,7 @@ export default function PlanDetailScreen() {
       }
       return (
         <AnswerFooter
+          full={d.isFull}
           onYes={() => answerRsvp.mutate('yes')}
           onNo={() => answerRsvp.mutate('no')}
         />
