@@ -75,7 +75,7 @@ export const COPY = {
     closeCta: 'Get Planazo',
 
     fPrivacy: 'Privacy',
-    fTerms: 'Terms',
+    fSupport: 'Support',
     fContact: 'Contact',
   },
   es: {
@@ -141,7 +141,7 @@ export const COPY = {
     closeCta: 'Bajate Planazo',
 
     fPrivacy: 'Privacidad',
-    fTerms: 'Términos',
+    fSupport: 'Ayuda',
     fContact: 'Contacto',
   },
 } as const;

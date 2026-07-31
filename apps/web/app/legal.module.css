@@ -1,0 +1,135 @@
+/*
+ * Shared shell for the prose pages (/privacy, /support).
+ *
+ * Deliberately narrower than the landing page's --shell: these are read
+ * top-to-bottom rather than scanned, and a 68ch measure is where that stops
+ * being work.
+ */
+
+.page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 40px var(--gutter) 120px;
+}
+
+.nav {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 56px;
+}
+
+.wordmark {
+  font-size: 22px;
+  color: var(--ink);
+}
+
+.navBack {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.title {
+  font-size: clamp(40px, 7vw, 58px);
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+}
+
+.updated {
+  margin-top: 14px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+
+.lede {
+  margin-top: 24px;
+  font-size: 19px;
+  line-height: 1.55;
+  color: var(--muted);
+  text-wrap: pretty;
+}
+
+.rule {
+  height: 1px;
+  margin: 48px 0;
+  border: 0;
+  background: var(--line);
+}
+
+.section + .section {
+  margin-top: 44px;
+}
+
+.heading {
+  font-size: 24px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.para {
+  margin-top: 14px;
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--muted);
+  text-wrap: pretty;
+}
+
+.bullets {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0;
+  list-style: none;
+}
+
+.bullet {
+  padding: 18px 20px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line-warmer);
+}
+
+.term {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.detail {
+  margin-top: 6px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--muted);
+  text-wrap: pretty;
+}
+
+.footer {
+  margin-top: 72px;
+  padding-top: 28px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .page {
+    padding-top: 28px;
+  }
+
+  .nav {
+    padding-bottom: 40px;
+  }
+
+  .lede {
+    font-size: 17px;
+  }
+}
