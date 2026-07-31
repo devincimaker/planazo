@@ -1,49 +1,48 @@
 import { useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
+  StyleSheet,
+  View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link, useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
-import { COLORS } from '../../constants/colors';
+import { BrandMark, Button, FormField, ThemedText } from '../../components/ui';
+import { colors, fonts, spacing } from '../../theme/tokens';
 
 export default function LoginScreen() {
   const router = useRouter();
   const { setSession, setProfile } = useAuthStore();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function handleLogin() {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+    if (!email.trim() || !password) {
+      setError('Put in your email and password to carry on.');
       return;
     }
 
     try {
       setLoading(true);
-      const { data, error } = await supabase.auth.signInWithPassword({
+      setError(null);
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
         password,
       });
 
-      if (error) {
-        Alert.alert('Error', error.message);
+      if (signInError) {
+        setError(signInError.message);
         return;
       }
 
-      // Update auth store
       setSession(data.session);
 
-      // Fetch profile
       if (data.session?.user) {
         const { data: profile } = await supabase
           .from('profiles')
@@ -56,149 +55,152 @@ export default function LoginScreen() {
         }
       }
 
-      // Navigate to app
       router.replace('/(app)/(tabs)');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unexpected login error';
-      Alert.alert('Network Error', message);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "That didn't go through. Check your connection and try again.",
+      );
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+    <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <View style={styles.header}>
-          <Text style={styles.title}>Planazo</Text>
-          <Text style={styles.subtitle}>Plan awesome adventures with friends</Text>
-        </View>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
+          <View style={styles.body}>
+            <BrandMark size={52} />
 
-        <View style={styles.form}>
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="your@email.com"
-            placeholderTextColor={COLORS.gray[400]}
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            autoComplete="email"
-          />
+            <ThemedText variant="screenTitle" style={styles.title}>
+              Good to see you
+            </ThemedText>
 
-          <Text style={styles.label}>Password</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Your password"
-            placeholderTextColor={COLORS.gray[400]}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            autoComplete="password"
-          />
+            <View style={styles.fields}>
+              <FormField
+                label="Email"
+                value={email}
+                onChangeText={setEmail}
+                placeholder="your@email.com"
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
+                autoComplete="email"
+                testID="email-input"
+              />
 
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            <Text style={styles.buttonText}>
-              {loading ? 'Signing in...' : 'Sign In'}
-            </Text>
-          </TouchableOpacity>
+              <FormField
+                label="Password"
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Your password"
+                autoCapitalize="none"
+                autoComplete="password"
+                secure
+                testID="password-input"
+              />
 
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Don't have an account? </Text>
-            <Link href="/(auth)/signup" asChild>
-              <TouchableOpacity>
-                <Text style={styles.link}>Sign Up</Text>
-              </TouchableOpacity>
-            </Link>
+              <View style={styles.forgotRow}>
+                <Link href="/(auth)/forgot" asChild>
+                  <Pressable accessibilityRole="button" hitSlop={8} testID="forgot-link">
+                    <ThemedText variant="caption" color={colors.accent}>
+                      Forgot your password?
+                    </ThemedText>
+                  </Pressable>
+                </Link>
+              </View>
+            </View>
+
+            {error ? (
+              <View style={styles.errorBox} testID="login-error">
+                <ThemedText variant="bodyStrong" color={colors.accentPressed}>
+                  {error}
+                </ThemedText>
+              </View>
+            ) : null}
+
+            <Button
+              label={loading ? 'Signing in…' : 'Sign in'}
+              onPress={handleLogin}
+              disabled={loading}
+              style={styles.submit}
+              testID="sign-in"
+            />
+
+            <View style={styles.flex} />
+
+            <View style={styles.footer}>
+              <ThemedText variant="sub">First time here?</ThemedText>
+              <Link href="/(auth)/signup" asChild>
+                <Pressable accessibilityRole="button" hitSlop={8} testID="signup-link">
+                  <ThemedText variant="sub" color={colors.accent} style={styles.footerLink}>
+                    Make your account
+                  </ThemedText>
+                </Pressable>
+              </Link>
+            </View>
           </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    backgroundColor: COLORS.white,
+    backgroundColor: colors.background,
   },
-  scrollContent: {
+  flex: {
+    flex: 1,
+  },
+  scroll: {
     flexGrow: 1,
-    justifyContent: 'center',
-    padding: 24,
   },
-  header: {
-    alignItems: 'center',
-    marginBottom: 48,
+  body: {
+    flex: 1,
+    paddingHorizontal: spacing.xl,
+    paddingTop: 34,
   },
   title: {
-    fontSize: 48,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-    marginBottom: 8,
+    marginTop: 26,
   },
-  subtitle: {
-    fontSize: 16,
-    color: COLORS.gray[500],
-    textAlign: 'center',
+  fields: {
+    gap: 18,
+    marginTop: spacing.xxxl,
   },
-  form: {
-    width: '100%',
+  forgotRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
   },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.gray[700],
-    marginBottom: 8,
+  errorBox: {
+    marginTop: spacing.xl,
+    backgroundColor: colors.accentSoft,
+    borderRadius: 14,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
   },
-  input: {
-    backgroundColor: COLORS.gray[50],
-    borderWidth: 1,
-    borderColor: COLORS.gray[200],
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    color: COLORS.gray[900],
-    marginBottom: 16,
-  },
-  button: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-  buttonText: {
-    color: COLORS.white,
-    fontSize: 16,
-    fontWeight: '600',
+  submit: {
+    marginTop: 26,
   },
   footer: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 24,
+    gap: 6,
+    paddingTop: spacing.xxl,
+    paddingBottom: 34,
   },
-  footerText: {
-    color: COLORS.gray[500],
-    fontSize: 14,
-  },
-  link: {
-    color: COLORS.primary,
-    fontSize: 14,
-    fontWeight: '600',
+  footerLink: {
+    fontFamily: fonts.bodyBold,
   },
 });

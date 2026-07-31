@@ -1,5 +1,9 @@
 export { ThemedText } from './ThemedText';
 export { Button } from './Button';
+export { BrandMark } from './BrandMark';
+export { BrandSplash } from './BrandSplash';
+export { ConfirmCard } from './ConfirmCard';
+export { FormField } from './FormField';
 export { Card } from './Card';
 export { Chip } from './Chip';
 export { Badge } from './Badge';

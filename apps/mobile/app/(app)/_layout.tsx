@@ -1,5 +1,5 @@
 import { Stack } from 'expo-router';
-import { COLORS } from '../../constants/colors';
+import { colors } from '../../theme/tokens';
 import { ToastHost } from '../../components/ui';
 import { ScreenshotFeedback } from '../../components/ScreenshotFeedback';
 
@@ -8,7 +8,7 @@ export default function AppLayout() {
     <>
       <Stack
         screenOptions={{
-          headerTintColor: COLORS.primary,
+          headerTintColor: colors.accent,
           headerBackTitle: 'Back',
         }}
       >

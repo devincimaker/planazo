@@ -1,5 +1,4 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
-import { Alert } from 'react-native';
 import LoginScreen from '../login';
 import { supabase } from '../../../lib/supabase';
 
@@ -22,7 +21,6 @@ const mockFrom = supabase.from as jest.Mock;
 
 beforeEach(() => {
   jest.clearAllMocks();
-  jest.spyOn(Alert, 'alert').mockImplementation(() => {});
 });
 
 describe('LoginScreen', () => {
@@ -31,15 +29,15 @@ describe('LoginScreen', () => {
 
     expect(screen.getByPlaceholderText('your@email.com')).toBeTruthy();
     expect(screen.getByPlaceholderText('Your password')).toBeTruthy();
-    expect(screen.getByText('Sign In')).toBeTruthy();
+    expect(screen.getByText('Sign in')).toBeTruthy();
   });
 
   it('rejects an empty submit without calling Supabase', async () => {
     await render(<LoginScreen />);
 
-    await fireEvent.press(screen.getByText('Sign In'));
+    await fireEvent.press(screen.getByTestId('sign-in'));
 
-    expect(Alert.alert).toHaveBeenCalledWith('Error', 'Please fill in all fields');
+    expect(screen.getByTestId('login-error')).toBeTruthy();
     expect(mockSignIn).not.toHaveBeenCalled();
   });
 
@@ -52,10 +50,10 @@ describe('LoginScreen', () => {
     await render(<LoginScreen />);
     await fireEvent.changeText(screen.getByPlaceholderText('your@email.com'), 'Test@Example.com ');
     await fireEvent.changeText(screen.getByPlaceholderText('Your password'), 'hunter22');
-    await fireEvent.press(screen.getByText('Sign In'));
+    await fireEvent.press(screen.getByTestId('sign-in'));
 
     await waitFor(() => {
-      expect(Alert.alert).toHaveBeenCalledWith('Error', 'Invalid login credentials');
+      expect(screen.getByText('Invalid login credentials')).toBeTruthy();
     });
     expect(mockSignIn).toHaveBeenCalledWith({
       email: 'test@example.com',
@@ -82,11 +80,21 @@ describe('LoginScreen', () => {
     await render(<LoginScreen />);
     await fireEvent.changeText(screen.getByPlaceholderText('your@email.com'), 'test@example.com');
     await fireEvent.changeText(screen.getByPlaceholderText('Your password'), 'hunter22');
-    await fireEvent.press(screen.getByText('Sign In'));
+    await fireEvent.press(screen.getByTestId('sign-in'));
 
     await waitFor(() => {
       expect(mockReplace).toHaveBeenCalledWith('/(app)/(tabs)');
     });
     expect(mockFrom).toHaveBeenCalledWith('profiles');
+  });
+
+  it('masks the password until the reveal toggle is pressed', async () => {
+    await render(<LoginScreen />);
+
+    expect(screen.getByPlaceholderText('Your password').props.secureTextEntry).toBe(true);
+
+    await fireEvent.press(screen.getByTestId('password-input-reveal'));
+
+    expect(screen.getByPlaceholderText('Your password').props.secureTextEntry).toBe(false);
   });
 });
