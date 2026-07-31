@@ -11,10 +11,10 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#f8730e"
+      "backgroundColor": "#FCF8F4"
     },
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.planazo.app",
       "appleTeamId": "D4ADFZ3XZL",
       "infoPlist": {
@@ -24,7 +24,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#f8730e"
+        "backgroundColor": "#F2542D"
       },
       "package": "com.planazo.app",
       "edgeToEdgeEnabled": true
