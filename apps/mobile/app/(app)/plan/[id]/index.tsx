@@ -22,7 +22,6 @@ import {
   isPlanFull,
   isPlanPast,
   planLastDate,
-  seatsLeft,
   type DateCount,
 } from '@planazo/shared';
 import { supabase } from '../../../../lib/supabase';
@@ -321,9 +320,15 @@ export default function PlanDetailScreen() {
       headline = `${gap} more on ${fmtDay(lead[1].date)}`;
     else headline = `${gap} more and it's on`;
 
+    // Room is counted off `going`, the very number rendered beside it — NOT
+    // off the yes-RSVPs the cap is actually enforced on. On an open flexible
+    // plan `going` is availability on the leading date, so mixing the two
+    // populations reads as a contradiction: "4 in · room for 6 more" on a cap
+    // of 6, because nobody has a yes yet.
+    //
     // "room for 0 more" was the old wording once a capped plan filled up —
     // technically true, and a strange way to say the door is shut (PLA-20).
-    const room = seatsLeft({ max_people: plan.max_people, rsvps });
+    const room = plan.max_people ? Math.max(plan.max_people - going, 0) : null;
     const capLine = isExpired
       ? 'The date passed before it reached its minimum'
       : plan.max_people

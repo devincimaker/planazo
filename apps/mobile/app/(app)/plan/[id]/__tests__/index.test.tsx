@@ -292,6 +292,35 @@ describe('PlanDetailScreen — flexible plans', () => {
     );
   });
 
+  // PLA-20 regression: `going` on an open flexible plan is availability on the
+  // leading date, but the cap is enforced on yes-RSVPs. Counting room off the
+  // RSVPs while showing `going` beside it rendered "4 in · room for 6 more" on
+  // a cap of 6 — two populations, one sentence.
+  it('counts room off the same population it reports as "in"', async () => {
+    prime({
+      plan: {
+        ...basePlan,
+        max_people: 6,
+        plan_type: 'flexible',
+        status: 'open',
+        event_date: null,
+      },
+      options,
+      avail: [
+        { id: 'a1', date_option_id: 'd1', user_id: 'u-aina', profile: { display_name: 'Aina' } },
+        { id: 'a2', date_option_id: 'd1', user_id: 'u-jordi', profile: { display_name: 'Jordi' } },
+        { id: 'a3', date_option_id: 'd1', user_id: 'u-marta', profile: { display_name: 'Marta' } },
+        { id: 'a4', date_option_id: 'd1', user_id: 'u-rocio', profile: { display_name: 'Rocío' } },
+      ],
+      // Deliberately no RSVP rows — a running vote hands out no seats.
+      rsvps: [],
+    });
+    await renderDetail();
+
+    await waitFor(() => expect(screen.getByText('4 in · room for 2 more')).toBeTruthy());
+    expect(screen.queryByText('4 in · room for 6 more')).toBeNull();
+  });
+
   it('lets the host lock in the viable leading date via the RPC', async () => {
     prime({
       plan: {

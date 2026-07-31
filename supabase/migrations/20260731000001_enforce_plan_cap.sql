@@ -93,6 +93,13 @@ CREATE TRIGGER trg_enforce_plan_cap
 -- Whoever doesn't fit gets no RSVP row and no notification. That is the honest
 -- interim state: the waiting list that gives them somewhere to land is the
 -- next change, not this one.
+--
+-- On a RE-lock (reopen_plan leaves the yes rows standing), a seat already held
+-- is never revoked — not even from someone who is no longer free on the newly
+-- locked date. Locking must not take away an answer the person gave; only they
+-- can, by withdrawing. The consequence is that such a seat stays spent and can
+-- block someone who IS free, which is a real cost and the strongest argument
+-- for the waiting list.
 CREATE OR REPLACE FUNCTION public.lock_plan(
   p_plan_id UUID,
   p_date_option_id UUID DEFAULT NULL
@@ -173,20 +180,18 @@ BEGIN
   SET status = 'locked', locked_date = v_option.date, locked_at = NOW(), updated_at = NOW()
   WHERE id = p_plan_id;
 
-  -- Seats already held by someone who is NOT free on the locked date. On the
-  -- happy path this is zero — declining deletes your availability — but if any
-  -- such row exists it is a real seat, and ignoring it would let the seating
-  -- below trip the trigger and abort the host's whole lock.
+  -- EVERY existing yes is a seat already spent, whether or not that person is
+  -- free on the date being locked.
+  --
+  -- Discounting only the unavailable holders is not enough, and this is the
+  -- re-lock bug: reopen_plan leaves the yes rows in place, so locking again
+  -- onto a different date meets holders who ARE available but sort outside
+  -- the new top-N. They hold a seat nobody counted, the newcomer chosen in
+  -- their place trips the trigger, and the exception rolls back the lock the
+  -- host just asked for — leaving the plan open with no explanation.
   SELECT COUNT(*) INTO v_held
-  FROM public.rsvps r
-  WHERE r.plan_id = p_plan_id
-    AND r.response = 'yes'
-    AND NOT EXISTS (
-      SELECT 1 FROM public.date_availability da
-      WHERE da.date_option_id = v_option.id
-        AND da.available
-        AND da.user_id = r.user_id
-    );
+  FROM public.rsvps
+  WHERE plan_id = p_plan_id AND response = 'yes';
 
   -- NULL is "No limit", and LIMIT NULL is LIMIT ALL — so an uncapped plan
   -- seats everyone, exactly as it did before this migration.
@@ -195,13 +200,24 @@ BEGIN
     ELSE GREATEST(v_plan.max_people - v_held, 0)
   END;
 
-  -- Availability on the locked date becomes attendance, up to the cap. The
-  -- data-modifying CTE runs exactly once and both consumers read the same
+  -- Availability on the locked date becomes attendance, up to whatever the
+  -- cap has left. Anyone already holding a yes is excluded rather than
+  -- re-seated: they are counted in v_held, their row already says yes, and
+  -- re-inserting them would only re-notify them on every re-lock.
+  --
+  -- The data-modifying CTE runs exactly once and both consumers read the same
   -- `seated` set, so the RSVPs and the notifications cannot disagree.
   WITH seated AS (
     SELECT da.user_id
     FROM public.date_availability da
-    WHERE da.date_option_id = v_option.id AND da.available
+    WHERE da.date_option_id = v_option.id
+      AND da.available
+      AND NOT EXISTS (
+        SELECT 1 FROM public.rsvps r
+        WHERE r.plan_id = p_plan_id
+          AND r.user_id = da.user_id
+          AND r.response = 'yes'
+      )
     ORDER BY da.created_at ASC, da.user_id ASC
     LIMIT v_limit
   ),

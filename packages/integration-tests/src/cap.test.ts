@@ -229,6 +229,101 @@ describe('lock_plan honours the cap', () => {
     expect(await yesCount(planId)).toBe(4);
   });
 
+  // reopen_plan deliberately leaves the yes rows standing, so a re-lock meets
+  // people who already hold a seat. Discounting only the ones who are NOT free
+  // on the new date is not enough: a holder who IS free can sort outside the
+  // new top-N, hold a seat nobody counted, and make the newcomer chosen in
+  // their place trip the trigger — which rolls back the host's entire lock.
+  describe('re-locking after a reopen', () => {
+    async function twoDatePlan(maxPeople: number) {
+      const planId = await createPlan({ planType: 'flexible', maxPeople, minPeople: 2 });
+      const [early, late] = await Promise.all([
+        host.client
+          .from('plan_date_options')
+          .insert({ plan_id: planId, date: daysFromNow(7).slice(0, 10) })
+          .select('id')
+          .single(),
+        host.client
+          .from('plan_date_options')
+          .insert({ plan_id: planId, date: daysFromNow(14).slice(0, 10) })
+          .select('id')
+          .single(),
+      ]);
+      return { planId, d1: ok(early).id, d2: ok(late).id };
+    }
+
+    // Awaited one at a time by every caller: seating is first-come on
+    // created_at, so the write order is the thing under test.
+    async function free(user: TestUser, planId: string, optionId: string) {
+      ok(
+        await user.client.from('date_availability').insert({
+          plan_id: planId,
+          user_id: user.id,
+          date_option_id: optionId,
+          available: true,
+        }),
+      );
+    }
+
+    it('does not blow up when a holder sorts outside the new top-N', async () => {
+      const { planId, d1, d2 } = await twoDatePlan(2);
+
+      // D1: host, memberA.   D2: memberB (earlier), then host.
+      await free(host, planId, d1);
+      await free(memberA, planId, d1);
+      await free(memberB, planId, d2);
+      await free(host, planId, d2);
+
+      const first = ok(await host.client.rpc('lock_plan', { p_plan_id: planId })) as {
+        locked: boolean;
+      };
+      expect(first.locked).toBe(true);
+      expect(await yesCount(planId)).toBe(2);
+
+      ok(await host.client.rpc('reopen_plan', { p_plan_id: planId }));
+
+      // memberB is first in line on D2, but host and memberA already hold both
+      // seats. Before the fix this raised PT409 and left the plan open.
+      const second = (await host.client.rpc('lock_plan', {
+        p_plan_id: planId,
+        p_date_option_id: d2,
+      })) as { data: { locked: boolean } | null; error: { code?: string } | null };
+
+      expect(second.error).toBeNull();
+      expect(second.data?.locked).toBe(true);
+
+      const plan = ok(
+        await bed.service.from('plans').select('status').eq('id', planId).single(),
+      );
+      expect(plan.status).toBe('locked');
+      expect(await yesCount(planId)).toBeLessThanOrEqual(2);
+    });
+
+    it('never revokes a seat, and never oversubscribes to hand one out', async () => {
+      const { planId, d1, d2 } = await twoDatePlan(2);
+      await free(host, planId, d1);
+      await free(memberA, planId, d1);
+      await free(memberB, planId, d2);
+      await free(memberC, planId, d2);
+
+      ok(await host.client.rpc('lock_plan', { p_plan_id: planId, p_date_option_id: d1 }));
+      ok(await host.client.rpc('reopen_plan', { p_plan_id: planId }));
+      ok(await host.client.rpc('lock_plan', { p_plan_id: planId, p_date_option_id: d2 }));
+
+      // Both seats were already spent on D1's pair, so neither of D2's people
+      // gets in — but nobody is thrown out either, and the cap holds.
+      const seated = ok(
+        await bed.service
+          .from('rsvps')
+          .select('user_id')
+          .eq('plan_id', planId)
+          .eq('response', 'yes'),
+      ).map((r) => r.user_id);
+      expect(seated).toHaveLength(2);
+      expect(seated.sort()).toEqual([host.id, memberA.id].sort());
+    });
+  });
+
   it('leaves a locked plan at or under its cap', async () => {
     const planId = await flexiblePlanWithEveryoneFree(3);
     ok(await host.client.rpc('lock_plan', { p_plan_id: planId }));
