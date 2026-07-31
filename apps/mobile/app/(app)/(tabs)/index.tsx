@@ -207,6 +207,10 @@ export default function FeedScreen() {
       const userRsvp = (plan.rsvps ?? []).find((r: any) => r.user_id === user?.id);
       const myDates = availabilities.filter((a) => a.user_id === user?.id).length;
       const countByDate = countAvailabilityByDate(dateOptions, availabilities);
+      // No live vote — either there never was one, or locking ended it. Both
+      // who's in and what you can answer then read the RSVP rows, so the two
+      // must be decided together or they drift apart.
+      const rsvpDriven = plan.plan_type === 'fixed' || plan.status === 'locked';
 
       let when: string;
       if (plan.locked_date) {
@@ -221,7 +225,7 @@ export default function FeedScreen() {
       // locked, the RSVP rows are the attendance — same rule as plan detail —
       // so someone who withdraws actually leaves the stack.
       let goingNames: string[];
-      if (plan.plan_type === 'fixed' || plan.status === 'locked') {
+      if (rsvpDriven) {
         goingNames = (plan.rsvps ?? [])
           .filter((r: any) => r.response === 'yes')
           .map((r: any) => r.profile?.display_name ?? '?');
@@ -248,6 +252,7 @@ export default function FeedScreen() {
         confirmed,
         needs,
         userRsvp,
+        rsvpDriven,
         myDates,
         when,
         goingNames,
@@ -280,7 +285,7 @@ export default function FeedScreen() {
     // flexible plan answers like a fixed one: a plain yes/no on your own row.
     // It has to stay reachable — locking seeds every available member into a
     // 'yes' they never tapped, and that's exactly when a clash shows up.
-    if (plan.plan_type === 'fixed' || plan.status === 'locked') {
+    if (d.rsvpDriven) {
       if (d.userRsvp?.response === 'yes' || d.userRsvp?.response === 'no') {
         return (
           <AnswerFooter
