@@ -101,6 +101,153 @@ describe('plans', () => {
   });
 });
 
+// PLA-16: rsvps shipped with INSERT/UPDATE/SELECT and no DELETE policy, so
+// every "Change" in the app deleted nothing and reported success. These pin
+// the rule that replaced it: your own row, on a plan that is still live.
+describe('rsvps', () => {
+  /** A fixed plan of this group, min 2, a week out. */
+  async function freshPlan(title: string): Promise<string> {
+    return ok(
+      await owner.client
+        .from('plans')
+        .insert({
+          group_id: group.id,
+          created_by: owner.id,
+          title,
+          plan_type: 'fixed',
+          event_date: daysFromNow(7),
+          min_people: 2,
+        })
+        .select('id')
+        .single(),
+    ).id;
+  }
+
+  /** Both actors say yes, then the owner locks — the state that trapped people. */
+  async function lockedPlan(title: string): Promise<string> {
+    const id = await freshPlan(title);
+    ok(await owner.client.from('rsvps').insert({ plan_id: id, user_id: owner.id, response: 'yes' }));
+    ok(await member.client.from('rsvps').insert({ plan_id: id, user_id: member.id, response: 'yes' }));
+    ok(await owner.client.rpc('lock_plan', { p_plan_id: id }));
+    return id;
+  }
+
+  it('an answer on an open plan can be withdrawn', async () => {
+    const planId = await freshPlan('Rsvp open plan');
+    ok(await member.client.from('rsvps').insert({ plan_id: planId, user_id: member.id, response: 'no' }));
+
+    const cleared = ok(
+      await member.client
+        .from('rsvps')
+        .delete()
+        .eq('plan_id', planId)
+        .eq('user_id', member.id)
+        .select(),
+    );
+    expect(cleared).toHaveLength(1);
+    expect(
+      ok(await member.client.from('rsvps').select('id').eq('plan_id', planId).eq('user_id', member.id)),
+    ).toEqual([]);
+  });
+
+  it('a locked plan can still be flipped and withdrawn from', async () => {
+    const planId = await lockedPlan('Rsvp locked plan');
+
+    const flipped = ok(
+      await member.client
+        .from('rsvps')
+        .update({ response: 'no' })
+        .eq('plan_id', planId)
+        .eq('user_id', member.id)
+        .select(),
+    );
+    expect(flipped).toHaveLength(1);
+    expect(flipped[0].response).toBe('no');
+
+    const withdrawn = ok(
+      await member.client
+        .from('rsvps')
+        .delete()
+        .eq('plan_id', planId)
+        .eq('user_id', member.id)
+        .select(),
+    );
+    expect(withdrawn).toHaveLength(1);
+
+    // And back in — withdrawing can't be a one-way door either.
+    ok(await member.client.from('rsvps').insert({ plan_id: planId, user_id: member.id, response: 'yes' }));
+  });
+
+  it("nobody can touch someone else's answer", async () => {
+    const planId = await freshPlan('Rsvp foreign row');
+    ok(await owner.client.from('rsvps').insert({ plan_id: planId, user_id: owner.id, response: 'yes' }));
+
+    const deleted = ok(
+      await member.client
+        .from('rsvps')
+        .delete()
+        .eq('plan_id', planId)
+        .eq('user_id', owner.id)
+        .select(),
+    );
+    expect(deleted).toEqual([]);
+
+    const flipped = ok(
+      await member.client
+        .from('rsvps')
+        .update({ response: 'no' })
+        .eq('plan_id', planId)
+        .eq('user_id', owner.id)
+        .select(),
+    );
+    expect(flipped).toEqual([]);
+
+    const untouched = ok(
+      await owner.client
+        .from('rsvps')
+        .select('response')
+        .eq('plan_id', planId)
+        .eq('user_id', owner.id)
+        .single(),
+    );
+    expect(untouched.response).toBe('yes');
+  });
+
+  it('an outsider cannot answer a plan they cannot see', async () => {
+    const planId = await freshPlan('Rsvp outsider probe');
+    const denied = await outsider.client
+      .from('rsvps')
+      .insert({ plan_id: planId, user_id: outsider.id, response: 'yes' });
+    expect(denied.error?.message).toMatch(/row-level security/);
+  });
+
+  it('a cancelled plan is frozen — answers stand as a record', async () => {
+    const planId = await freshPlan('Rsvp cancelled plan');
+    ok(await member.client.from('rsvps').insert({ plan_id: planId, user_id: member.id, response: 'yes' }));
+    ok(await owner.client.rpc('cancel_plan', { p_plan_id: planId }));
+
+    const deleted = ok(
+      await member.client
+        .from('rsvps')
+        .delete()
+        .eq('plan_id', planId)
+        .eq('user_id', member.id)
+        .select(),
+    );
+    expect(deleted).toEqual([]);
+
+    const flipped = ok(
+      await member.client
+        .from('rsvps')
+        .update({ response: 'no' })
+        .eq('plan_id', planId)
+        .eq('user_id', member.id)
+        .select(),
+    );
+    expect(flipped).toEqual([]);
+  });
+});
+
 describe('notifications', () => {
   it('are visible and updatable by their owner only', async () => {
     // Plan INSERTs above fanned plan_created out to the member.

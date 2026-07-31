@@ -90,6 +90,34 @@ const flexibleOpen = {
   ],
 };
 
+// Locking seeds everyone who was free on the chosen date into a 'yes' they
+// never tapped — so this card, of all of them, has to keep a way out (PLA-16).
+const lockedFlexible = {
+  id: 'p4',
+  title: 'Escape room revenge',
+  plan_type: 'flexible',
+  status: 'locked',
+  min_people: 2,
+  event_date: null,
+  locked_date: iso(9),
+  groups: { id: 'g2', name: 'Escapistas' },
+  rsvps: [
+    { user_id: 'me', response: 'yes', profile: { display_name: 'Me' } },
+    { user_id: 'u-aina', response: 'yes', profile: { display_name: 'Aina' } },
+  ],
+  plan_date_options: [
+    {
+      id: 'd1',
+      date: iso(9),
+      date_availability: [
+        { user_id: 'me', profile: { display_name: 'Me' } },
+        { user_id: 'u-aina', profile: { display_name: 'Aina' } },
+        { user_id: 'u-pau', profile: { display_name: 'Pau' } },
+      ],
+    },
+  ],
+};
+
 let plansChain: ReturnType<typeof chain>;
 let rsvpsChain: ReturnType<typeof chain>;
 let availChain: ReturnType<typeof chain>;
@@ -104,7 +132,9 @@ function primeSupabase(
   }: { notices?: unknown[]; cancelledPlans?: unknown[] } = {}
 ) {
   plansChain = chain({ data: plans, error: null });
-  rsvpsChain = chain({ error: null });
+  // Deletes ask for the cleared rows back (PLA-16), so the stub has to hand
+  // one over or every withdrawal reads as the silent no-op it used to be.
+  rsvpsChain = chain({ data: [{ plan_id: 'p' }], error: null });
   availChain = chain({ error: null });
   noticesChain = chain({ data: notices, error: null });
   mockFrom.mockImplementation((table: string) => {
@@ -198,6 +228,29 @@ describe('FeedScreen', () => {
     await waitFor(() => expect(screen.getByText("You're in")).toBeTruthy());
     expect(screen.queryByText("I'm in")).toBeNull();
     expect(screen.getByText('Change')).toBeTruthy();
+  });
+
+  it('PLA-16: a locked plan keeps a way out, and clearing proves the row went', async () => {
+    primeSupabase([lockedFlexible]);
+    await renderFeed();
+
+    // Locked cards used to render no footer at all — renderAnswer bailed on
+    // anything that wasn't 'open'.
+    await waitFor(() => expect(screen.getByText("You're in")).toBeTruthy());
+    expect(screen.getByText('Change')).toBeTruthy();
+
+    // Attendance is the RSVPs once locked, not the old availability — Pau was
+    // free that day but never converted, so he isn't counted as going.
+    expect(screen.getByText('2 going')).toBeTruthy();
+
+    await fireEvent.press(screen.getByText('Change'));
+
+    await waitFor(() => expect(rsvpsChain.delete).toHaveBeenCalled());
+    expect(rsvpsChain.eq).toHaveBeenCalledWith('plan_id', 'p4');
+    expect(rsvpsChain.eq).toHaveBeenCalledWith('user_id', 'me');
+    // The .select() is the whole fix: without it RLS filtering the row out
+    // comes back as a silent success.
+    expect(rsvpsChain.select).toHaveBeenCalledWith('plan_id');
   });
 
   it('marks a confirmed plan and filters by Needs answer', async () => {

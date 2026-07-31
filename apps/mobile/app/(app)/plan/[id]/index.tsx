@@ -24,6 +24,7 @@ import {
   type DateCount,
 } from '@planazo/shared';
 import { supabase } from '../../../../lib/supabase';
+import { deleteOwnRsvp } from '../../../../lib/rsvp';
 import { useAuthStore } from '../../../../stores/authStore';
 import {
   ThemedText,
@@ -172,14 +173,7 @@ export default function PlanDetailScreen() {
   });
 
   const clearRsvp = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase
-        .from('rsvps')
-        .delete()
-        .eq('plan_id', id)
-        .eq('user_id', user!.id);
-      if (error) throw error;
-    },
+    mutationFn: () => deleteOwnRsvp(id, user!.id),
     onSuccess: invalidateAll,
     onError: (error: Error) => Alert.alert('Error', error.message),
   });
@@ -205,8 +199,11 @@ export default function PlanDetailScreen() {
         const { error } = await supabase.from('date_availability').delete().in('id', removed);
         if (error) throw error;
       }
-      // Sending dates supersedes a previous "no"
-      await supabase.from('rsvps').delete().eq('plan_id', id).eq('user_id', user!.id);
+      // Sending dates supersedes a previous "no" — only worth a round-trip
+      // (and only safe to assert on) when there is actually a row to clear.
+      if ((rsvps ?? []).some((r) => r.user_id === user?.id)) {
+        await deleteOwnRsvp(id, user!.id);
+      }
     },
     onSuccess: () => {
       setEditingPicks(null);

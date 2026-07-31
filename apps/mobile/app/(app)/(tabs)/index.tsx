@@ -20,6 +20,7 @@ import {
   needsUserResponse,
 } from '@planazo/shared';
 import { supabase } from '../../../lib/supabase';
+import { deleteOwnRsvp } from '../../../lib/rsvp';
 import { useAuthStore } from '../../../stores/authStore';
 import {
   ThemedText,
@@ -145,14 +146,7 @@ export default function FeedScreen() {
   });
 
   const clearAnswer = useMutation({
-    mutationFn: async (planId: string) => {
-      const { error } = await supabase
-        .from('rsvps')
-        .delete()
-        .eq('plan_id', planId)
-        .eq('user_id', user!.id);
-      if (error) throw error;
-    },
+    mutationFn: (planId: string) => deleteOwnRsvp(planId, user!.id),
     onSuccess: invalidate,
     onError: (error: Error) => Alert.alert('Error', error.message),
   });
@@ -213,6 +207,10 @@ export default function FeedScreen() {
       const userRsvp = (plan.rsvps ?? []).find((r: any) => r.user_id === user?.id);
       const myDates = availabilities.filter((a) => a.user_id === user?.id).length;
       const countByDate = countAvailabilityByDate(dateOptions, availabilities);
+      // No live vote — either there never was one, or locking ended it. Both
+      // who's in and what you can answer then read the RSVP rows, so the two
+      // must be decided together or they drift apart.
+      const rsvpDriven = plan.plan_type === 'fixed' || plan.status === 'locked';
 
       let when: string;
       if (plan.locked_date) {
@@ -223,8 +221,11 @@ export default function FeedScreen() {
         when = `${dateOptions.length} date${dateOptions.length === 1 ? '' : 's'} on the table`;
       }
 
+      // Who's in comes from the vote only while the vote is running. Once
+      // locked, the RSVP rows are the attendance — same rule as plan detail —
+      // so someone who withdraws actually leaves the stack.
       let goingNames: string[];
-      if (plan.plan_type === 'fixed') {
+      if (rsvpDriven) {
         goingNames = (plan.rsvps ?? [])
           .filter((r: any) => r.response === 'yes')
           .map((r: any) => r.profile?.display_name ?? '?');
@@ -251,6 +252,7 @@ export default function FeedScreen() {
         confirmed,
         needs,
         userRsvp,
+        rsvpDriven,
         myDates,
         when,
         goingNames,
@@ -276,9 +278,14 @@ export default function FeedScreen() {
 
   const renderAnswer = (d: (typeof decorated)[number]) => {
     const { plan } = d;
-    if (plan.status !== 'open') return null;
+    // A called-off plan is a record — the notice above the feed carries it.
+    if (plan.status === 'cancelled') return null;
 
-    if (plan.plan_type === 'fixed') {
+    // Once a plan locks, the date is real and the vote is over, so a locked
+    // flexible plan answers like a fixed one: a plain yes/no on your own row.
+    // It has to stay reachable — locking seeds every available member into a
+    // 'yes' they never tapped, and that's exactly when a clash shows up.
+    if (d.rsvpDriven) {
       if (d.userRsvp?.response === 'yes' || d.userRsvp?.response === 'no') {
         return (
           <AnswerFooter
