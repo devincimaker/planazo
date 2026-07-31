@@ -86,29 +86,67 @@ wt_upsert_env() {
 # Setup allocates ports and simulators by scanning what already exists, so two
 # concurrent runs could hand out the same slot.
 
+# mkdir is the atomic gate, but two subtleties matter:
+#   - A lock that exists with no pid file yet is usually one someone created
+#     microseconds ago, NOT an abandoned one. Reclaiming on sight lets a cleaner
+#     delete a live lock. Only reclaim a pid-less lock after a grace period.
+#   - Two processes can both decide a lock is stale, both rm -rf, and the second
+#     rm can delete the lock the first just acquired. So the owner writes a
+#     random token and re-reads it; whoever loses the race goes back to waiting,
+#     and the EXIT trap only removes a lock still carrying its own token.
+WT_LOCK_GRACE_SECONDS=30
+
+wt_unlock() {
+  [ -n "${WT_LOCK_DIR:-}" ] || return 0
+  if [ "$(cat "$WT_LOCK_DIR/token" 2>/dev/null || true)" = "${WT_LOCK_TOKEN:-}" ]; then
+    rm -rf "$WT_LOCK_DIR" 2>/dev/null || true
+  fi
+  WT_LOCK_DIR=""
+}
+
 wt_lock() {
-  local state_dir lock_dir owner attempt=0
+  local state_dir lock_dir owner token age now created attempt=0
   state_dir=$(wt_state_dir)
   mkdir -p "$state_dir"
   lock_dir="$state_dir/setup.lock"
+  token="$$-${RANDOM}-${RANDOM}"
 
-  until mkdir "$lock_dir" 2>/dev/null; do
-    # A killed run leaves the lock behind — its EXIT trap never fires. Steal the
-    # lock when its owner is gone, instead of blocking every later run forever.
-    owner=$(cat "$lock_dir/pid" 2>/dev/null || true)
-    if [ -z "$owner" ] || ! kill -0 "$owner" 2>/dev/null; then
-      wt_info "clearing a stale lock from pid ${owner:-unknown}"
-      rm -rf "$lock_dir"
-      continue
+  while true; do
+    if mkdir "$lock_dir" 2>/dev/null; then
+      printf '%s\n' "$token" > "$lock_dir/token"
+      printf '%s\n' "$$" > "$lock_dir/pid"
+      sleep 0.1
+      if [ "$(cat "$lock_dir/token" 2>/dev/null || true)" = "$token" ]; then
+        WT_LOCK_DIR=$lock_dir
+        WT_LOCK_TOKEN=$token
+        trap wt_unlock EXIT
+        return 0
+      fi
+      continue  # someone reclaimed it from under us; wait our turn
     fi
+
+    owner=$(cat "$lock_dir/pid" 2>/dev/null || true)
+    if [ -n "$owner" ]; then
+      if ! kill -0 "$owner" 2>/dev/null; then
+        wt_info "clearing a stale lock from dead pid $owner"
+        rm -rf "$lock_dir" 2>/dev/null || true
+        continue
+      fi
+    else
+      now=$(date +%s)
+      created=$(stat -f %m "$lock_dir" 2>/dev/null || printf '%s' "$now")
+      age=$((now - created))
+      if [ "$age" -gt "$WT_LOCK_GRACE_SECONDS" ]; then
+        wt_info "clearing a lock abandoned before it recorded an owner"
+        rm -rf "$lock_dir" 2>/dev/null || true
+        continue
+      fi
+    fi
+
     attempt=$((attempt + 1))
-    [ "$attempt" -lt 300 ] || wt_die "Timed out waiting for wt (pid $owner) to finish"
+    [ "$attempt" -lt 900 ] || wt_die "Timed out waiting for wt (pid ${owner:-unknown}) to finish"
     sleep 0.2
   done
-
-  printf '%s\n' "$$" > "$lock_dir/pid"
-  # shellcheck disable=SC2064
-  trap "rm -rf '$lock_dir' 2>/dev/null || true" EXIT
 }
 
 # --- worktree introspection --------------------------------------------------
@@ -259,6 +297,17 @@ v = data.get(sys.argv[1]) if isinstance(data, dict) else None
 if not v: sys.exit(1)
 print(v)
 ' "$key" 2>/dev/null || return 1
+}
+
+# Key names only. The payload holds the service-role key and Postgres URLs with
+# embedded passwords, so it must never reach an error message or a log.
+wt_branch_keys() {
+  printf '%s' "$1" | python3 -c '
+import json,sys
+try: d = json.load(sys.stdin)
+except Exception: print("<unparseable>"); sys.exit(0)
+print(", ".join(sorted(d)) if isinstance(d, dict) else type(d).__name__)
+' 2>/dev/null || printf '<unreadable>'
 }
 
 # Status lives in `branches list`, not `branches get`.

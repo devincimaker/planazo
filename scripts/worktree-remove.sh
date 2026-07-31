@@ -70,7 +70,9 @@ fi
 
 # Delete the branch DB before the worktree, so a failure here still leaves the
 # ledger on disk to retry from.
-if [ "$db_mode" = "branch" ] && [ -n "$branch_name" ]; then
+# Keyed on the branch NAME, not the mode: a setup interrupted mid-downgrade can
+# leave mode=shared while the branch still exists and bills.
+if [ -n "$branch_name" ]; then
   wt_step "Deleting Supabase branch '$branch_name'"
   if supabase branches delete "$branch_name" --project-ref "$WT_PROJECT_REF" --yes 2>/dev/null; then
     wt_info "deleted (billing stops)"

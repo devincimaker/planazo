@@ -71,7 +71,10 @@ previous_branch_name=$(wt_read_value "$metadata" "PLANAZO_BRANCH_NAME" 2>/dev/nu
 wt_upsert_env "$metadata" "PLANAZO_SLUG" "$slug"
 wt_upsert_env "$metadata" "PLANAZO_METRO_PORT" "$metro_port"
 wt_upsert_env "$metadata" "PLANAZO_SIM_NAME" "$sim_name"
-wt_upsert_env "$metadata" "PLANAZO_DB_MODE" "$db_mode"
+# PLANAZO_DB_MODE is deliberately NOT claimed here. Writing shared before the
+# old branch is actually deleted would, if interrupted in between, leave a
+# billable branch that wt:rm skips. Teardown keys off PLANAZO_BRANCH_NAME
+# instead, and the mode is recorded at the end once it is true.
 
 # --- env files ---------------------------------------------------------------
 # Gitignored, so git does not carry them into a new worktree. Seed from the
@@ -108,13 +111,17 @@ if [ "$db_mode" = "shared" ]; then
   if [ -n "$previous_branch_name" ]; then
     wt_step "Releasing the previous branch database '$previous_branch_name'"
     if supabase branches delete "$previous_branch_name" --project-ref "$WT_PROJECT_REF" --yes 2>/dev/null; then
+      # Clear the name only now: while it is set, teardown still knows to delete.
+      wt_upsert_env "$metadata" "PLANAZO_BRANCH_NAME" ""
+      wt_upsert_env "$metadata" "PLANAZO_BRANCH_REF" ""
+      branch_name=""
+      branch_ref=""
       wt_info "deleted (billing stops)"
     else
-      wt_info "FAILED to delete — do it yourself or it keeps billing:"
-      wt_info "  supabase branches delete $previous_branch_name --project-ref $WT_PROJECT_REF"
+      wt_die "Could not delete branch '$previous_branch_name'. Refusing to switch to
+shared mode while it may still exist and bill. Delete it and re-run:
+  supabase branches delete $previous_branch_name --project-ref $WT_PROJECT_REF"
     fi
-    branch_name=""
-    branch_ref=""
   fi
 
   wt_step "Database: main's local stack (shared)"
@@ -158,13 +165,15 @@ Delete it with: supabase branches delete $branch_name --project-ref $WT_PROJECT_
   # `branches get -o json` returns credentials, not metadata — one call has
   # everything: URL, anon key, service key and a direct Postgres URL.
   branch_json=$(supabase branches get "$branch_name" --project-ref "$WT_PROJECT_REF" -o json 2>/dev/null || true)
+  # Never echo the payload itself — it carries the service-role key and Postgres
+  # URLs with passwords in them. Key names are enough to diagnose a shape change.
+  branch_keys=$(wt_branch_keys "$branch_json")
   supabase_url=$(wt_branch_field "$branch_json" "SUPABASE_URL") || wt_die \
-    "Could not read SUPABASE_URL from the branch payload. Raw:
-$branch_json"
+    "Could not read SUPABASE_URL from the branch payload. Keys present: $branch_keys"
   anon_key=$(wt_branch_field "$branch_json" "SUPABASE_ANON_KEY") || wt_die \
-    "Could not read SUPABASE_ANON_KEY from the branch payload."
+    "Could not read SUPABASE_ANON_KEY from the branch payload. Keys present: $branch_keys"
   service_key=$(wt_branch_field "$branch_json" "SUPABASE_SERVICE_ROLE_KEY") || wt_die \
-    "Could not read SUPABASE_SERVICE_ROLE_KEY from the branch payload."
+    "Could not read SUPABASE_SERVICE_ROLE_KEY from the branch payload. Keys present: $branch_keys"
   # Connection choice matters twice over. POSTGRES_URL_NON_POOLING points at
   # db.<ref>.supabase.co, which resolves IPv6-only and is unreachable from an
   # IPv4 network. POSTGRES_URL reaches the pooler over IPv4 but on 6543 —

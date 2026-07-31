@@ -49,18 +49,26 @@ if [ -n "$branches" ]; then
     wt_read_value "$p/.env.worktree" "PLANAZO_BRANCH_NAME" 2>/dev/null || true
   done < <(wt_linked_paths) | grep -v '^$' > "$known" || true
 
-  orphans=$(printf '%s' "$branches" | python3 -c '
-import json,sys
+  # Heredoc, not python3 -c '...': bash strips inner single quotes, which
+  # silently turned b.get('status','?') into a syntax error and made this check
+  # a no-op. Errors are shown rather than swallowed, for the same reason.
+  orphan_script=$(mktemp)
+  cat > "$orphan_script" <<'PY'
+import json, sys
 known = set(l.strip() for l in open(sys.argv[1]) if l.strip())
-try: data = json.load(sys.stdin)
-except Exception: sys.exit(0)
-if isinstance(data, dict): data = data.get("branches", [])
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+if isinstance(data, dict):
+    data = data.get("branches", [])
 for b in data:
     name = b.get("name") or b.get("git_branch") or ""
     if name and not b.get("is_default") and name not in known:
-        print(f"  {name}  ({b.get('status','?')})")
-' "$known" 2>/dev/null || true)
-  rm -f "$known"
+        print("  {}  ({})".format(name, b.get("status", "?")))
+PY
+  orphans=$(printf '%s' "$branches" | python3 "$orphan_script" "$known" || true)
+  rm -f "$known" "$orphan_script"
 
   if [ -n "$orphans" ]; then
     echo
