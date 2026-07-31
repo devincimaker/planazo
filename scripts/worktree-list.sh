@@ -42,33 +42,22 @@ echo "* main is intentionally unmanaged by wt:* — its own local stack and simu
 # A branch DB with no worktree behind it is billed and forgotten. This is the
 # safety net for a wt:rm that died halfway, not a comment on your discipline.
 
-branches=$(supabase branches list --project-ref "$WT_PROJECT_REF" -o json 2>/dev/null || true)
-if [ -n "$branches" ]; then
+# wt_branch_table is strict: it fails loudly rather than reading an error
+# payload as an empty list. A safety net that cannot check must say so —
+# silence here looks identical to "no leaks", during the exact outage or auth
+# failure most likely to have also broken a wt:rm.
+table=""
+if table=$(wt_branch_table); then
   known=$(mktemp)
   while IFS= read -r p; do
     wt_read_value "$p/.env.worktree" "PLANAZO_BRANCH_NAME" 2>/dev/null || true
   done < <(wt_linked_paths) | grep -v '^$' > "$known" || true
 
-  # Heredoc, not python3 -c '...': bash strips inner single quotes, which
-  # silently turned b.get('status','?') into a syntax error and made this check
-  # a no-op. Errors are shown rather than swallowed, for the same reason.
-  orphan_script=$(mktemp)
-  cat > "$orphan_script" <<'PY'
-import json, sys
-known = set(l.strip() for l in open(sys.argv[1]) if l.strip())
-try:
-    data = json.load(sys.stdin)
-except Exception:
-    sys.exit(0)
-if isinstance(data, dict):
-    data = data.get("branches", [])
-for b in data:
-    name = b.get("name") or b.get("git_branch") or ""
-    if name and not b.get("is_default") and name not in known:
-        print("  {}  ({})".format(name, b.get("status", "?")))
-PY
-  orphans=$(printf '%s' "$branches" | python3 "$orphan_script" "$known" || true)
-  rm -f "$known" "$orphan_script"
+  orphans=$(printf '%s\n' "$table" | awk -F'\t' -v knownfile="$known" '
+    BEGIN { while ((getline line < knownfile) > 0) if (line != "") seen[line] = 1 }
+    $1 != "" && $3 != "default" && !($1 in seen) { printf "  %s  (%s)\n", $1, $2 }
+  ')
+  rm -f "$known"
 
   if [ -n "$orphans" ]; then
     echo
@@ -76,4 +65,9 @@ PY
     echo "$orphans"
     echo "  Delete with: supabase branches delete <name> --project-ref $WT_PROJECT_REF"
   fi
+else
+  echo
+  echo "WARNING: could not fetch the Supabase branch list, so orphaned branch"
+  echo "databases (billed hourly) could NOT be checked. Verify by hand:"
+  echo "  supabase branches list --project-ref $WT_PROJECT_REF"
 fi

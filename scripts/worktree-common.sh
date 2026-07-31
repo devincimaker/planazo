@@ -310,13 +310,21 @@ print(", ".join(sorted(d)) if isinstance(d, dict) else type(d).__name__)
 ' 2>/dev/null || printf '<unreadable>'
 }
 
-# Every branch as "name<TAB>status", or a non-zero return if the listing could
-# not be fetched or parsed.
+# Every branch as "name<TAB>status<TAB>default|-", or a non-zero return if the
+# listing could not be fetched or parsed.
 #
 # The non-zero return is the whole point. A project with no branches and a
 # Supabase that never answered produce the same empty output, and teardown
 # decides whether to delete a worktree on exactly that difference — so the two
 # cannot be allowed to look alike. Nothing here may fall back to "" on error.
+#
+# And "parsed" means the schema we expect, not merely valid JSON: the CLI's
+# {"error": "Access token not provided"} is a perfectly parseable object that
+# contains zero branches. Anything unexpected — an object without "branches",
+# a non-dict entry, an entry with no name — is treated as cannot-tell, because
+# reading it as an empty list is how an auth failure becomes "proof" that a
+# billed branch was already deleted. All rows are validated before any is
+# printed, so callers never see a half-table.
 wt_branch_table() {
   local json
   json=$(supabase branches list --project-ref "$WT_PROJECT_REF" -o json 2>/dev/null) || return 1
@@ -328,12 +336,20 @@ try:
 except Exception:
     sys.exit(1)
 if isinstance(data, dict):
-    data = data.get("branches", [])
+    if "branches" not in data:
+        sys.exit(1)
+    data = data["branches"]
 if not isinstance(data, list):
     sys.exit(1)
+rows = []
 for b in data:
-    if isinstance(b, dict):
-        print("{}\t{}".format(b.get("name") or b.get("git_branch") or "", b.get("status", "")))
+    if not isinstance(b, dict):
+        sys.exit(1)
+    name = b.get("name") or b.get("git_branch") or ""
+    if not name:
+        sys.exit(1)
+    rows.append("{}\t{}\t{}".format(name, b.get("status", ""), "default" if b.get("is_default") else "-"))
+sys.stdout.write("".join(r + "\n" for r in rows))
 '
 }
 
