@@ -12,7 +12,7 @@ set -euo pipefail
 
 # Passed explicitly to every CLI call. `supabase link` state is NOT trusted:
 # it was found pointing at a deleted project, which fails in confusing ways.
-WT_PROJECT_REF="lmgjdvacivzzhctgctqa"
+WT_PROJECT_REF="leszgvpjonzjclhbgzju"
 
 # Match main's simulator so QA differences are never an iOS-version artifact.
 WT_SIM_DEVICE_TYPE="com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro"

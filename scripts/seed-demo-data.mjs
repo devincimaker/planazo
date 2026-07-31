@@ -22,10 +22,13 @@ const serviceRoleKey = requiredEnv('SUPABASE_SERVICE_ROLE_KEY');
 // This script creates users and deletes plans. A worktree whose .env was copied
 // from the primary but never repointed would aim all of that at production, so
 // the live ref has to be asked for explicitly.
-const PRODUCTION_REF = 'lmgjdvacivzzhctgctqa';
-if (supabaseUrl.includes(PRODUCTION_REF) && process.env.SEED_ALLOW_PRODUCTION !== 'yes') {
+// Both the current live project and the retired one — a stale .env pointing at
+// the old project is exactly as damaging as one pointing at the new.
+const PRODUCTION_REFS = ['leszgvpjonzjclhbgzju', 'lmgjdvacivzzhctgctqa'];
+const hitRef = PRODUCTION_REFS.find((ref) => supabaseUrl.includes(ref));
+if (hitRef && process.env.SEED_ALLOW_PRODUCTION !== 'yes') {
   throw new Error(
-    `Refusing to seed PRODUCTION (${PRODUCTION_REF}).\n` +
+    `Refusing to seed PRODUCTION (${hitRef}).\n` +
       `SUPABASE_URL is ${supabaseUrl}.\n` +
       `If that is genuinely what you want: SEED_ALLOW_PRODUCTION=yes pnpm db:seed:demo`
   );
@@ -497,6 +500,14 @@ async function insertFlexiblePlanData(planDefinitions, plansByKey, primary, peop
   const availabilityRows = [];
   const declinedRows = [];
 
+  // On an empty database there is no pre-existing account to be the primary, so
+  // it falls back to the 'demo' user — meaning the 'primary' and 'demo' handles
+  // resolve to the SAME person and any plan listing both yields duplicate rows.
+  // insertFixedPlanRsvps already guards this; these two need it as well, and it
+  // matters most for fresh databases (every Supabase branch starts empty).
+  const seenAvailability = new Set();
+  const seenDeclined = new Set();
+
   for (const definition of flexiblePlans) {
     const plan = plansByKey.get(definition.key);
     const planOptions = optionsByPlanAndIndex.get(definition.key);
@@ -508,6 +519,10 @@ async function insertFlexiblePlanData(planDefinitions, plansByKey, primary, peop
       for (const dateIndex of dateIndexes) {
         const option = planOptions[dateIndex];
         if (!option) continue;
+
+        const key = `${plan.id}:${person.id}:${option.id}`;
+        if (seenAvailability.has(key)) continue;
+        seenAvailability.add(key);
 
         availabilityRows.push({
           plan_id: plan.id,
@@ -521,6 +536,10 @@ async function insertFlexiblePlanData(planDefinitions, plansByKey, primary, peop
     for (const handle of definition.declined || []) {
       const person = resolveHandle(handle, primary, peopleByHandle);
       if (!person) continue;
+
+      const key = `${plan.id}:${person.id}`;
+      if (seenDeclined.has(key)) continue;
+      seenDeclined.add(key);
 
       declinedRows.push({
         plan_id: plan.id,
