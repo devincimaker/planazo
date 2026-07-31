@@ -548,6 +548,10 @@ export type Database = {
         Returns: Json
       }
       color_for_name: { Args: { p_name: string }; Returns: string }
+      create_group: {
+        Args: { p_color?: string; p_description?: string; p_name: string }
+        Returns: Database["public"]["Tables"]["groups"]["Row"]
+      }
       generate_handle: { Args: { p_base: string }; Returns: string }
       generate_invite_code: { Args: never; Returns: string }
       get_group_by_invite_code: {
@@ -563,6 +567,10 @@ export type Database = {
       }
       is_group_admin: { Args: { check_group_id: string }; Returns: boolean }
       is_group_member: { Args: { check_group_id: string }; Returns: boolean }
+      join_group_by_invite_code: {
+        Args: { p_code: string }
+        Returns: Json
+      }
       leave_group: { Args: { p_group_id: string }; Returns: Json }
       lock_plan: {
         Args: { p_date_option_id?: string; p_plan_id: string }

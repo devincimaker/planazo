@@ -1,3 +1,4 @@
+import { Alert } from 'react-native';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import GroupsScreen, { inviteCodeFrom } from '../groups';
@@ -88,6 +89,7 @@ async function renderGroups() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   memberships = [];
   counts = [];
   plans = [];
@@ -259,8 +261,13 @@ describe('GroupsScreen', () => {
     expect(mockPush).toHaveBeenCalledTimes(2);
   });
 
+  // PLA-35: joining is one server-side call. The screen hands over the code
+  // and never touches group_members itself.
   it('joins from a pasted invite link', async () => {
-    mockRpc.mockResolvedValue({ data: [{ id: 'g9', name: 'Padel Dilluns' }], error: null });
+    mockRpc.mockResolvedValue({
+      data: { status: 'joined', group_id: 'g9', name: 'Padel Dilluns' },
+      error: null,
+    });
 
     await renderGroups();
 
@@ -269,9 +276,39 @@ describe('GroupsScreen', () => {
     await fireEvent.press(screen.getByTestId('join-button'));
 
     await waitFor(() =>
-      expect(mockRpc).toHaveBeenCalledWith('get_group_by_invite_code', { code: 'ABCD2345' })
+      expect(mockRpc).toHaveBeenCalledWith('join_group_by_invite_code', { p_code: 'ABCD2345' })
     );
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/(app)/group/g9'));
-    expect(gmInserts.some((ins) => ins.mock.calls.length > 0)).toBe(true);
+    expect(gmInserts.every((ins) => ins.mock.calls.length === 0)).toBe(true);
+  });
+
+  it('an unknown code is reported, not swallowed as a join', async () => {
+    mockRpc.mockResolvedValue({ data: { status: 'not_found' }, error: null });
+
+    await renderGroups();
+
+    await fireEvent.changeText(await screen.findByTestId('join-input'), 'ABCD2345');
+    await fireEvent.press(screen.getByTestId('join-button'));
+
+    await waitFor(() =>
+      expect(Alert.alert).toHaveBeenCalledWith('Couldn’t join', 'That link doesn’t work')
+    );
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('a code for a group you are already in says so', async () => {
+    mockRpc.mockResolvedValue({
+      data: { status: 'already_member', group_id: 'g9', name: 'Padel Dilluns' },
+      error: null,
+    });
+
+    await renderGroups();
+
+    await fireEvent.changeText(await screen.findByTestId('join-input'), 'ABCD2345');
+    await fireEvent.press(screen.getByTestId('join-button'));
+
+    await waitFor(() =>
+      expect(Alert.alert).toHaveBeenCalledWith('Couldn’t join', 'You’re already in this group')
+    );
   });
 });
