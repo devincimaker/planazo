@@ -35,6 +35,11 @@ jobs:
       - name: Component tests (mobile)
         run: pnpm --filter mobile test -- --ci
 
+      # Catches what typecheck can't: bad CSS module references, missing
+      # font/metadata config, anything that only fails at render time.
+      - name: Build landing page (web)
+        run: pnpm turbo build --filter=web
+
   migrations:
     name: DB migrations + integration tests
     runs-on: ubuntu-latest
