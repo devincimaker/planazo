@@ -24,6 +24,12 @@ const FORBIDDEN_CODES = ['42501'];
  */
 const EXPIRED_TOKEN_CODE = 'PGRST301';
 const SIGN_IN_REQUIRED_CODE = 'PGRST302';
+/**
+ * Raised by the enforce_plan_cap trigger when a yes would exceed max_people
+ * (PLA-20). PostgREST's PTxyz convention turns the SQLSTATE into the HTTP
+ * status, so this arrives as a 409 rather than an opaque 500.
+ */
+const PLAN_FULL_CODE = 'PT409';
 
 const codeOf = (error: unknown): string | undefined => {
   if (error && typeof error === 'object' && 'code' in error) {
@@ -80,6 +86,15 @@ export function isTimeoutError(error: unknown): boolean {
 }
 
 /**
+ * The plan filled up. Screens grey out "I'm in" when they can see the plan is
+ * full, but the last place can go between the render and the tap — so this is
+ * the case that actually reaches the user, and it deserves real copy.
+ */
+export function isPlanFullError(error: unknown): boolean {
+  return codeOf(error) === PLAN_FULL_CODE;
+}
+
+/**
  * A not-found never becomes found by asking again, and a permission denial
  * never becomes permitted, so retrying only delays the message the user needs.
  * Everything else — including an expired token, which a refresh can fix — gets
@@ -126,4 +141,26 @@ export function errorCopy(error: unknown): { title: string; body: string } {
     title: "That didn't load",
     body: 'Something went wrong fetching this. Try again.',
   };
+}
+
+/**
+ * Copy for a failed *write* — answering, withdrawing, sending dates. Shares
+ * the diagnosis above but never says "didn't load", which would misdescribe
+ * an action the user just took.
+ */
+export function actionErrorCopy(error: unknown): { title: string; body: string } {
+  if (isPlanFullError(error)) {
+    return {
+      title: "This one's full",
+      body: 'Every place is taken. One opens up if somebody drops out.',
+    };
+  }
+  const copy = errorCopy(error);
+  if (copy.title === "That didn't load") {
+    return {
+      title: "That didn't go through",
+      body: 'Something went wrong saving your answer. Try again.',
+    };
+  }
+  return copy;
 }

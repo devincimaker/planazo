@@ -191,6 +191,73 @@ describe('PlanDetailScreen — fixed plans', () => {
     expect(screen.getByText("You're in")).toBeTruthy();
     expect(screen.getByText('You')).toBeTruthy();
   });
+
+  // PLA-20. The database is what actually refuses the seat; these cover the
+  // screen saying so first, so the refusal is rare rather than routine.
+  describe('a full plan', () => {
+    const sixOthers = Array.from({ length: 6 }, (_, i) => ({
+      user_id: `u-${i}`,
+      response: 'yes',
+      profile: { display_name: `Person ${i}` },
+    }));
+
+    it('offers "Full" instead of "I\'m in" when every place is taken', async () => {
+      prime({
+        plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(7) },
+        rsvps: sixOthers,
+      });
+      await renderDetail();
+
+      await waitFor(() => expect(screen.getByText('Full')).toBeTruthy());
+      expect(screen.queryByText("I'm in")).toBeNull();
+      // Saying no is still worth doing — it takes you off what it's waiting on.
+      expect(screen.getByText("Can't make it")).toBeTruthy();
+    });
+
+    it('says "that\'s everyone" rather than "room for 0 more"', async () => {
+      prime({
+        plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(7) },
+        rsvps: sixOthers,
+      });
+      await renderDetail();
+
+      await waitFor(() => expect(screen.getByText("6 in · that's everyone")).toBeTruthy());
+      expect(screen.queryByText('6 in · room for 0 more')).toBeNull();
+    });
+
+    it('still lets someone already in withdraw', async () => {
+      prime({
+        plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(7) },
+        rsvps: [
+          { user_id: 'me', response: 'yes', profile: { display_name: 'Me' } },
+          ...sixOthers.slice(0, 5),
+        ],
+      });
+      await renderDetail();
+
+      await waitFor(() => expect(screen.getByText("You're in")).toBeTruthy());
+      expect(screen.queryByText('Full')).toBeNull();
+      await fireEvent.press(screen.getByText('Change'));
+      await waitFor(() => expect(rsvpsChain.delete).toHaveBeenCalled());
+    });
+
+    it('leaves an uncapped plan alone no matter how many say yes', async () => {
+      prime({
+        plan: {
+          ...basePlan,
+          max_people: null,
+          plan_type: 'fixed',
+          status: 'open',
+          event_date: iso(7),
+        },
+        rsvps: sixOthers,
+      });
+      await renderDetail();
+
+      await waitFor(() => expect(screen.getByText("I'm in")).toBeTruthy());
+      expect(screen.queryByText('Full')).toBeNull();
+    });
+  });
 });
 
 describe('PlanDetailScreen — flexible plans', () => {
@@ -223,6 +290,35 @@ describe('PlanDetailScreen — flexible plans', () => {
         { onConflict: 'plan_id,user_id,date_option_id' }
       )
     );
+  });
+
+  // PLA-20 regression: `going` on an open flexible plan is availability on the
+  // leading date, but the cap is enforced on yes-RSVPs. Counting room off the
+  // RSVPs while showing `going` beside it rendered "4 in · room for 6 more" on
+  // a cap of 6 — two populations, one sentence.
+  it('counts room off the same population it reports as "in"', async () => {
+    prime({
+      plan: {
+        ...basePlan,
+        max_people: 6,
+        plan_type: 'flexible',
+        status: 'open',
+        event_date: null,
+      },
+      options,
+      avail: [
+        { id: 'a1', date_option_id: 'd1', user_id: 'u-aina', profile: { display_name: 'Aina' } },
+        { id: 'a2', date_option_id: 'd1', user_id: 'u-jordi', profile: { display_name: 'Jordi' } },
+        { id: 'a3', date_option_id: 'd1', user_id: 'u-marta', profile: { display_name: 'Marta' } },
+        { id: 'a4', date_option_id: 'd1', user_id: 'u-rocio', profile: { display_name: 'Rocío' } },
+      ],
+      // Deliberately no RSVP rows — a running vote hands out no seats.
+      rsvps: [],
+    });
+    await renderDetail();
+
+    await waitFor(() => expect(screen.getByText('4 in · room for 2 more')).toBeTruthy());
+    expect(screen.queryByText('4 in · room for 6 more')).toBeNull();
   });
 
   it('lets the host lock in the viable leading date via the RPC', async () => {
