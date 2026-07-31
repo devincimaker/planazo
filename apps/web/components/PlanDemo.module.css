@@ -1,0 +1,428 @@
+.deck {
+  width: 100%;
+  display: flex;
+  gap: 16px;
+  align-items: stretch;
+  justify-content: center;
+  padding: 4px 0 8px;
+}
+
+.card {
+  flex: 1 1 316px;
+  min-width: 0;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 26px;
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+/*
+ * The design drops cards as the viewport narrows rather than stacking them:
+ * the flexible card is the one that carries the story on a phone.
+ */
+.cardFixed {
+  display: none;
+}
+
+.cardFull {
+  display: none;
+}
+
+@media (min-width: 712px) {
+  .cardFixed {
+    display: flex;
+  }
+}
+
+@media (min-width: 1044px) {
+  .cardFull {
+    display: flex;
+  }
+}
+
+.cardTop {
+  padding: 22px 22px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.circleLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.circleDot {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+}
+
+.host {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted-2);
+}
+
+.tag {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  border-radius: 999px;
+}
+
+.tagFlex {
+  color: var(--pink-ink);
+  background: var(--pink-tint);
+}
+
+.tagFull {
+  color: var(--muted);
+  background: var(--clay-2);
+}
+
+.titleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.planTitle {
+  font-size: 24px;
+  line-height: 1.1;
+  letter-spacing: -0.006em;
+  text-wrap: balance;
+}
+
+.planWhen {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* progress + attendees ---------------------------------------------------- */
+
+.progressBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding-top: 2px;
+}
+
+.track {
+  height: 7px;
+  border-radius: 999px;
+  background: var(--line-softer);
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--orange);
+  transition: width 220ms ease;
+}
+
+.trackFull {
+  height: 7px;
+  border-radius: 999px;
+  background: var(--line-strong);
+}
+
+.goersRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.avatars {
+  display: flex;
+  align-items: center;
+}
+
+.avatar {
+  position: relative;
+  width: 31px;
+  height: 31px;
+  flex: 0 0 auto;
+  margin-right: -8px;
+  border-radius: 999px;
+  border: 2.5px solid var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.slots {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.slotsMuted {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--muted-2);
+}
+
+/* actions ----------------------------------------------------------------- */
+
+.cardFoot {
+  padding: 18px 22px 22px;
+}
+
+.cardFootStack {
+  padding: 18px 22px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.answerRow {
+  display: flex;
+  gap: 10px;
+}
+
+.btnGhost {
+  flex: 0 0 128px;
+  padding: 14px 0;
+  border-radius: 14px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+  background: var(--sunken);
+  box-shadow: inset 0 0 0 1.5px var(--line-warm);
+  color: var(--muted);
+  transition: background-color 150ms ease;
+}
+
+.btnGhost:hover {
+  background: var(--sunken-hover);
+}
+
+.btnPrimary {
+  flex: 1;
+  padding: 14px 0;
+  border-radius: 14px;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 700;
+  background: var(--orange);
+  color: #ffffff;
+  box-shadow: var(--shadow-orange);
+  transition: background-color 150ms ease;
+}
+
+.btnPrimary:hover {
+  background: var(--orange-hover);
+}
+
+.btnOutline {
+  width: 100%;
+  padding: 14px 0;
+  border-radius: 14px;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1.5px var(--ink);
+  transition: background-color 150ms ease;
+}
+
+.btnOutline:hover {
+  background: var(--sunken-hover);
+}
+
+.statusPill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 16px;
+  border-radius: 14px;
+  background: var(--sunken);
+  box-shadow: inset 0 0 0 1.5px var(--line-warm);
+}
+
+.statusPill[data-in] {
+  background: var(--orange-tint);
+  box-shadow: inset 0 0 0 1.5px var(--orange);
+}
+
+.statusLabel {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.statusPill[data-in] .statusLabel {
+  color: var(--orange-hover);
+}
+
+.waitPill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 16px;
+  border-radius: 14px;
+  background: var(--pink-tint);
+  box-shadow: inset 0 0 0 1.5px var(--pink);
+}
+
+.waitLabel {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--pink-ink);
+}
+
+.linkBtn {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.waitNote {
+  padding: 1px 6px 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--muted-2);
+  text-align: center;
+  text-wrap: pretty;
+}
+
+/* flexible date picker ---------------------------------------------------- */
+
+.dateList {
+  padding: 16px 22px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.dateRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  text-align: left;
+  background: var(--white);
+  box-shadow: inset 0 0 0 1.5px var(--line-warm);
+  transition:
+    background-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+/* Order matters below: "hot" (locked winner) wins over "mine", which wins
+   over "leading" — same specificity, later rule takes it. */
+.dateRow[data-mine] {
+  background: var(--orange-tint);
+  box-shadow: inset 0 0 0 1.5px var(--orange);
+}
+
+.dateRow[data-hot] {
+  background: var(--sage-tint);
+  box-shadow: inset 0 0 0 1.5px var(--sage);
+}
+
+.dateBox {
+  width: 21px;
+  height: 21px;
+  flex: 0 0 auto;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffffff;
+  box-shadow: inset 0 0 0 1.5px var(--line-strong);
+  transition:
+    background-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.dateRow[data-mine] .dateBox {
+  background: var(--orange);
+  box-shadow: inset 0 0 0 1.5px var(--orange);
+}
+
+.dateText {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.dateLabel {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.dateSub {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted-2);
+}
+
+.dateRow[data-lead] .dateSub {
+  color: var(--orange);
+}
+
+.dateRow[data-mine] .dateSub {
+  color: var(--orange-hover);
+}
+
+.dateCount {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--muted-2);
+  white-space: nowrap;
+}
+
+.dateRow[data-lead] .dateCount {
+  color: var(--ink);
+}
+
+.dateRow[data-hot] .dateCount {
+  color: var(--sage-ink);
+}
+
+.lockNote {
+  padding: 7px 6px 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--muted-2);
+  text-align: center;
+  text-wrap: pretty;
+}
+
+.lockNote[data-locked] {
+  color: var(--sage-ink);
+}

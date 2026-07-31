@@ -1,0 +1,513 @@
+/* nav ---------------------------------------------------------------------- */
+
+.nav {
+  padding-block: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.wordmark {
+  font-size: 23px;
+}
+
+.navCta {
+  padding: 10px 20px;
+  border-radius: 13px;
+  background: var(--ink);
+  color: var(--on-ink);
+  font-size: 14px;
+  font-weight: 700;
+  transition: background-color 150ms ease;
+}
+
+.navCta:hover {
+  background: var(--ink-hover);
+  color: var(--on-ink);
+}
+
+/* hero --------------------------------------------------------------------- */
+
+/*
+ * 980px, not the design's 820px. The Spanish headline needs ~845px at the
+ * clamp ceiling and was breaking mid-phrase; this leaves enough headroom that
+ * the wider Georgia fallback doesn't flash as a wrapped line during font swap.
+ */
+.hero {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 56px var(--gutter) 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 22px;
+}
+
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--pink);
+  padding: 7px 15px 7px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.eyebrowDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--ink);
+}
+
+.heroTitle {
+  font-size: clamp(2.9rem, 7vw, 5.6rem);
+  line-height: 1.04;
+  letter-spacing: -0.012em;
+  text-wrap: balance;
+}
+
+.heroLine {
+  display: block;
+  text-wrap: balance;
+}
+
+.heroAccent {
+  color: var(--orange);
+}
+
+.heroSub {
+  /* 44ch, not the design's 32ch: this copy is longer and 32ch ran to three
+     lines under a two-line headline. */
+  max-width: 44ch;
+  font-size: 19px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--muted);
+  text-wrap: pretty;
+}
+
+/* demo + primary CTA -------------------------------------------------------- */
+
+.demoSection {
+  max-width: var(--shell);
+  margin: 0 auto;
+  padding: 44px var(--gutter) 96px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 26px;
+}
+
+.heroCtaBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 11px;
+}
+
+.btnInk {
+  padding: 17px 34px;
+  border-radius: 15px;
+  background: var(--ink);
+  color: var(--on-ink);
+  font-size: 17px;
+  font-weight: 700;
+  transition: background-color 150ms ease;
+}
+
+.btnInk:hover {
+  background: var(--ink-hover);
+  color: var(--on-ink);
+}
+
+.heroCtaSub {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted-2);
+}
+
+/* shared section furniture --------------------------------------------------- */
+
+.sectionTitle {
+  font-size: clamp(2rem, 4.2vw, 3.2rem);
+  line-height: 1;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+
+.labelAccent {
+  color: var(--orange);
+}
+
+.labelPink {
+  color: var(--pink-ink);
+}
+
+/* proof --------------------------------------------------------------------- */
+
+.proof {
+  background: var(--surface);
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+  padding-block: 88px;
+}
+
+.proofTitle {
+  max-width: 19ch;
+  margin-bottom: 44px;
+}
+
+.proofGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+  gap: 26px;
+  align-items: start;
+}
+
+@media (max-width: 400px) {
+  /* Below the auto-fit floor the columns would overflow their gutter. */
+  .proofGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.proofCol {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.thread {
+  background: var(--sand);
+  border: 1px solid var(--line-soft);
+  border-radius: 22px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.bubble {
+  align-self: flex-start;
+  max-width: 76%;
+  padding: 11px 15px;
+  border-radius: 17px;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.4;
+  background: var(--clay);
+  color: var(--ink);
+}
+
+.bubble[data-mine] {
+  align-self: flex-end;
+  background: var(--white);
+}
+
+.threadEnd {
+  padding-top: 8px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted-3);
+}
+
+.resolvedCard {
+  background: var(--white);
+  border: 1px solid var(--line-warmer);
+  border-radius: 22px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: var(--shadow-soft);
+}
+
+.resolvedHead {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.resolvedCircle {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.resolvedTitle {
+  font-size: 23px;
+  line-height: 1.1;
+}
+
+.planWhen {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.confirmed {
+  padding: 13px 16px;
+  border-radius: 14px;
+  background: var(--sage-tint);
+  box-shadow: inset 0 0 0 1.5px var(--sage);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--sage-ink);
+}
+
+.answerList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.answerItem {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.answerAvatar {
+  width: 29px;
+  height: 29px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.answerName {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.answerValue {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--sage-ink);
+}
+
+.answerValue[data-declined] {
+  color: var(--muted-2);
+}
+
+/* circles -------------------------------------------------------------------- */
+
+.circles {
+  background: var(--pink);
+  padding-block: 88px;
+}
+
+.circlesHead {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 44px;
+}
+
+/*
+ * The measure belongs on the heading, not the wrapper. On the wrapper `ch`
+ * resolves against 16px Instrument Sans (~234px) rather than the 51px serif,
+ * which collapsed this into a four-line stack. Sized to break in two, like
+ * the proof heading.
+ */
+.circlesTitle {
+  max-width: 15ch;
+}
+
+.circleRow {
+  display: flex;
+  gap: 16px;
+  align-items: stretch;
+}
+
+.circleCard {
+  flex: 1 1 216px;
+  min-width: 0;
+  background: var(--surface);
+  border-radius: 22px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* The row never wraps — it sheds cards as space runs out, like the deck above. */
+.circleCard[data-index='2'],
+.circleCard[data-index='3'] {
+  display: none;
+}
+
+@media (min-width: 780px) {
+  .circleCard[data-index='2'] {
+    display: flex;
+  }
+}
+
+@media (min-width: 1000px) {
+  .circleCard[data-index='3'] {
+    display: flex;
+  }
+}
+
+.circleSwatch {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+}
+
+.circleText {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.circleName {
+  font-size: 20px;
+  line-height: 1.12;
+}
+
+.circleVibe {
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--muted);
+  text-wrap: pretty;
+}
+
+.circleMeta {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-top: 1px solid var(--line-softer);
+  padding-top: 11px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.circlePeople {
+  color: var(--muted-2);
+}
+
+.circleNext {
+  color: var(--orange);
+}
+
+/* closing panel ---------------------------------------------------------------- */
+
+.close {
+  margin-block: 96px;
+  background: var(--ink);
+  border-radius: 32px;
+  padding: clamp(40px, 6vw, 76px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 24px;
+}
+
+.closeTitle {
+  max-width: 16ch;
+  font-size: clamp(2.2rem, 5.2vw, 4rem);
+  line-height: 1;
+  letter-spacing: -0.012em;
+  color: var(--on-ink);
+  text-wrap: balance;
+}
+
+.closeSub {
+  max-width: 34ch;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--on-ink-muted);
+  text-wrap: pretty;
+}
+
+.closeActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 11px;
+  justify-content: center;
+  padding-top: 6px;
+}
+
+.btnOrange {
+  padding: 17px 30px;
+  border-radius: 15px;
+  font-size: 17px;
+  font-weight: 700;
+  background: var(--orange);
+  color: #ffffff;
+  box-shadow: var(--shadow-orange);
+  transition: background-color 150ms ease;
+}
+
+.btnOrange:hover {
+  background: var(--orange-hover);
+  color: #ffffff;
+}
+
+/* footer ------------------------------------------------------------------------ */
+
+.footer {
+  border-top: 1px solid var(--line-soft);
+}
+
+.footerInner {
+  padding-block: 34px 52px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.footerMark {
+  font-size: 17px;
+  color: var(--ink);
+}
+
+.footerLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 22px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.footerLinks a {
+  color: var(--muted);
+}
+
+.footerLinks a:hover {
+  color: var(--ink);
+}
