@@ -24,6 +24,30 @@ Worktrees live in `../planazo-worktrees/<slug>`. Each owns exactly three things,
 recorded in its gitignored `.env.worktree`: a **Metro port**, a **simulator**,
 and a **database** (`PLANAZO_DB_MODE` = `shared` or `branch`).
 
+### Asked to make a worktree for a Linear issue
+
+When the user says something like *"create a worktree for PLA-20"*:
+
+1. **Read the issue first** (`mcp__linear__get_issue`). You need its title, body
+   and labels to choose the database mode — do not guess from the number.
+2. **Pick the mode.** Use `--db` when the issue implies a **schema change**:
+   migrations, RLS or policies, RPCs, triggers, new tables/columns/indexes,
+   `SECURITY DEFINER`, or anything the DB enforces. Otherwise use the default
+   shared mode: UI, copy, styling, navigation, state, loading/error states,
+   tests, config.
+   **When it is genuinely ambiguous, choose shared** — it is free and instant,
+   and `pnpm wt:setup --db` upgrades in place the moment you discover you need
+   a real database. Guessing "shared" wrongly costs one command; guessing
+   "--db" wrongly costs money and minutes.
+3. **Name the branch off the issue**, matching the existing convention:
+   `fix/pla-20-<short-slug>` or `feat/pla-20-<short-slug>`.
+4. **Run it**, then say which mode you chose and why:
+   ```bash
+   pnpm wt:new fix/pla-20-enforce-plan-cap          # shared
+   pnpm wt:new feat/pla-31-group-roles --db         # own database
+   ```
+5. `cd` into the worktree and `pnpm wt:start` to bring up its simulator and Metro.
+
 **Rules for any session working inside a worktree:**
 
 - Read `.env.worktree` and `apps/mobile/.env` to learn *your* simulator, Metro

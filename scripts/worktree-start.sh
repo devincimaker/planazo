@@ -31,16 +31,20 @@ sim_name=$(wt_read_value "$metadata" "PLANAZO_SIM_NAME")
 db_mode=$(wt_read_value "$metadata" "PLANAZO_DB_MODE")
 [ -n "$port" ] && [ -n "$udid" ] || wt_die "Incomplete .env.worktree. Run: pnpm wt:setup"
 
-# A shared-DB worktree writing migrations is editing MAIN's schema.
+# A shared-DB worktree writing migrations is editing MAIN's schema — and every
+# other shared worktree's. This is a stop, not a warning: the mode is chosen
+# before the work starts, so by the time migrations exist the guess was wrong,
+# and the fix is one command.
 if [ "$db_mode" = "shared" ]; then
   changed=$(git -C "$target" status --porcelain -- supabase/migrations | wc -l | tr -d ' ')
   if [ "$changed" != "0" ]; then
-    echo
-    echo "  WARNING: this worktree shares main's local database, but you have" >&2
-    echo "  $changed uncommitted change(s) under supabase/migrations/." >&2
-    echo "  Applying them here changes main's schema too." >&2
-    echo "  Give this branch its own database with:  pnpm wt:setup --db" >&2
-    echo
+    git -C "$target" status --short -- supabase/migrations
+    wt_die "This worktree shares main's local database, but has $changed uncommitted
+change(s) under supabase/migrations/. Applying them would change main's schema
+and every other shared worktree's with it.
+
+Give this branch its own database:  pnpm wt:setup --db
+Or, if these changes are not yours to keep, revert them and start again."
   fi
 fi
 
