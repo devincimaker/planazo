@@ -16,6 +16,10 @@ const tooManyRows = { code: 'PGRST116', message: SINGULAR, details: 'The result 
 const forbidden = { code: '42501', message: 'new row violates row-level security policy' };
 /** PostgREST group-3: the JWT expired or failed verification. Not a denial. */
 const expiredJwt = { code: 'PGRST301', message: 'JWSError JWSInvalidSignature' };
+/** Group-3 too, but no token was sent and anonymous access is off. */
+const signInRequired = { code: 'PGRST302', message: 'Anonymous access is disabled' };
+/** Group-3 as well — but this one is OUR server missing its JWT secret. */
+const serverMisconfigured = { code: 'PGRST300', message: 'JWT secret missing' };
 const unreachable = new Error('Failed to reach Supabase at https://x.supabase.co/rest/v1/plans.');
 
 describe('isNotFoundError', () => {
@@ -40,9 +44,15 @@ describe('isNotFoundError', () => {
 });
 
 describe('isAuthError', () => {
-  it('recognises an expired or invalid token', () => {
+  it('recognises the two codes where the user\'s own token is at fault', () => {
     expect(isAuthError(expiredJwt)).toBe(true);
-    expect(isAuthError({ code: 'PGRST300' })).toBe(true);
+    expect(isAuthError(signInRequired)).toBe(true);
+  });
+
+  // PGRST300 is a missing server-side JWT secret. Blaming the user's session
+  // for our misconfiguration sends them to re-authenticate for nothing.
+  it('does not blame the user for a server missing its JWT secret', () => {
+    expect(isAuthError(serverMisconfigured)).toBe(false);
   });
 
   it('is not confused with an RLS denial', () => {
@@ -100,6 +110,17 @@ describe('errorCopy', () => {
   it('never blames group membership for an expired token', () => {
     expect(errorCopy(expiredJwt).title).toBe('Your sign-in expired');
     expect(errorCopy(expiredJwt).body).not.toMatch(/group/i);
+  });
+
+  it('asks for a sign-in when no token was sent', () => {
+    expect(errorCopy(signInRequired).title).toBe('Sign in to see this');
+  });
+
+  it('stays generic for a server-side misconfiguration', () => {
+    const copy = errorCopy(serverMisconfigured);
+    expect(copy.title).toBe("That didn't load");
+    expect(copy.title).not.toMatch(/sign.?in/i);
+    expect(copy.body).not.toMatch(/sign.?in|session/i);
   });
 
   it('falls back to something honest rather than blank', () => {

@@ -14,8 +14,16 @@
 const SINGULAR_ROW_CODE = 'PGRST116';
 /** Postgres insufficient_privilege: RLS rejected the statement outright. */
 const FORBIDDEN_CODES = ['42501'];
-/** PostgREST group-3 JWT errors: the token is missing, invalid, or expired. */
-const AUTH_CODES = ['PGRST300', 'PGRST301', 'PGRST302'];
+/**
+ * The two PostgREST group-3 codes where the *client's* token is the problem.
+ *
+ * PGRST300 is deliberately absent: it means the server is missing its JWT
+ * secret, which is our misconfiguration, not the user's session. Telling
+ * someone to sign in again would be both wrong and useless, so it falls
+ * through to the generic copy.
+ */
+const EXPIRED_TOKEN_CODE = 'PGRST301';
+const SIGN_IN_REQUIRED_CODE = 'PGRST302';
 
 const codeOf = (error: unknown): string | undefined => {
   if (error && typeof error === 'object' && 'code' in error) {
@@ -64,7 +72,7 @@ export function isForbiddenError(error: unknown): boolean {
  */
 export function isAuthError(error: unknown): boolean {
   const code = codeOf(error);
-  return !!code && AUTH_CODES.includes(code);
+  return code === EXPIRED_TOKEN_CODE || code === SIGN_IN_REQUIRED_CODE;
 }
 
 export function isTimeoutError(error: unknown): boolean {
@@ -96,7 +104,13 @@ export function errorCopy(error: unknown): { title: string; body: string } {
       body: "You're not in the group this belongs to. Ask someone in it for an invite.",
     };
   }
-  if (isAuthError(error)) {
+  if (codeOf(error) === SIGN_IN_REQUIRED_CODE) {
+    return {
+      title: 'Sign in to see this',
+      body: 'Your session ended. Sign in again to pick up where you left off.',
+    };
+  }
+  if (codeOf(error) === EXPIRED_TOKEN_CODE) {
     return {
       title: 'Your sign-in expired',
       body: "Try again — we'll refresh it. If it keeps happening, sign out and back in.",
