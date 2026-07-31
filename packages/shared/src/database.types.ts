@@ -257,7 +257,7 @@ export type Database = {
           anyone_can_post: boolean
           color: string | null
           created_at: string | null
-          created_by: string
+          created_by: string | null
           description: string | null
           id: string
           invite_code: string
@@ -268,7 +268,7 @@ export type Database = {
           anyone_can_post?: boolean
           color?: string | null
           created_at?: string | null
-          created_by: string
+          created_by?: string | null
           description?: string | null
           id?: string
           invite_code: string
@@ -279,7 +279,7 @@ export type Database = {
           anyone_can_post?: boolean
           color?: string | null
           created_at?: string | null
-          created_by?: string
+          created_by?: string | null
           description?: string | null
           id?: string
           invite_code?: string
@@ -375,7 +375,7 @@ export type Database = {
           cancelled_at: string | null
           cancelled_by: string | null
           created_at: string | null
-          created_by: string
+          created_by: string | null
           deadline: string | null
           description: string | null
           event_date: string | null
@@ -396,7 +396,7 @@ export type Database = {
           cancelled_at?: string | null
           cancelled_by?: string | null
           created_at?: string | null
-          created_by: string
+          created_by?: string | null
           deadline?: string | null
           description?: string | null
           event_date?: string | null
@@ -417,7 +417,7 @@ export type Database = {
           cancelled_at?: string | null
           cancelled_by?: string | null
           created_at?: string | null
-          created_by?: string
+          created_by?: string | null
           deadline?: string | null
           description?: string | null
           event_date?: string | null
@@ -548,6 +548,7 @@ export type Database = {
         Returns: Json
       }
       color_for_name: { Args: { p_name: string }; Returns: string }
+      delete_my_account: { Args: never; Returns: undefined }
       generate_handle: { Args: { p_base: string }; Returns: string }
       generate_invite_code: { Args: never; Returns: string }
       get_group_by_invite_code: {

@@ -18,8 +18,10 @@ jest.mock('../../../../lib/supabase', () => ({
 }));
 
 const mockClearPushToken: jest.Mock = jest.fn(() => Promise.resolve());
+const mockRegisterPushToken: jest.Mock = jest.fn(() => Promise.resolve());
 jest.mock('../../../../lib/push', () => ({
   clearPushToken: (...args: unknown[]) => mockClearPushToken(...args),
+  registerPushToken: (...args: unknown[]) => mockRegisterPushToken(...args),
 }));
 
 jest.mock('expo-router', () => ({
@@ -130,6 +132,19 @@ describe('ProfileSheet', () => {
     await waitFor(() => {
       expect(useAuthStore.getState().profile?.push_enabled).toBe(false);
     });
+  });
+
+  // The privacy policy claims the device token goes when you turn
+  // notifications off. Flipping a boolean alone would leave that a lie.
+  it('turning Notify me off clears the device token, and on re-registers it', async () => {
+    await renderSheet();
+
+    await fireEvent(screen.getByTestId('pref-push'), 'valueChange', false);
+    await waitFor(() => expect(mockClearPushToken).toHaveBeenCalledWith('me'));
+    expect(mockRegisterPushToken).not.toHaveBeenCalled();
+
+    await fireEvent(screen.getByTestId('pref-push'), 'valueChange', true);
+    await waitFor(() => expect(mockRegisterPushToken).toHaveBeenCalledWith('me'));
   });
 
   it('flipping the calendar toggle persists it to the profile', async () => {

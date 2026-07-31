@@ -112,8 +112,8 @@ export const PRIVACY: Record<Lang, LegalDoc> = {
         heading: 'Deleting your account',
         paras: [
           'You can delete your account from inside the app, under your profile. It is immediate and it is not reversible.',
-          'Deleting removes your email address, display name, handle, profile photo, push tokens, preferences, every answer you gave, and any feedback you sent.',
-          'Groups and plans other people are still using are not destroyed with you: a group you created passes to its longest-standing remaining member, and is deleted outright only if nobody else is left. Plans you posted stay in their group so the people who answered them keep their evening, but they stop carrying your name.',
+          'Deleting removes your email address, display name, handle, profile photo, push tokens, preferences, every answer you gave, and any feedback you sent. The photo and any screenshots are deleted from storage too, not just unlinked.',
+          'Groups and plans other people are still using are not destroyed with you: a group you created passes to someone already in it — an existing admin where there is one, otherwise whoever has been there longest — and is deleted outright only if nobody else is left. Plans you posted stay in their group so the people who answered them keep their evening, but they stop carrying your name.',
         ],
       },
       {
@@ -227,8 +227,8 @@ export const PRIVACY: Record<Lang, LegalDoc> = {
         heading: 'Borrar tu cuenta',
         paras: [
           'Podés borrar tu cuenta desde la app, en tu perfil. Es inmediato y no se puede deshacer.',
-          'Al borrarla se van tu email, tu nombre, tu usuario, tu foto de perfil, los tokens de notificación, tus preferencias, todas tus respuestas y el feedback que hayas mandado.',
-          'Los grupos y planes que otros siguen usando no se destruyen con vos: un grupo que creaste pasa al miembro más antiguo que quede, y se borra solo si no queda nadie. Los planes que publicaste siguen en su grupo, para que quienes contestaron no pierdan la noche, pero dejan de llevar tu nombre.',
+          'Al borrarla se van tu email, tu nombre, tu usuario, tu foto de perfil, los tokens de notificación, tus preferencias, todas tus respuestas y el feedback que hayas mandado. La foto y las capturas se borran del almacenamiento, no quedan sueltas.',
+          'Los grupos y planes que otros siguen usando no se destruyen con vos: un grupo que creaste pasa a alguien que ya estaba adentro — un admin si hay alguno, si no el que lleva más tiempo — y se borra solo si no queda nadie. Los planes que publicaste siguen en su grupo, para que quienes contestaron no pierdan la noche, pero dejan de llevar tu nombre.',
         ],
       },
       {

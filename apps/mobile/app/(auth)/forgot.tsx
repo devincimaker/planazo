@@ -19,8 +19,13 @@ import { colors, fonts, spacing } from '../../theme/tokens';
  * redirects here if the URL is on the project's allow-list — see
  * `supabase/config.toml` locally, and Auth → URL Configuration in the
  * hosted dashboard.
+ *
+ * No leading slash, and it matters. createURL builds `<scheme>://<hostUri><path>`
+ * with an empty hostUri in a standalone build, so '/reset-password' comes out
+ * as `planazo:///reset-password` — three slashes, and not the string anyone
+ * put on the allow-list.
  */
-export const RESET_REDIRECT_PATH = '/reset-password';
+export const RESET_REDIRECT_PATH = 'reset-password';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();

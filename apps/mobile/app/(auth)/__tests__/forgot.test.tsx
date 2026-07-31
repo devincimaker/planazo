@@ -15,8 +15,12 @@ jest.mock('expo-router', () => ({
   Link: ({ children }: { children: React.ReactNode }) => children,
 }));
 
+// Faithful to expo-linking in a standalone build: hostUri is empty, so the
+// result is `<scheme>://` + the path *verbatim*. An earlier version of this
+// mock stripped a leading slash, which quietly hid the fact that the app was
+// asking Supabase to redirect to a triple-slashed URL nobody had allow-listed.
 jest.mock('expo-linking', () => ({
-  createURL: (path: string) => `planazo://${path.replace(/^\//, '')}`,
+  createURL: (path: string) => `planazo://${path}`,
 }));
 
 const mockReset = supabase.auth.resetPasswordForEmail as jest.Mock;

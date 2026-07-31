@@ -4,7 +4,8 @@ import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Constants from 'expo-constants';
 import { supabase } from '../../../lib/supabase';
-import { clearPushToken } from '../../../lib/push';
+import { clearPushToken, registerPushToken } from '../../../lib/push';
+import { purgeOwnedFiles } from '../../../lib/storage';
 import { useAuthStore } from '../../../stores/authStore';
 import { Avatar, Card, ListRow, ThemedText } from '../../../components/ui';
 import { colors, fonts, spacing } from '../../../theme/tokens';
@@ -49,6 +50,16 @@ export default function ProfileSheet() {
 
   const setPush = useMutation({
     mutationFn: async (on: boolean) => {
+      // The privacy policy says turning notifications off clears the device
+      // token, so do that rather than only flipping a flag — otherwise the
+      // token sits on the profile and the policy is a lie. Token first, so
+      // the row we read back already reflects it.
+      if (on) {
+        await registerPushToken(profile!.id);
+      } else {
+        await clearPushToken(profile!.id);
+      }
+
       const { data, error } = await supabase
         .from('profiles')
         .update({ push_enabled: on })
@@ -85,6 +96,11 @@ export default function ProfileSheet() {
 
   const deleteAccount = useMutation({
     mutationFn: async () => {
+      // Files first, while this session is still the owner RLS recognises.
+      // The database cannot reach Storage, so if this does not happen here it
+      // does not happen at all — and the avatars bucket is public.
+      if (user) await purgeOwnedFiles(user.id);
+
       const { error } = await supabase.rpc('delete_my_account');
       if (error) throw error;
     },
