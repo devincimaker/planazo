@@ -363,4 +363,3 @@ describe('FeedScreen — when the feed cannot load', () => {
     expect(screen.queryByTestId('feed-error')).toBeNull();
   });
 });
-

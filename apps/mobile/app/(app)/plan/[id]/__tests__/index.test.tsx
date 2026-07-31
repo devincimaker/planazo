@@ -11,12 +11,13 @@ jest.mock('../../../../../lib/supabase', () => ({
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
+const mockBack = jest.fn();
 let mockCanGoBack = true;
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ id: 'plan-1' }),
   useRouter: () => ({
     push: mockPush,
-    back: jest.fn(),
+    back: mockBack,
     replace: mockReplace,
     canGoBack: () => mockCanGoBack,
   }),
@@ -483,6 +484,7 @@ describe('PlanDetailScreen — a plan you cannot see', () => {
 
     await waitFor(() => expect(screen.getByTestId('plan-error-back')).toBeTruthy());
     await fireEvent.press(screen.getByTestId('plan-error-back'));
+    expect(mockBack).toHaveBeenCalled();
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
@@ -494,6 +496,7 @@ describe('PlanDetailScreen — a plan you cannot see', () => {
     await waitFor(() => expect(screen.getByTestId('plan-error-back')).toBeTruthy());
     await fireEvent.press(screen.getByTestId('plan-error-back'));
     expect(mockReplace).toHaveBeenCalledWith('/(app)/(tabs)');
+    expect(mockBack).not.toHaveBeenCalled();
   });
 
   it('offers a retry when the fetch failed rather than came back empty', async () => {
@@ -504,4 +507,3 @@ describe('PlanDetailScreen — a plan you cannot see', () => {
     expect(screen.getByTestId('plan-error-retry')).toBeTruthy();
   });
 });
-

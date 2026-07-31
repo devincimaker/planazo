@@ -6,15 +6,29 @@
  * spinner up forever (PLA-15, PLA-19).
  */
 
-/** PostgREST's code for `.single()` matching zero rows. */
-const NOT_FOUND_CODE = 'PGRST116';
-/** RLS rejected the write/read outright, rather than filtering it to nothing. */
-const FORBIDDEN_CODES = ['42501', 'PGRST301'];
+/**
+ * PostgREST's code for a singular query (`.single()`) that didn't match exactly
+ * one row. It covers BOTH zero rows and several, so the code alone doesn't mean
+ * "missing" — the row count lives in `details`.
+ */
+const SINGULAR_ROW_CODE = 'PGRST116';
+/** Postgres insufficient_privilege: RLS rejected the statement outright. */
+const FORBIDDEN_CODES = ['42501'];
+/** PostgREST group-3 JWT errors: the token is missing, invalid, or expired. */
+const AUTH_CODES = ['PGRST300', 'PGRST301', 'PGRST302'];
 
 const codeOf = (error: unknown): string | undefined => {
   if (error && typeof error === 'object' && 'code' in error) {
     const code = (error as { code?: unknown }).code;
     if (typeof code === 'string') return code;
+  }
+  return undefined;
+};
+
+const detailsOf = (error: unknown): string | undefined => {
+  if (error && typeof error === 'object' && 'details' in error) {
+    const details = (error as { details?: unknown }).details;
+    if (typeof details === 'string') return details;
   }
   return undefined;
 };
@@ -25,9 +39,17 @@ const messageOf = (error: unknown): string =>
 /**
  * True when the row isn't there *for this user* — deleted, or hidden by RLS.
  * These read identically from the client: a SELECT filtered to zero rows.
+ *
+ * More than one row shares the same code but is a real fault, not a missing
+ * row, so it falls through to the generic (retryable) error instead.
  */
 export function isNotFoundError(error: unknown): boolean {
-  return codeOf(error) === NOT_FOUND_CODE;
+  if (codeOf(error) !== SINGULAR_ROW_CODE) return false;
+  const details = detailsOf(error);
+  // Every caller filters on a primary key, so a code with no details is the
+  // zero-row case in practice. Only claim otherwise when PostgREST says so.
+  if (details === undefined) return true;
+  return /\b0 rows\b/.test(details);
 }
 
 export function isForbiddenError(error: unknown): boolean {
@@ -35,13 +57,25 @@ export function isForbiddenError(error: unknown): boolean {
   return !!code && FORBIDDEN_CODES.includes(code);
 }
 
+/**
+ * The token, not the permission, is the problem. supabase-js refreshes in the
+ * background, so this is worth retrying — and it must never be reported as
+ * "you're not in this group".
+ */
+export function isAuthError(error: unknown): boolean {
+  const code = codeOf(error);
+  return !!code && AUTH_CODES.includes(code);
+}
+
 export function isTimeoutError(error: unknown): boolean {
   return error instanceof Error && error.name === 'RequestTimeoutError';
 }
 
 /**
- * A not-found never becomes found by asking again, so retrying only delays the
- * message the user needs. Everything else gets two more goes.
+ * A not-found never becomes found by asking again, and a permission denial
+ * never becomes permitted, so retrying only delays the message the user needs.
+ * Everything else — including an expired token, which a refresh can fix — gets
+ * two more goes.
  */
 export function retryQuery(failureCount: number, error: unknown): boolean {
   if (isNotFoundError(error) || isForbiddenError(error)) return false;
@@ -60,6 +94,12 @@ export function errorCopy(error: unknown): { title: string; body: string } {
     return {
       title: "You can't see this",
       body: "You're not in the group this belongs to. Ask someone in it for an invite.",
+    };
+  }
+  if (isAuthError(error)) {
+    return {
+      title: 'Your sign-in expired',
+      body: "Try again — we'll refresh it. If it keeps happening, sign out and back in.",
     };
   }
   if (messageOf(error).startsWith('Failed to reach Supabase')) {
