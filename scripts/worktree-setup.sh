@@ -63,6 +63,16 @@ wt_info "db mode    $db_mode"
 wt_info "metro      $metro_port"
 wt_info "simulator  $sim_name"
 
+previous_branch_name=$(wt_read_value "$metadata" "PLANAZO_BRANCH_NAME" 2>/dev/null || true)
+
+# Claim the slot NOW, not at the end. Allocation scans sibling .env.worktree
+# files, so a slot that isn't written until setup finishes can be handed out
+# twice — and setup can take minutes or die halfway.
+wt_upsert_env "$metadata" "PLANAZO_SLUG" "$slug"
+wt_upsert_env "$metadata" "PLANAZO_METRO_PORT" "$metro_port"
+wt_upsert_env "$metadata" "PLANAZO_SIM_NAME" "$sim_name"
+wt_upsert_env "$metadata" "PLANAZO_DB_MODE" "$db_mode"
+
 # --- env files ---------------------------------------------------------------
 # Gitignored, so git does not carry them into a new worktree. Seed from the
 # primary, then override the parts that must differ.
@@ -92,6 +102,21 @@ branch_name=$(wt_read_value "$metadata" "PLANAZO_BRANCH_NAME" 2>/dev/null || tru
 branch_ref=$(wt_read_value "$metadata" "PLANAZO_BRANCH_REF" 2>/dev/null || true)
 
 if [ "$db_mode" = "shared" ]; then
+  # Downgrading from a branch: delete it here, or it bills forever — wt:rm skips
+  # deletion once the mode is shared, and wt:list treats a named branch in the
+  # ledger as claimed, so it would never show up as orphaned either.
+  if [ -n "$previous_branch_name" ]; then
+    wt_step "Releasing the previous branch database '$previous_branch_name'"
+    if supabase branches delete "$previous_branch_name" --project-ref "$WT_PROJECT_REF" --yes 2>/dev/null; then
+      wt_info "deleted (billing stops)"
+    else
+      wt_info "FAILED to delete — do it yourself or it keeps billing:"
+      wt_info "  supabase branches delete $previous_branch_name --project-ref $WT_PROJECT_REF"
+    fi
+    branch_name=""
+    branch_ref=""
+  fi
+
   wt_step "Database: main's local stack (shared)"
   wt_require_local_stack
   local_env=$(wt_local_keys) || wt_die "Could not read local stack keys"
@@ -104,60 +129,60 @@ else
   wt_step "Database: dedicated Supabase branch"
   branch_name=${branch_name:-$slug}
 
-  if ! supabase branches get "$branch_name" --project-ref "$WT_PROJECT_REF" >/dev/null 2>&1; then
-    wt_info "creating branch '$branch_name' (this is the slow step — minutes)"
+  if wt_branch_exists "$branch_name"; then
+    wt_info "branch '$branch_name' already exists — reusing"
+  else
+    wt_info "creating branch '$branch_name' (the slow step — minutes)"
     supabase branches create "$branch_name" --project-ref "$WT_PROJECT_REF" --yes \
       || wt_die "Could not create branch '$branch_name'"
-  else
-    wt_info "branch '$branch_name' already exists — reusing"
+    # Record it immediately: if provisioning or seeding fails below, the ledger
+    # still names the branch so wt:rm can delete it rather than leaving it billing.
+    wt_upsert_env "$metadata" "PLANAZO_BRANCH_NAME" "$branch_name"
   fi
 
-  wt_info "waiting for the branch to come up..."
-  branch_json=""
+  wt_info "waiting for it to come up..."
+  status=""
   for _ in $(seq 1 120); do
-    branch_json=$(supabase branches get "$branch_name" --project-ref "$WT_PROJECT_REF" -o json 2>/dev/null || true)
-    status=$(wt_branch_field "$branch_json" "status" || true)
+    status=$(wt_branch_status "$branch_name")
     case "$status" in
       FUNCTIONS_DEPLOYED|MIGRATIONS_PASSED|ACTIVE_HEALTHY|RUNNING) break ;;
-      MIGRATIONS_FAILED|FUNCTIONS_FAILED) wt_die "Branch '$branch_name' failed to provision (status $status)" ;;
+      MIGRATIONS_FAILED|FUNCTIONS_FAILED)
+        wt_die "Branch '$branch_name' failed to provision (status $status).
+Delete it with: supabase branches delete $branch_name --project-ref $WT_PROJECT_REF" ;;
     esac
     sleep 5
   done
+  [ -n "$status" ] || wt_die "Branch '$branch_name' never reported a status"
+  wt_info "status $status"
 
-  branch_ref=$(wt_branch_field "$branch_json" "ref" "project_ref" "id" "database.ref") \
-    || wt_die "Could not read the branch project ref. Raw payload:
+  # `branches get -o json` returns credentials, not metadata — one call has
+  # everything: URL, anon key, service key and a direct Postgres URL.
+  branch_json=$(supabase branches get "$branch_name" --project-ref "$WT_PROJECT_REF" -o json 2>/dev/null || true)
+  supabase_url=$(wt_branch_field "$branch_json" "SUPABASE_URL") || wt_die \
+    "Could not read SUPABASE_URL from the branch payload. Raw:
 $branch_json"
-  db_pass=$(wt_branch_field "$branch_json" "db_pass" "database.password" "postgres_password" || true)
+  anon_key=$(wt_branch_field "$branch_json" "SUPABASE_ANON_KEY") || wt_die \
+    "Could not read SUPABASE_ANON_KEY from the branch payload."
+  service_key=$(wt_branch_field "$branch_json" "SUPABASE_SERVICE_ROLE_KEY") || wt_die \
+    "Could not read SUPABASE_SERVICE_ROLE_KEY from the branch payload."
+  # Connection choice matters twice over. POSTGRES_URL_NON_POOLING points at
+  # db.<ref>.supabase.co, which resolves IPv6-only and is unreachable from an
+  # IPv4 network. POSTGRES_URL reaches the pooler over IPv4 but on 6543 —
+  # transaction mode, where migrations lose advisory locks. Session mode is the
+  # same host on 5432, which is what the old project's working db-url used.
+  db_url=$(wt_branch_field "$branch_json" "POSTGRES_URL" | sed 's/:6543\//:5432\//' || true)
+  [ -n "$db_url" ] || db_url=$(wt_branch_field "$branch_json" "POSTGRES_URL_NON_POOLING" || true)
 
-  supabase_url="https://${branch_ref}.supabase.co"
-  keys_json=$(supabase projects api-keys --project-ref "$branch_ref" -o json 2>/dev/null || true)
-  anon_key=$(printf '%s' "$keys_json" | python3 -c '
-import json,sys
-try: data = json.load(sys.stdin)
-except Exception: sys.exit(1)
-for k in data:
-    if k.get("name") in ("anon","publishable"): print(k.get("api_key") or k.get("apiKey","")); sys.exit(0)
-sys.exit(1)' 2>/dev/null || true)
-  service_key=$(printf '%s' "$keys_json" | python3 -c '
-import json,sys
-try: data = json.load(sys.stdin)
-except Exception: sys.exit(1)
-for k in data:
-    if k.get("name") in ("service_role","secret"): print(k.get("api_key") or k.get("apiKey","")); sys.exit(0)
-sys.exit(1)' 2>/dev/null || true)
-  [ -n "$anon_key" ] && [ -n "$service_key" ] || wt_die \
-    "Could not read API keys for branch ref $branch_ref. Raw payload:
-$keys_json"
-
+  branch_ref=$(printf '%s' "$supabase_url" | sed -E 's#https://([^.]+)\..*#\1#')
+  wt_upsert_env "$metadata" "PLANAZO_BRANCH_REF" "$branch_ref"
   wt_info "branch ref $branch_ref"
 
   wt_step "Applying this branch's migrations"
-  if [ -n "$db_pass" ]; then
-    (cd "$target" && supabase db push --project-ref "$branch_ref" --password "$db_pass" --yes) \
-      || wt_die "Migration push failed"
+  # `db push` has no --project-ref; it takes a linked project or --db-url.
+  if [ -n "$db_url" ]; then
+    (cd "$target" && supabase db push --db-url "$db_url" --yes) || wt_die "Migration push failed"
   else
-    wt_info "no DB password in the branch payload — skipping push."
-    wt_info "Apply manually: supabase db push --project-ref $branch_ref"
+    wt_die "No POSTGRES_URL_NON_POOLING in the branch payload — cannot push migrations."
   fi
 
   wt_step "Seeding demo data"
@@ -204,16 +229,15 @@ fi
 
 # --- ledger ------------------------------------------------------------------
 
-cat > "$metadata" <<EOF
-# Written by wt:setup. This worktree's slot — do not hand these to another worktree.
-PLANAZO_SLUG=$slug
-PLANAZO_DB_MODE=$db_mode
-PLANAZO_METRO_PORT=$metro_port
-PLANAZO_SIM_NAME=$sim_name
-PLANAZO_SIM_UDID=$sim_udid
-PLANAZO_BRANCH_NAME=${branch_name:-}
-PLANAZO_BRANCH_REF=${branch_ref:-}
-EOF
+# Upsert rather than rewrite: the slot was already claimed at the top, and
+# PLANAZO_METRO_PID (written by wt:start) must survive a re-run.
+wt_upsert_env "$metadata" "PLANAZO_SLUG" "$slug"
+wt_upsert_env "$metadata" "PLANAZO_DB_MODE" "$db_mode"
+wt_upsert_env "$metadata" "PLANAZO_METRO_PORT" "$metro_port"
+wt_upsert_env "$metadata" "PLANAZO_SIM_NAME" "$sim_name"
+wt_upsert_env "$metadata" "PLANAZO_SIM_UDID" "$sim_udid"
+wt_upsert_env "$metadata" "PLANAZO_BRANCH_NAME" "${branch_name:-}"
+wt_upsert_env "$metadata" "PLANAZO_BRANCH_REF" "${branch_ref:-}"
 
 wt_step "Ready"
 wt_info "cd $target && pnpm wt:start"

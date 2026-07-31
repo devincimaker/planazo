@@ -52,10 +52,18 @@ sim_name=$(wt_read_value "$metadata" "PLANAZO_SIM_NAME" 2>/dev/null || true)
 branch_name=$(wt_read_value "$metadata" "PLANAZO_BRANCH_NAME" 2>/dev/null || true)
 db_mode=$(wt_read_value "$metadata" "PLANAZO_DB_MODE" 2>/dev/null || true)
 
-if [ -n "$port" ] && lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
-  wt_step "Stopping Metro on $port"
-  lsof -nP -tiTCP:"$port" -sTCP:LISTEN | xargs -r kill 2>/dev/null || true
-  wt_info "stopped"
+metro_pid=$(wt_read_value "$metadata" "PLANAZO_METRO_PID" 2>/dev/null || true)
+if [ -n "$port" ]; then
+  wt_port_ownership "$port" "$metro_pid"
+  case $? in
+    0) wt_step "Stopping our Metro on $port (pid $metro_pid)"
+       kill "$metro_pid" 2>/dev/null || true
+       wt_info "stopped" ;;
+    2) wt_step "Leaving port $port alone"
+       # Our Metro is gone and something else took the port. Killing by port
+       # here would take out an unrelated project.
+       wt_info "held by pid $(wt_pid_on_port "$port"), which we did not start" ;;
+  esac
 fi
 
 # Delete the branch DB before the worktree, so a failure here still leaves the

@@ -87,17 +87,28 @@ wt_upsert_env() {
 # concurrent runs could hand out the same slot.
 
 wt_lock() {
-  local state_dir lock_dir attempt=0
+  local state_dir lock_dir owner attempt=0
   state_dir=$(wt_state_dir)
   mkdir -p "$state_dir"
   lock_dir="$state_dir/setup.lock"
+
   until mkdir "$lock_dir" 2>/dev/null; do
+    # A killed run leaves the lock behind — its EXIT trap never fires. Steal the
+    # lock when its owner is gone, instead of blocking every later run forever.
+    owner=$(cat "$lock_dir/pid" 2>/dev/null || true)
+    if [ -z "$owner" ] || ! kill -0 "$owner" 2>/dev/null; then
+      wt_info "clearing a stale lock from pid ${owner:-unknown}"
+      rm -rf "$lock_dir"
+      continue
+    fi
     attempt=$((attempt + 1))
-    [ "$attempt" -lt 300 ] || wt_die "Timed out waiting for another wt command to finish"
+    [ "$attempt" -lt 300 ] || wt_die "Timed out waiting for wt (pid $owner) to finish"
     sleep 0.2
   done
+
+  printf '%s\n' "$$" > "$lock_dir/pid"
   # shellcheck disable=SC2064
-  trap "rmdir '$lock_dir' 2>/dev/null || true" EXIT
+  trap "rm -rf '$lock_dir' 2>/dev/null || true" EXIT
 }
 
 # --- worktree introspection --------------------------------------------------
@@ -235,29 +246,53 @@ wt_require_local_stack() {
     "Main's local Supabase stack is not running. Start it with: (cd $(wt_primary_path) && supabase start)"
 }
 
-# Pull one field out of `supabase branches get -o json`, tolerating key-name
-# drift across CLI versions. Fails loudly with the raw payload rather than
-# writing a half-broken .env.
+# `branches get -o json` returns the branch's CREDENTIALS, not metadata:
+# SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, POSTGRES_URL and
+# POSTGRES_URL_NON_POOLING. Everything setup needs is in that one call.
 wt_branch_field() {
-  local json=$1; shift
+  local json=$1 key=$2
   printf '%s' "$json" | python3 -c '
 import json,sys
-candidates = sys.argv[1:]
-try:
-    data = json.load(sys.stdin)
-except Exception:
-    sys.exit(1)
-if isinstance(data, list):
-    data = data[0] if data else {}
-for c in candidates:
-    cur, ok = data, True
-    for part in c.split("."):
-        if isinstance(cur, dict) and part in cur:
-            cur = cur[part]
-        else:
-            ok = False; break
-    if ok and cur not in (None, ""):
-        print(cur); sys.exit(0)
-sys.exit(1)
-' "$@" 2>/dev/null || return 1
+try: data = json.load(sys.stdin)
+except Exception: sys.exit(1)
+v = data.get(sys.argv[1]) if isinstance(data, dict) else None
+if not v: sys.exit(1)
+print(v)
+' "$key" 2>/dev/null || return 1
+}
+
+# Status lives in `branches list`, not `branches get`.
+wt_branch_status() {
+  supabase branches list --project-ref "$WT_PROJECT_REF" -o json 2>/dev/null | python3 -c '
+import json,sys
+name = sys.argv[1]
+try: data = json.load(sys.stdin)
+except Exception: sys.exit(0)
+data = data if isinstance(data, list) else data.get("branches", [])
+for b in data:
+    if b.get("name") == name:
+        print(b.get("status", "")); break
+' "$1" 2>/dev/null || true
+}
+
+wt_branch_exists() {
+  [ -n "$(wt_branch_status "$1")" ]
+}
+
+# --- port ownership ----------------------------------------------------------
+# The assigned port is only ours while OUR Metro holds it. If that process died
+# and something else took the port, connecting to it would misroute the app and
+# tearing it down would kill an unrelated project.
+
+wt_pid_on_port() {
+  lsof -nP -tiTCP:"$1" -sTCP:LISTEN 2>/dev/null | head -1
+}
+
+# 0 = our Metro is listening, 1 = port free, 2 = someone else has it
+wt_port_ownership() {
+  local port=$1 expected=$2 actual
+  actual=$(wt_pid_on_port "$port")
+  [ -n "$actual" ] || return 1
+  [ -n "$expected" ] && [ "$actual" = "$expected" ] && return 0
+  return 2
 }

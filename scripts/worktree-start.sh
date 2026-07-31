@@ -55,21 +55,29 @@ fi
 open -a Simulator --args -CurrentDeviceUDID "$udid" 2>/dev/null || true
 
 wt_step "Metro on $port"
-if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
-  wt_info "already listening — leaving it alone"
-else
-  # --clear matters: EXPO_PUBLIC_* is inlined at bundle time, so a cached
-  # transform can keep serving the previous database URL.
-  (cd "$target/apps/mobile" && nohup npx expo start --port "$port" --clear >"$target/.metro.log" 2>&1 &)
-  wt_info "starting (log: $target/.metro.log)"
-  for _ in $(seq 1 60); do
-    lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1 && break
-    sleep 1
-  done
-  lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1 \
-    || wt_die "Metro did not come up on $port — see $target/.metro.log"
-  wt_info "up"
-fi
+metro_pid=$(wt_read_value "$metadata" "PLANAZO_METRO_PID" 2>/dev/null || true)
+wt_port_ownership "$port" "$metro_pid"
+case $? in
+  0) wt_info "our Metro (pid $metro_pid) is already listening — leaving it alone" ;;
+  2) wt_die "Port $port is held by pid $(wt_pid_on_port "$port"), which is NOT this
+worktree's Metro. Refusing to connect the app to another project's bundler.
+Stop that process, or re-run 'pnpm wt:setup' to get a different port." ;;
+  *)
+    # --clear matters: EXPO_PUBLIC_* is inlined at bundle time, so a cached
+    # transform can keep serving the previous database URL.
+    (cd "$target/apps/mobile" && nohup npx expo start --port "$port" --clear >"$target/.metro.log" 2>&1 &)
+    wt_info "starting (log: $target/.metro.log)"
+    for _ in $(seq 1 60); do
+      [ -n "$(wt_pid_on_port "$port")" ] && break
+      sleep 1
+    done
+    metro_pid=$(wt_pid_on_port "$port")
+    [ -n "$metro_pid" ] || wt_die "Metro did not come up on $port — see $target/.metro.log"
+    # Record the owner so wt:rm never kills a process it did not start.
+    wt_upsert_env "$metadata" "PLANAZO_METRO_PID" "$metro_pid"
+    wt_info "up (pid $metro_pid)"
+    ;;
+esac
 
 wt_step "Connecting the app"
 url="com.planazo.app://expo-development-client/?url=http%3A%2F%2Flocalhost%3A${port}"
