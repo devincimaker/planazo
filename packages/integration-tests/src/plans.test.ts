@@ -101,7 +101,10 @@ describe('lock_plan on a fixed plan', () => {
     expect(relock.error?.message).toMatch(/Plan is not open/);
   });
 
-  it('freezes RSVPs once locked', async () => {
+  // Locking used to freeze RSVPs outright (PLA-16). It can't: the lock seeds
+  // every available member into a 'yes' they never tapped, so freezing at that
+  // moment is what trapped people. A locked plan stays answerable.
+  it('leaves attendees free to change their mind once locked', async () => {
     const planId = await createPlan('fixed', 'Fixed brunch');
     ok(await host.client.from('rsvps').insert({ plan_id: planId, user_id: host.id, response: 'yes' }));
     ok(await memberA.client.from('rsvps').insert({ plan_id: planId, user_id: memberA.id, response: 'yes' }));
@@ -115,7 +118,8 @@ describe('lock_plan on a fixed plan', () => {
         .eq('user_id', memberA.id)
         .select(),
     );
-    expect(flipped).toEqual([]);
+    expect(flipped).toHaveLength(1);
+    expect(flipped[0].response).toBe('no');
   });
 });
 
