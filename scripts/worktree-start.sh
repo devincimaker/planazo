@@ -56,8 +56,8 @@ open -a Simulator --args -CurrentDeviceUDID "$udid" 2>/dev/null || true
 
 wt_step "Metro on $port"
 metro_pid=$(wt_read_value "$metadata" "PLANAZO_METRO_PID" 2>/dev/null || true)
-wt_port_ownership "$port" "$metro_pid"
-case $? in
+own=0; wt_port_ownership "$port" "$metro_pid" || own=$?
+case $own in
   0) wt_info "our Metro (pid $metro_pid) is already listening — leaving it alone" ;;
   2) wt_die "Port $port is held by pid $(wt_pid_on_port "$port"), which is NOT this
 worktree's Metro. Refusing to connect the app to another project's bundler.

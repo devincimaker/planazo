@@ -54,8 +54,10 @@ db_mode=$(wt_read_value "$metadata" "PLANAZO_DB_MODE" 2>/dev/null || true)
 
 metro_pid=$(wt_read_value "$metadata" "PLANAZO_METRO_PID" 2>/dev/null || true)
 if [ -n "$port" ]; then
-  wt_port_ownership "$port" "$metro_pid"
-  case $? in
+  # `|| own=$?` keeps set -e from killing the script: a bare call whose status
+  # is only read afterwards via $? still counts as an untested failure.
+  own=0; wt_port_ownership "$port" "$metro_pid" || own=$?
+  case $own in
     0) wt_step "Stopping our Metro on $port (pid $metro_pid)"
        kill "$metro_pid" 2>/dev/null || true
        wt_info "stopped" ;;
