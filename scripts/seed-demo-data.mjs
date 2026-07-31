@@ -19,6 +19,18 @@ function requiredEnv(name) {
 const supabaseUrl = requiredEnv('SUPABASE_URL').replace(/\/+$/, '');
 const serviceRoleKey = requiredEnv('SUPABASE_SERVICE_ROLE_KEY');
 
+// This script creates users and deletes plans. A worktree whose .env was copied
+// from the primary but never repointed would aim all of that at production, so
+// the live ref has to be asked for explicitly.
+const PRODUCTION_REF = 'lmgjdvacivzzhctgctqa';
+if (supabaseUrl.includes(PRODUCTION_REF) && process.env.SEED_ALLOW_PRODUCTION !== 'yes') {
+  throw new Error(
+    `Refusing to seed PRODUCTION (${PRODUCTION_REF}).\n` +
+      `SUPABASE_URL is ${supabaseUrl}.\n` +
+      `If that is genuinely what you want: SEED_ALLOW_PRODUCTION=yes pnpm db:seed:demo`
+  );
+}
+
 const supabase = createClient(supabaseUrl, serviceRoleKey, {
   auth: {
     autoRefreshToken: false,
