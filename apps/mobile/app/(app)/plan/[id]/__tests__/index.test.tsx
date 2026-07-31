@@ -191,6 +191,73 @@ describe('PlanDetailScreen — fixed plans', () => {
     expect(screen.getByText("You're in")).toBeTruthy();
     expect(screen.getByText('You')).toBeTruthy();
   });
+
+  // PLA-20. The database is what actually refuses the seat; these cover the
+  // screen saying so first, so the refusal is rare rather than routine.
+  describe('a full plan', () => {
+    const sixOthers = Array.from({ length: 6 }, (_, i) => ({
+      user_id: `u-${i}`,
+      response: 'yes',
+      profile: { display_name: `Person ${i}` },
+    }));
+
+    it('offers "Full" instead of "I\'m in" when every place is taken', async () => {
+      prime({
+        plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(7) },
+        rsvps: sixOthers,
+      });
+      await renderDetail();
+
+      await waitFor(() => expect(screen.getByText('Full')).toBeTruthy());
+      expect(screen.queryByText("I'm in")).toBeNull();
+      // Saying no is still worth doing — it takes you off what it's waiting on.
+      expect(screen.getByText("Can't make it")).toBeTruthy();
+    });
+
+    it('says "that\'s everyone" rather than "room for 0 more"', async () => {
+      prime({
+        plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(7) },
+        rsvps: sixOthers,
+      });
+      await renderDetail();
+
+      await waitFor(() => expect(screen.getByText("6 in · that's everyone")).toBeTruthy());
+      expect(screen.queryByText('6 in · room for 0 more')).toBeNull();
+    });
+
+    it('still lets someone already in withdraw', async () => {
+      prime({
+        plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(7) },
+        rsvps: [
+          { user_id: 'me', response: 'yes', profile: { display_name: 'Me' } },
+          ...sixOthers.slice(0, 5),
+        ],
+      });
+      await renderDetail();
+
+      await waitFor(() => expect(screen.getByText("You're in")).toBeTruthy());
+      expect(screen.queryByText('Full')).toBeNull();
+      await fireEvent.press(screen.getByText('Change'));
+      await waitFor(() => expect(rsvpsChain.delete).toHaveBeenCalled());
+    });
+
+    it('leaves an uncapped plan alone no matter how many say yes', async () => {
+      prime({
+        plan: {
+          ...basePlan,
+          max_people: null,
+          plan_type: 'fixed',
+          status: 'open',
+          event_date: iso(7),
+        },
+        rsvps: sixOthers,
+      });
+      await renderDetail();
+
+      await waitFor(() => expect(screen.getByText("I'm in")).toBeTruthy());
+      expect(screen.queryByText('Full')).toBeNull();
+    });
+  });
 });
 
 describe('PlanDetailScreen — flexible plans', () => {

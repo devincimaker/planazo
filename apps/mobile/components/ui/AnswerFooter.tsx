@@ -9,6 +9,12 @@ interface AnswerFooterProps {
   answerLabel?: string;
   yesLabel?: string;
   noLabel?: string;
+  /**
+   * Every place is taken, so joining would be refused (PLA-20). Only affects
+   * the unanswered state — someone already in is unaffected by the plan being
+   * full, and must keep their way out.
+   */
+  full?: boolean;
   onYes?: () => void;
   onNo?: () => void;
   onChange?: () => void;
@@ -25,6 +31,7 @@ export function AnswerFooter({
   answerLabel,
   yesLabel = "I'm in",
   noLabel = "Can't make it",
+  full = false,
   onYes,
   onNo,
   onChange,
@@ -64,6 +71,8 @@ export function AnswerFooter({
     );
   }
 
+  // "Can't make it" stays live on a full plan: declining still takes you off
+  // the list of people it's waiting on, and it's the honest answer to give.
   return (
     <View style={styles.row} testID={testID}>
       <Button
@@ -74,7 +83,14 @@ export function AnswerFooter({
         style={size === 'md' ? styles.noButtonMd : styles.noButton}
         testID="answer-no"
       />
-      <Button label={yesLabel} size={size} onPress={onYes} style={styles.yesButton} testID="answer-yes" />
+      <Button
+        label={full ? 'Full' : yesLabel}
+        size={size}
+        disabled={full}
+        onPress={onYes}
+        style={styles.yesButton}
+        testID="answer-yes"
+      />
     </View>
   );
 }

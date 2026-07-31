@@ -1,7 +1,9 @@
 import {
+  actionErrorCopy,
   errorCopy,
   isAuthError,
   isNotFoundError,
+  isPlanFullError,
   isTimeoutError,
   retryQuery,
 } from '../queryErrors';
@@ -127,5 +129,37 @@ describe('errorCopy', () => {
     const copy = errorCopy(new Error('boom'));
     expect(copy.title).toBeTruthy();
     expect(copy.body).toBeTruthy();
+  });
+});
+
+describe('isPlanFullError / actionErrorCopy', () => {
+  /** enforce_plan_cap's RAISE, surfaced through PostgREST's PTxyz mapping. */
+  const planFull = {
+    code: 'PT409',
+    message: 'This plan is full',
+    details: '6 of 6 places are taken',
+  };
+
+  it('recognises the cap rejection', () => {
+    expect(isPlanFullError(planFull)).toBe(true);
+    expect(isPlanFullError(forbidden)).toBe(false);
+    expect(isPlanFullError(new Error('boom'))).toBe(false);
+  });
+
+  it('says the plan is full rather than that something broke', () => {
+    const copy = actionErrorCopy(planFull);
+    expect(copy.title).toBe("This one's full");
+    expect(copy.body).toMatch(/drops out/i);
+  });
+
+  it('never tells someone a write "didn\'t load"', () => {
+    const copy = actionErrorCopy(new Error('boom'));
+    expect(copy.title).toBe("That didn't go through");
+    expect(copy.body).not.toMatch(/load|fetch/i);
+  });
+
+  it('keeps the diagnosis errorCopy already makes for shared cases', () => {
+    expect(actionErrorCopy(expiredJwt).title).toBe('Your sign-in expired');
+    expect(actionErrorCopy(new RequestTimeoutError(15000)).title).toBe('That took too long');
   });
 });
