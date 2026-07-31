@@ -25,6 +25,7 @@ import {
 } from '@planazo/shared';
 import { supabase } from '../../../../lib/supabase';
 import { deleteOwnRsvp } from '../../../../lib/rsvp';
+import { errorCopy, isNotFoundError } from '../../../../lib/queryErrors';
 import { useAuthStore } from '../../../../stores/authStore';
 import {
   ThemedText,
@@ -35,6 +36,7 @@ import {
   Button,
   SlotBar,
   ListRow,
+  ErrorState,
   colorForName,
   showToast,
 } from '../../../../components/ui';
@@ -65,7 +67,7 @@ export default function PlanDetailScreen() {
   // null = not editing dates; array = local picks being edited
   const [editingPicks, setEditingPicks] = useState<string[] | null>(null);
 
-  const { data: plan, isLoading, refetch, isRefetching } = useQuery({
+  const { data: plan, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ['plan', id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -377,6 +379,34 @@ export default function PlanDetailScreen() {
       lastDate,
     };
   }, [plan, rsvps, dateOptions, availabilities, membership, memberIds, user?.id]);
+
+  const goBack = () =>
+    router.canGoBack() ? router.back() : router.replace('/(app)/(tabs)');
+
+  // A plan you can't see and a plan that doesn't exist look identical from here
+  // — RLS filters it to zero rows either way, so `.single()` throws PGRST116.
+  // Say so instead of spinning forever (PLA-19).
+  if (!isLoading && (isError || !plan)) {
+    const notFound = !id || isNotFoundError(error);
+    const copy = notFound
+      ? {
+          title: "This plan isn't here",
+          body: "It was called off and cleared, or it belongs to a group you're not in. Ask whoever shared it to add you.",
+        }
+      : errorCopy(error);
+
+    return (
+      <SafeAreaView style={styles.screen} edges={['top']}>
+        <ErrorState
+          title={copy.title}
+          body={copy.body}
+          onRetry={notFound ? undefined : () => refetch()}
+          onBack={goBack}
+          testID="plan-error"
+        />
+      </SafeAreaView>
+    );
+  }
 
   if (isLoading || !plan || !derived) {
     return (

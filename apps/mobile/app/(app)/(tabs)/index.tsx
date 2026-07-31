@@ -21,6 +21,7 @@ import {
 } from '@planazo/shared';
 import { supabase } from '../../../lib/supabase';
 import { deleteOwnRsvp } from '../../../lib/rsvp';
+import { errorCopy } from '../../../lib/queryErrors';
 import { useAuthStore } from '../../../stores/authStore';
 import {
   ThemedText,
@@ -33,6 +34,7 @@ import {
   Button,
   DateOptionRow,
   EmptyState,
+  ErrorState,
   colorForName,
 } from '../../../components/ui';
 import { colors, spacing } from '../../../theme/tokens';
@@ -52,7 +54,7 @@ export default function FeedScreen() {
   // Local date selections per flexible plan, committed on "Send N dates"
   const [pickedDates, setPickedDates] = useState<Record<string, string[]>>({});
 
-  const { data: plans, isLoading, refetch, isRefetching } = useQuery({
+  const { data: plans, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ['home-plans', user?.id],
     queryFn: async () => {
       const { data: memberships, error: memberError } = await supabase
@@ -400,6 +402,16 @@ export default function FeedScreen() {
         <View style={styles.loading}>
           <ActivityIndicator size="large" color={colors.accent} />
         </View>
+      ) : isError ? (
+        // Still a ScrollView so pull-to-refresh survives: the old spinner replaced
+        // the whole list, leaving a stuck feed no way out but a relaunch (PLA-15).
+        <ScrollView
+          style={styles.list}
+          contentContainerStyle={styles.errorContent}
+          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} />}
+        >
+          <ErrorState {...errorCopy(error)} onRetry={() => refetch()} testID="feed-error" />
+        </ScrollView>
       ) : (
         <ScrollView
           style={styles.list}
@@ -547,6 +559,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingBottom: 120,
     gap: spacing.lg,
+  },
+  errorContent: {
+    flexGrow: 1,
+    paddingBottom: 120,
   },
   // 19e cancellation notice: stone, not red — it's news, not an alarm
   notices: {

@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Slot, useRouter, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, AppState, AppStateStatus } from 'react-native';
 import * as Notifications from 'expo-notifications';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import {
@@ -18,12 +18,31 @@ import {
 } from '@expo-google-fonts/instrument-sans';
 import { supabase } from '../lib/supabase';
 import { initNotificationPresentation, registerPushToken } from '../lib/push';
+import { retryQuery } from '../lib/queryErrors';
 import { useAuthStore } from '../stores/authStore';
 import { COLORS } from '../constants/colors';
 
 SplashScreen.preventAutoHideAsync();
 
-const queryClient = new QueryClient();
+// react-query's default focus tracking is web-only, so returning to the app
+// never kicked a stale or stuck query (PLA-15). AppState is the RN equivalent.
+focusManager.setEventListener((handleFocus) => {
+  const subscription = AppState.addEventListener('change', (status: AppStateStatus) => {
+    handleFocus(status === 'active');
+  });
+  return () => subscription.remove();
+});
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: retryQuery,
+      // Coming back from the background is the moment a hung request most needs
+      // replacing, so refetch even if the data isn't stale yet.
+      refetchOnWindowFocus: 'always',
+    },
+  },
+});
 
 function InitialLayout() {
   const { session, isLoading, setSession, setIsLoading, setProfile } = useAuthStore();

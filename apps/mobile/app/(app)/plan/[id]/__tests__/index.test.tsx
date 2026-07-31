@@ -11,12 +11,13 @@ jest.mock('../../../../../lib/supabase', () => ({
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
+const mockBack = jest.fn();
 let mockCanGoBack = true;
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ id: 'plan-1' }),
   useRouter: () => ({
     push: mockPush,
-    back: jest.fn(),
+    back: mockBack,
     replace: mockReplace,
     canGoBack: () => mockCanGoBack,
   }),
@@ -448,5 +449,61 @@ describe('PlanDetailScreen — endings', () => {
 
     await waitFor(() => expect(screen.getByText("It's on")).toBeTruthy());
     expect(screen.queryByText("Didn't happen")).toBeNull();
+  });
+});
+
+// PLA-19: an unknown or RLS-hidden plan used to spin forever. `.single()` throws
+// PGRST116, the query settles with no data, and the guard had no error branch.
+describe('PlanDetailScreen — a plan you cannot see', () => {
+  const notFound = {
+    code: 'PGRST116',
+    message: 'JSON object requested, multiple (or no) rows returned',
+  };
+
+  function primeMissing(planResult: unknown) {
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'plans') return chain(planResult);
+      return chain({ data: [], error: null });
+    });
+    mockRpc.mockResolvedValue({ data: {}, error: null });
+  }
+
+  it('says so instead of spinning forever', async () => {
+    primeMissing({ data: null, error: notFound });
+    await renderDetail();
+
+    await waitFor(() => expect(screen.getByTestId('plan-error')).toBeTruthy());
+    expect(screen.getByText("This plan isn't here")).toBeTruthy();
+    expect(screen.queryByTestId('plan-error-retry')).toBeNull();
+  });
+
+  it('offers a way back when there is a screen behind it', async () => {
+    mockCanGoBack = true;
+    primeMissing({ data: null, error: notFound });
+    await renderDetail();
+
+    await waitFor(() => expect(screen.getByTestId('plan-error-back')).toBeTruthy());
+    await fireEvent.press(screen.getByTestId('plan-error-back'));
+    expect(mockBack).toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('sends a cold deep link to the feed, since there is nothing to go back to', async () => {
+    mockCanGoBack = false;
+    primeMissing({ data: null, error: notFound });
+    await renderDetail();
+
+    await waitFor(() => expect(screen.getByTestId('plan-error-back')).toBeTruthy());
+    await fireEvent.press(screen.getByTestId('plan-error-back'));
+    expect(mockReplace).toHaveBeenCalledWith('/(app)/(tabs)');
+    expect(mockBack).not.toHaveBeenCalled();
+  });
+
+  it('offers a retry when the fetch failed rather than came back empty', async () => {
+    primeMissing({ data: null, error: new Error('Failed to reach Supabase at https://x/') });
+    await renderDetail();
+
+    await waitFor(() => expect(screen.getByText("Couldn't reach Planazo")).toBeTruthy());
+    expect(screen.getByTestId('plan-error-retry')).toBeTruthy();
   });
 });

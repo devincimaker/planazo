@@ -334,3 +334,32 @@ describe('FeedScreen', () => {
     expect(screen.queryByText('Called off')).toBeNull();
   });
 });
+
+// PLA-15: the spinner replaced the whole list, so a query that never settled
+// left no error, no empty state, and no reachable pull-to-refresh.
+describe('FeedScreen — when the feed cannot load', () => {
+  it('shows a reason and a retry instead of spinning forever', async () => {
+    mockFrom.mockImplementation(() =>
+      chain({ data: null, error: new Error('Failed to reach Supabase at https://x/') })
+    );
+    await renderFeed();
+
+    await waitFor(() => expect(screen.getByTestId('feed-error')).toBeTruthy());
+    expect(screen.getByText("Couldn't reach Planazo")).toBeTruthy();
+    expect(screen.getByTestId('feed-error-retry')).toBeTruthy();
+  });
+
+  it('recovers when the retry succeeds', async () => {
+    mockFrom.mockImplementation(() =>
+      chain({ data: null, error: new Error('Failed to reach Supabase at https://x/') })
+    );
+    await renderFeed();
+    await waitFor(() => expect(screen.getByTestId('feed-error')).toBeTruthy());
+
+    primeSupabase([fixedOpen]);
+    await fireEvent.press(screen.getByTestId('feed-error-retry'));
+
+    await waitFor(() => expect(screen.getByText('Padel + pizza')).toBeTruthy());
+    expect(screen.queryByTestId('feed-error')).toBeNull();
+  });
+});
