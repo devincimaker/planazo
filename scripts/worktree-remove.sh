@@ -68,17 +68,41 @@ if [ -n "$port" ]; then
   esac
 fi
 
-# Delete the branch DB before the worktree, so a failure here still leaves the
-# ledger on disk to retry from.
+# Delete the branch DB before the worktree, and STOP if it does not work.
+# .env.worktree is the only record of which branch belongs to this worktree, and
+# `git worktree remove` deletes it — so carrying on past a failed delete destroys
+# the retry information and leaves a branch billing that nothing points at any
+# more. Printing the manual command is not enough when the next line removes the
+# evidence.
 # Keyed on the branch NAME, not the mode: a setup interrupted mid-downgrade can
 # leave mode=shared while the branch still exists and bills.
 if [ -n "$branch_name" ]; then
   wt_step "Deleting Supabase branch '$branch_name'"
+  deleted=""
   if supabase branches delete "$branch_name" --project-ref "$WT_PROJECT_REF" --yes 2>/dev/null; then
+    deleted=1
     wt_info "deleted (billing stops)"
+  elif ! wt_branch_exists "$branch_name"; then
+    # Already gone — deleted by hand, or by an earlier wt:rm that died later on.
+    deleted=1
+    wt_info "already gone — nothing is billing"
+  fi
+
+  if [ -n "$deleted" ]; then
+    # Clear the ledger before anything destructive, so a failure further down
+    # cannot send the next run chasing a branch that no longer exists.
+    wt_upsert_env "$metadata" "PLANAZO_BRANCH_NAME" ""
+    wt_upsert_env "$metadata" "PLANAZO_BRANCH_REF" ""
   else
-    wt_info "FAILED — delete it yourself or it keeps billing:"
-    wt_info "  supabase branches delete $branch_name --project-ref $WT_PROJECT_REF"
+    wt_die "Could not delete branch '$branch_name', and it still exists.
+
+Stopping before the worktree is removed — $metadata is the only
+record of this branch, and removing the worktree would take it with it.
+
+  supabase branches delete $branch_name --project-ref $WT_PROJECT_REF
+
+Then re-run wt:rm. If you are certain the branch is gone, clear
+PLANAZO_BRANCH_NAME in that file first."
   fi
 fi
 

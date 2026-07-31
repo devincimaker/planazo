@@ -71,10 +71,21 @@ previous_branch_name=$(wt_read_value "$metadata" "PLANAZO_BRANCH_NAME" 2>/dev/nu
 wt_upsert_env "$metadata" "PLANAZO_SLUG" "$slug"
 wt_upsert_env "$metadata" "PLANAZO_METRO_PORT" "$metro_port"
 wt_upsert_env "$metadata" "PLANAZO_SIM_NAME" "$sim_name"
-# PLANAZO_DB_MODE is deliberately NOT claimed here. Writing shared before the
-# old branch is actually deleted would, if interrupted in between, leave a
-# billable branch that wt:rm skips. Teardown keys off PLANAZO_BRANCH_NAME
-# instead, and the mode is recorded at the end once it is true.
+
+# The mode is claimed here too, but only when it is safe to claim early.
+#
+#   branch: MUST be written now. Provisioning, migrations and seeding all come
+#   later and all can fail, and the recovery path is "re-run wt:setup". With no
+#   mode on disk that re-run reads nothing, defaults to shared, and deletes the
+#   branch it just spent minutes creating — silently putting the worktree on
+#   main's database, which is the one outcome --db exists to prevent.
+#
+#   shared: only when there is no branch to lose. Writing shared while a branch
+#   still exists, then dying before the delete, would leave it billing with the
+#   ledger claiming otherwise.
+if [ "$db_mode" = "branch" ] || [ -z "$previous_branch_name" ]; then
+  wt_upsert_env "$metadata" "PLANAZO_DB_MODE" "$db_mode"
+fi
 
 # --- env files ---------------------------------------------------------------
 # Gitignored, so git does not carry them into a new worktree. Seed from the

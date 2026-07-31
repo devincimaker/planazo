@@ -65,6 +65,8 @@ fi
 if ! "$SCRIPT_DIR/worktree-setup.sh" "$target" ${db_flag:+"$db_flag"}; then
   echo >&2
   echo "The worktree was created but setup did not finish." >&2
-  echo "Fix the problem above, then re-run:  pnpm wt:setup $target" >&2
+  # Carry the flag into the retry. Dropping it would make the recovery command
+  # mean something different from what was asked for.
+  echo "Fix the problem above, then re-run:  pnpm wt:setup $target${db_flag:+ $db_flag}" >&2
   exit 1
 fi

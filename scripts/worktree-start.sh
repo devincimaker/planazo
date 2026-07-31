@@ -36,12 +36,37 @@ db_mode=$(wt_read_value "$metadata" "PLANAZO_DB_MODE")
 # before the work starts, so by the time migrations exist the guess was wrong,
 # and the fix is one command.
 if [ "$db_mode" = "shared" ]; then
-  changed=$(git -C "$target" status --porcelain -- supabase/migrations | wc -l | tr -d ' ')
-  if [ "$changed" != "0" ]; then
-    git -C "$target" status --short -- supabase/migrations
-    wt_die "This worktree shares main's local database, but has $changed uncommitted
-change(s) under supabase/migrations/. Applying them would change main's schema
-and every other shared worktree's with it.
+  uncommitted=$(git -C "$target" status --porcelain -- supabase/migrations | wc -l | tr -d ' ')
+
+  # Committed migrations count too, and are the likelier case: work a day on a
+  # schema change, commit it, and the worktree is clean again. `git status`
+  # alone would wave it straight through to main's database. Compare against the
+  # point this branch left its base instead.
+  committed=0
+  base_ref=""
+  merge_base=""
+  for candidate in origin/main main; do
+    if git -C "$target" rev-parse --verify --quiet "$candidate" >/dev/null 2>&1; then
+      base_ref=$candidate
+      break
+    fi
+  done
+  if [ -n "$base_ref" ]; then
+    merge_base=$(git -C "$target" merge-base "$base_ref" HEAD 2>/dev/null || true)
+    if [ -n "$merge_base" ]; then
+      committed=$(git -C "$target" diff --name-only "$merge_base" HEAD -- supabase/migrations \
+        | wc -l | tr -d ' ')
+    fi
+  fi
+
+  if [ "$uncommitted" != "0" ] || [ "$committed" != "0" ]; then
+    [ "$uncommitted" != "0" ] && git -C "$target" status --short -- supabase/migrations
+    [ "$committed" != "0" ] && git -C "$target" diff --name-only "$merge_base" HEAD -- supabase/migrations \
+      | sed 's/^/  committed  /'
+    wt_die "This worktree shares main's local database, but has $uncommitted uncommitted
+and $committed committed change(s) under supabase/migrations/ (vs $base_ref).
+Applying them would change main's schema and every other shared worktree's
+with it.
 
 Give this branch its own database:  pnpm wt:setup --db
 Or, if these changes are not yours to keep, revert them and start again."
