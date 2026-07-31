@@ -1,3 +1,46 @@
+## Linear Integration
+
+- **Workspace**: fioris
+- **Team**: Planazo
+- **Project URL**: https://linear.app/fioris/team/PLA/all
+- **Issue Identifier**: PLA
+
+## Worktrees
+
+Work can happen in the main checkout **or** in an isolated worktree. Both are
+first-class — main is deliberately *not* managed by the `wt:*` tooling, so it
+stays the simple single-threaded path.
+
+```bash
+pnpm wt:new pla-17          # new worktree, shares main's local DB (UI/JS work)
+pnpm wt:new pla-17 --db     # ...with its own hosted Supabase branch database
+pnpm wt:setup --db          # give an existing worktree its own DB, mid-work
+pnpm wt:start               # boot its simulator + Metro, connect the app
+pnpm wt:list                # every worktree's slot, plus orphaned branch DBs
+pnpm wt:rm pla-17           # delete branch DB + simulator + worktree
+```
+
+Worktrees live in `../planazo-worktrees/<slug>`. Each owns exactly three things,
+recorded in its gitignored `.env.worktree`: a **Metro port**, a **simulator**,
+and a **database** (`PLANAZO_DB_MODE` = `shared` or `branch`).
+
+**Rules for any session working inside a worktree:**
+
+- Read `.env.worktree` and `apps/mobile/.env` to learn *your* simulator, Metro
+  port, and database. Never assume main's.
+- **Never touch another worktree's simulator, Metro port, or branch database**,
+  and never kill a Metro you did not start. Check `pnpm wt:list` first.
+- **Do not run `supabase start` / `db reset` from a worktree.** `config.toml` is
+  tracked with a fixed `project_id`, so a worktree attaches to *main's* stack —
+  a reset there wipes main's data and every other shared-mode worktree's.
+- If `PLANAZO_DB_MODE=shared`, your database **is main's**. Editing
+  `supabase/migrations/` changes main's schema. Run `pnpm wt:setup --db` first.
+- Integration tests (`packages/integration-tests`) run from **main** or in CI.
+  They hard-refuse non-loopback URLs, so they can never target a branch DB.
+- No native rebuild is needed for JS-only work: the Dev Client is a generic
+  shell and `EXPO_PUBLIC_*` is inlined by Metro at bundle time. Rebuild only
+  when `app.json` or the native dependency set changes.
+
 ### iOS Simulator
 
 **CRITICAL:** Always use the simulator specified in `apps/mobile/.env` (`IOS_SIMULATOR`). Never use a different simulator, even if:
