@@ -1,6 +1,7 @@
 import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
+import { createTimeoutFetch } from './timeoutFetch';
 
 function getRequiredEnv(name: 'EXPO_PUBLIC_SUPABASE_URL' | 'EXPO_PUBLIC_SUPABASE_ANON_KEY') {
   const value = process.env[name]?.trim();
@@ -13,23 +14,7 @@ function getRequiredEnv(name: 'EXPO_PUBLIC_SUPABASE_URL' | 'EXPO_PUBLIC_SUPABASE
 const supabaseUrl = getRequiredEnv('EXPO_PUBLIC_SUPABASE_URL').replace(/\/+$/, '');
 const supabaseAnonKey = getRequiredEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY');
 
-const supabaseFetch: typeof fetch = async (input, init) => {
-  try {
-    return await fetch(input, init);
-  } catch (error) {
-    const target =
-      typeof input === 'string'
-        ? input
-        : input instanceof URL
-          ? input.toString()
-          : input.url;
-
-    const message = error instanceof Error ? error.message : 'Unknown network error';
-    throw new Error(
-      `Failed to reach Supabase at ${target}. Check EXPO_PUBLIC_SUPABASE_URL and that the host resolves from the simulator. Original error: ${message}`
-    );
-  }
-};
+const supabaseFetch = createTimeoutFetch();
 
 const ExpoSecureStoreAdapter = {
   getItem: (key: string) => {

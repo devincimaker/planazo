@@ -12,7 +12,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../../../lib/supabase';
 import { useAuthStore } from '../../../../stores/authStore';
-import { ThemedText, Card, Avatar } from '../../../../components/ui';
+import { errorCopy, isNotFoundError } from '../../../../lib/queryErrors';
+import { ThemedText, Card, Avatar, ErrorState } from '../../../../components/ui';
 import { colors, fonts, radii, spacing } from '../../../../theme/tokens';
 
 export default function ManageGroupScreen() {
@@ -21,7 +22,7 @@ export default function ManageGroupScreen() {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
 
-  const { data: group, isLoading } = useQuery({
+  const { data: group, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['group-manage', id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -104,6 +105,30 @@ export default function ManageGroupScreen() {
     },
     onError: (error: Error) => Alert.alert('Error', error.message),
   });
+
+  if (!isLoading && (isError || !group)) {
+    const notFound = !id || isNotFoundError(error);
+    const copy = notFound
+      ? {
+          title: "This group isn't here",
+          body: "It was deleted, or you've been removed from it.",
+        }
+      : errorCopy(error);
+
+    return (
+      <SafeAreaView style={styles.screen} edges={['top']}>
+        <ErrorState
+          title={copy.title}
+          body={copy.body}
+          onRetry={notFound ? undefined : () => refetch()}
+          onBack={() =>
+            router.canGoBack() ? router.back() : router.replace('/(app)/(tabs)/groups')
+          }
+          testID="group-manage-error"
+        />
+      </SafeAreaView>
+    );
+  }
 
   if (isLoading || !group) {
     return (

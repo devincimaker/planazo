@@ -17,7 +17,16 @@ import { supabase } from '../../../lib/supabase';
 import { useAuthStore } from '../../../stores/authStore';
 import { usePendingInvites } from '../../../lib/usePendingInvites';
 import { useFriends } from '../../../lib/useFriends';
-import { ThemedText, Card, Button, Avatar, AvatarStack, GroupTile } from '../../../components/ui';
+import { errorCopy } from '../../../lib/queryErrors';
+import {
+  ThemedText,
+  Card,
+  Button,
+  Avatar,
+  AvatarStack,
+  GroupTile,
+  ErrorState,
+} from '../../../components/ui';
 import { colors, fonts, radii, spacing, groupColors } from '../../../theme/tokens';
 
 /** Invite codes travel as links; accept a raw code or anything containing one. */
@@ -42,7 +51,7 @@ export default function GroupsScreen() {
   const { groupInvites, friendRequests, count: inviteCount } = usePendingInvites();
   const { friends } = useFriends();
 
-  const { data: rows, isLoading, refetch, isRefetching } = useQuery({
+  const { data: rows, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ['groups', user?.id],
     queryFn: async (): Promise<GroupRow[]> => {
       const { data: memberships, error } = await supabase
@@ -169,6 +178,14 @@ export default function GroupsScreen() {
         <View style={styles.loading}>
           <ActivityIndicator size="large" color={colors.accent} />
         </View>
+      ) : isError ? (
+        <ScrollView
+          style={styles.list}
+          contentContainerStyle={styles.errorContent}
+          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} />}
+        >
+          <ErrorState {...errorCopy(error)} onRetry={() => refetch()} testID="groups-error" />
+        </ScrollView>
       ) : !hasGroups ? (
         // 16a: two ways in, and they're not equal — the link field is real,
         // creating is second, and the header pill stays gone.
@@ -442,6 +459,10 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  errorContent: {
+    flexGrow: 1,
+    paddingBottom: 120,
   },
   list: {
     flex: 1,

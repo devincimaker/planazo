@@ -12,4 +12,5 @@ export { DateOptionRow } from './DateOptionRow';
 export { AnswerFooter } from './AnswerFooter';
 export { ListRow } from './ListRow';
 export { EmptyState } from './EmptyState';
+export { ErrorState } from './ErrorState';
 export { ToastHost, showToast } from './Toast';
