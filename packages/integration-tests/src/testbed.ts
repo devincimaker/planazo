@@ -55,36 +55,55 @@ export class TestBed {
     return user;
   }
 
-  /** Creates a group the way the app does: owner inserts the row, then their own admin membership. */
+  /**
+   * Registers a group this bed did not create for teardown. Tests that call
+   * create_group directly need this: dispose() must drop the group before the
+   * creator's profile, which groups.created_by still points at.
+   */
+  trackGroup(id: string) {
+    this.groupIds.push(id);
+  }
+
+  /** Creates a group the way the app does: one create_group call that also seats the owner as admin. */
   async createGroup(owner: TestUser, opts: { name?: string; anyone_can_post?: boolean } = {}) {
     const group = ok(
-      await owner.client
-        .from('groups')
-        .insert({
-          name: opts.name ?? `it-group-${randomUUID().slice(0, 8)}`,
-          invite_code: inviteCode(),
-          created_by: owner.id,
-          anyone_can_post: opts.anyone_can_post ?? true,
-        })
-        .select()
-        .single(),
+      await owner.client.rpc('create_group', {
+        p_name: opts.name ?? `it-group-${randomUUID().slice(0, 8)}`,
+      }),
     );
     this.groupIds.push(group.id);
-    ok(
-      await owner.client
-        .from('group_members')
-        .insert({ group_id: group.id, user_id: owner.id, role: 'admin' }),
-    );
+    // anyone_can_post is not a create_group argument — the app sets it later
+    // from the manage screen, and so do we.
+    if (opts.anyone_can_post === false) {
+      ok(await owner.client.from('groups').update({ anyone_can_post: false }).eq('id', group.id));
+    }
     return group;
   }
 
-  /** Joins via direct membership insert — the invite-code path the app uses after get_group_by_invite_code. */
+  /**
+   * Joins by invite code — the real app path (PLA-35), so every test's setup
+   * exercises it. `role` exists only for the rare fixture that needs a second
+   * admin: no client path can grant that, so it goes through the service role.
+   */
   async join(groupId: string, user: TestUser, role: 'admin' | 'member' = 'member') {
-    ok(
-      await user.client
-        .from('group_members')
-        .insert({ group_id: groupId, user_id: user.id, role }),
+    if (role === 'admin') {
+      ok(
+        await this.service
+          .from('group_members')
+          .insert({ group_id: groupId, user_id: user.id, role: 'admin' }),
+      );
+      return;
+    }
+
+    const { invite_code } = ok(
+      await this.service.from('groups').select('invite_code').eq('id', groupId).single(),
     );
+    const res = ok(await user.client.rpc('join_group_by_invite_code', { p_code: invite_code })) as {
+      status: string;
+    };
+    if (res.status !== 'joined') {
+      throw new Error(`join_group_by_invite_code returned ${res.status} for ${user.email}`);
+    }
   }
 
   /** Deletes everything this bed created. Groups first: profiles can't go while groups.created_by points at them. */
@@ -96,11 +115,6 @@ export class TestBed {
       await this.service.auth.admin.deleteUser(u.id);
     }
   }
-}
-
-function inviteCode(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  return Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 }
 
 /** ISO timestamp `days` from now (positive = future). */

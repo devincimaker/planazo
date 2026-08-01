@@ -60,6 +60,137 @@ describe('groups and memberships', () => {
   });
 });
 
+// PLA-35: group_members INSERT used to be WITH CHECK (auth.uid() = user_id) —
+// "the row is about you" and nothing more. Knowing a group UUID was enough to
+// walk in, and `role` was whatever you typed. These pin the replacement: no
+// INSERT policy at all, and three SECURITY DEFINER functions that pick the
+// role themselves.
+describe('group_members INSERT is server-side only', () => {
+  it('an outsider cannot insert themselves into a group they know the id of', async () => {
+    const denied = await outsider.client
+      .from('group_members')
+      .insert({ group_id: group.id, user_id: outsider.id, role: 'member' });
+    expect(denied.error?.message).toMatch(/row-level security/);
+
+    // Still not a member, by the service role's unfiltered view.
+    expect(
+      ok(
+        await bed.service
+          .from('group_members')
+          .select('id')
+          .eq('group_id', group.id)
+          .eq('user_id', outsider.id),
+      ),
+    ).toEqual([]);
+  });
+
+  it('a member cannot promote themselves by inserting a second admin row', async () => {
+    const denied = await member.client
+      .from('group_members')
+      .insert({ group_id: group.id, user_id: member.id, role: 'admin' });
+    expect(denied.error?.message).toMatch(/row-level security/);
+
+    const roles = ok(
+      await bed.service
+        .from('group_members')
+        .select('role')
+        .eq('group_id', group.id)
+        .eq('user_id', member.id),
+    );
+    expect(roles).toEqual([{ role: 'member' }]);
+  });
+
+  it('a client cannot create a group row directly either', async () => {
+    const denied = await outsider.client.from('groups').insert({
+      name: 'Orphan by hand',
+      invite_code: 'ZZZZ2345',
+      created_by: outsider.id,
+    });
+    expect(denied.error?.message).toMatch(/row-level security/);
+  });
+});
+
+describe('create_group and join_group_by_invite_code', () => {
+  it('create_group seats the caller as the sole admin, atomically', async () => {
+    const created = ok(
+      await outsider.client.rpc('create_group', {
+        p_name: '  Rls Created Group  ',
+        p_description: '  from the rpc  ',
+      }),
+    );
+    bed.trackGroup(created.id);
+
+    expect(created.name).toBe('Rls Created Group');
+    expect(created.description).toBe('from the rpc');
+    expect(created.created_by).toBe(outsider.id);
+    expect(created.invite_code).toMatch(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/);
+    // No colour passed: the server falls back to the same hash the app uses.
+    expect(created.color).toMatch(/^#[0-9A-F]{6}$/i);
+
+    const members = ok(
+      await outsider.client.from('group_members').select('user_id, role').eq('group_id', created.id),
+    );
+    expect(members).toEqual([{ user_id: outsider.id, role: 'admin' }]);
+  });
+
+  it('create_group refuses a blank name', async () => {
+    const denied = await outsider.client.rpc('create_group', { p_name: '   ' });
+    expect(denied.error?.message).toMatch(/A group needs a name/);
+  });
+
+  it('joining by code always lands as member, never admin', async () => {
+    const created = ok(await owner.client.rpc('create_group', { p_name: 'Rls Join Target' }));
+    bed.trackGroup(created.id);
+
+    // Lower-cased and padded, the way a pasted code arrives.
+    const joined = ok(
+      await outsider.client.rpc('join_group_by_invite_code', {
+        p_code: `  ${created.invite_code.toLowerCase()} `,
+      }),
+    ) as { status: string; group_id: string; name: string };
+    expect(joined).toEqual({
+      status: 'joined',
+      group_id: created.id,
+      name: 'Rls Join Target',
+    });
+
+    const mine = ok(
+      await outsider.client
+        .from('group_members')
+        .select('role')
+        .eq('group_id', created.id)
+        .eq('user_id', outsider.id)
+        .single(),
+    );
+    expect(mine.role).toBe('member');
+  });
+
+  it('a bad code and a second join report themselves instead of throwing', async () => {
+    const created = ok(await owner.client.rpc('create_group', { p_name: 'Rls Rejoin Target' }));
+    bed.trackGroup(created.id);
+
+    expect(
+      ok(await outsider.client.rpc('join_group_by_invite_code', { p_code: 'NOTACODE' })),
+    ).toEqual({ status: 'not_found' });
+
+    ok(await outsider.client.rpc('join_group_by_invite_code', { p_code: created.invite_code }));
+    expect(
+      ok(await outsider.client.rpc('join_group_by_invite_code', { p_code: created.invite_code })),
+    ).toEqual({ status: 'already_member', group_id: created.id, name: 'Rls Rejoin Target' });
+
+    // And the repeat did not mint a duplicate row.
+    expect(
+      ok(
+        await bed.service
+          .from('group_members')
+          .select('id')
+          .eq('group_id', created.id)
+          .eq('user_id', outsider.id),
+      ),
+    ).toHaveLength(1);
+  });
+});
+
 describe('plans', () => {
   it('members can read plans, outsiders cannot', async () => {
     expect(ok(await member.client.from('plans').select('id').eq('id', planId))).toHaveLength(1);

@@ -41,33 +41,27 @@ const FRIENDSHIPS = [
   },
 ];
 
-let groupInsert: jest.Mock;
-let memberInsert: jest.Mock;
-
 function primeSupabase() {
-  mockFrom.mockImplementation((table: string) => {
+  mockFrom.mockImplementation(() => {
     const c: any = {};
-    ['select', 'eq', 'or', 'single'].forEach((m) => {
+    ['select', 'eq', 'or', 'single', 'insert'].forEach((m) => {
       c[m] = jest.fn(() => c);
     });
-    let inserted = false;
-    c.insert = jest.fn(() => {
-      inserted = true;
-      return c;
-    });
-    if (table === 'groups') groupInsert = c.insert;
-    if (table === 'group_members') memberInsert = c.insert;
-    c.then = (resolve: (v: unknown) => void) => {
-      const result =
-        table === 'friendships'
-          ? { data: FRIENDSHIPS, error: null }
-          : table === 'groups' && inserted
-            ? { data: { id: 'g-new' }, error: null }
-            : { data: null, error: null };
-      return Promise.resolve(result).then(resolve);
-    };
+    c.then = (resolve: (v: unknown) => void) =>
+      Promise.resolve({ data: FRIENDSHIPS, error: null }).then(resolve);
     return c;
   });
+}
+
+/** create_group returns the group row; invite_to_group returns a status. */
+function primeRpc() {
+  mockRpc.mockImplementation((fn: string) =>
+    Promise.resolve(
+      fn === 'create_group'
+        ? { data: { id: 'g-new', name: 'Padel Dilluns' }, error: null }
+        : { data: { status: 'invited' }, error: null }
+    )
+  );
 }
 
 async function renderNew() {
@@ -83,7 +77,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockParams = {};
   primeSupabase();
-  mockRpc.mockResolvedValue({ data: { status: 'invited' }, error: null });
+  primeRpc();
   useAuthStore.setState({
     user: { id: 'me' } as any,
     profile: ME as any,
@@ -118,12 +112,13 @@ describe('NewGroupScreen', () => {
     await fireEvent.press(screen.getByText('Create and invite 2'));
 
     await waitFor(() => expect(mockBack).toHaveBeenCalled());
-    expect(groupInsert).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'Padel Dilluns', created_by: 'me' })
+    // PLA-35: one server-side call replaces the group + membership inserts,
+    // and the client no longer names itself as creator or picks the role.
+    expect(mockRpc).toHaveBeenCalledWith(
+      'create_group',
+      expect.objectContaining({ p_name: 'Padel Dilluns' })
     );
-    expect(memberInsert).toHaveBeenCalledWith(
-      expect.objectContaining({ group_id: 'g-new', user_id: 'me', role: 'admin' })
-    );
+    expect(mockFrom).not.toHaveBeenCalledWith('group_members');
     expect(mockRpc).toHaveBeenCalledWith('invite_to_group', {
       p_group_id: 'g-new',
       p_invitee: 'f1',
@@ -152,6 +147,9 @@ describe('NewGroupScreen', () => {
     await fireEvent.press(screen.getByText('Create group'));
 
     await waitFor(() => expect(mockBack).toHaveBeenCalled());
-    expect(groupInsert).toHaveBeenCalledWith(expect.objectContaining({ color: '#F6C453' }));
+    expect(mockRpc).toHaveBeenCalledWith(
+      'create_group',
+      expect.objectContaining({ p_color: '#F6C453' })
+    );
   });
 });
