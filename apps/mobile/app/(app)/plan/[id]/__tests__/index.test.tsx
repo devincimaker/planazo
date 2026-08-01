@@ -383,8 +383,42 @@ describe('PlanDetailScreen — flexible plans', () => {
         { onConflict: 'plan_id,user_id,date_option_id' }
       )
     );
-    // Sending dates supersedes the standing "no"
+    // Sending dates supersedes the standing "no" — scoped so the server
+    // decides, and only ever clears a decline
     await waitFor(() => expect(rsvpsChain.delete).toHaveBeenCalled());
+    expect(rsvpsChain.eq).toHaveBeenCalledWith('response', 'no');
+    // The whole mutation succeeded — no error alert
+    await waitFor(() => expect(Alert.alert).not.toHaveBeenCalled());
+  });
+
+  // A reopened plan leaves seeded "yes" rows standing as held seats
+  // (see 20260731000001): a seat is only ever given up by withdrawing.
+  // Updating your date votes must not silently surrender it.
+  it('sending dates never touches a held "yes" — only a decline is superseded', async () => {
+    prime({
+      plan: { ...basePlan, plan_type: 'flexible', status: 'open', event_date: null },
+      options,
+      rsvps: [{ user_id: 'me', response: 'yes', profile: { display_name: 'Me' } }],
+      avail: [{ id: 'a1', date_option_id: 'd1', user_id: 'me', profile: { display_name: 'Me' } }],
+    });
+    await renderDetail();
+
+    await waitFor(() => expect(screen.getByText('You sent 1 date')).toBeTruthy());
+    await fireEvent.press(screen.getByTestId('vote-d2'));
+    await fireEvent.press(screen.getByText('Update your dates'));
+
+    await waitFor(() =>
+      expect(availChain.upsert).toHaveBeenCalledWith(
+        [
+          { plan_id: 'plan-1', user_id: 'me', date_option_id: 'd1', available: true },
+          { plan_id: 'plan-1', user_id: 'me', date_option_id: 'd2', available: true },
+        ],
+        { onConflict: 'plan_id,user_id,date_option_id' }
+      )
+    );
+    // The RSVP delete is scoped to response = 'no' — the "yes" seat survives
+    expect(rsvpsChain.eq).toHaveBeenCalledWith('response', 'no');
+    await waitFor(() => expect(Alert.alert).not.toHaveBeenCalled());
   });
 
   it('locked plans ask for a plain yes/no and offer the host a reopen', async () => {
