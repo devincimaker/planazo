@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, TextInput, TextInputProps, View } from 'react-native';
 import { ThemedText } from './ThemedText';
+import { LINK_HIT_SLOP } from '../../lib/a11y';
 import { colors, fonts, spacing } from '../../theme/tokens';
 
 interface FormFieldProps extends Omit<TextInputProps, 'style' | 'secureTextEntry'> {
@@ -24,11 +25,19 @@ export function FormField({ label, hint, secure = false, testID, ...rest }: Form
 
   return (
     <View style={styles.field}>
-      <ThemedText variant="sectionLabel">{label}</ThemedText>
+      {/* Decorative to a screen reader: the input below carries the same words
+          as its own accessibilityLabel, so leaving this visible to VoiceOver
+          would read the label twice and still leave the field unnamed. React
+          Native has no htmlFor — naming the input *is* the association. */}
+      <ThemedText variant="sectionLabel" accessibilityElementsHidden importantForAccessibility="no">
+        {label}
+      </ThemedText>
       <View style={[styles.inputWrap, focused && styles.inputWrapFocused]}>
         <TextInput
           {...rest}
           testID={testID}
+          accessibilityLabel={rest.accessibilityLabel ?? label}
+          accessibilityHint={rest.accessibilityHint ?? hint}
           secureTextEntry={secure && !revealed}
           placeholderTextColor={colors.textFaint}
           onFocus={(e) => {
@@ -45,11 +54,11 @@ export function FormField({ label, hint, secure = false, testID, ...rest }: Form
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={revealed ? 'Hide password' : 'Show password'}
-            hitSlop={10}
+            hitSlop={LINK_HIT_SLOP}
             onPress={() => setRevealed((v) => !v)}
             testID={testID ? `${testID}-reveal` : undefined}
           >
-            <ThemedText variant="caption" color={colors.accent}>
+            <ThemedText variant="caption" color={colors.accentText}>
               {revealed ? 'Hide' : 'Show'}
             </ThemedText>
           </Pressable>

@@ -52,6 +52,13 @@ export default function AppLayout() {
           getId={({ params }) => JSON.stringify(params ?? {})}
           options={{ presentation: 'modal', headerShown: false }}
         />
+        {/* getId: reporting a second thing must not reuse the first sheet's
+            params, the same trap plan/create and feedback hit. */}
+        <Stack.Screen
+          name="report"
+          getId={({ params }) => JSON.stringify(params ?? {})}
+          options={{ presentation: 'modal', headerShown: false }}
+        />
         <Stack.Screen name="plan/[id]" options={{ headerShown: false }} />
       </Stack>
       <ScreenshotFeedback />

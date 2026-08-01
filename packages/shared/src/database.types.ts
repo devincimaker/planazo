@@ -34,6 +34,54 @@ export type Database = {
   }
   public: {
     Tables: {
+      blocked_users: {
+        Row: {
+          blocked_id: string
+          blocker_id: string
+          created_at: string
+        }
+        Insert: {
+          blocked_id: string
+          blocker_id: string
+          created_at?: string
+        }
+        Update: {
+          blocked_id?: string
+          blocker_id?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      content_reports: {
+        Row: {
+          created_at: string
+          id: string
+          note: string
+          reason: string
+          reporter_id: string | null
+          subject_id: string
+          subject_type: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          note?: string
+          reason: string
+          reporter_id?: string | null
+          subject_id: string
+          subject_type: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          note?: string
+          reason?: string
+          reporter_id?: string | null
+          subject_id?: string
+          subject_type?: string
+        }
+        Relationships: []
+      }
       date_availability: {
         Row: {
           available: boolean
@@ -558,6 +606,7 @@ export type Database = {
           name: string
         }[]
       }
+      has_blocked: { Args: { p_target: string }; Returns: boolean }
       invite_to_group: {
         Args: { p_group_id: string; p_invitee: string }
         Returns: Json

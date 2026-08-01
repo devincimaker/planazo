@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link, useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
+import { LINK_HIT_SLOP, useAnnounce } from '../../lib/a11y';
 import { useAuthStore } from '../../stores/authStore';
 import { BrandMark, Button, FormField, ThemedText } from '../../components/ui';
 import { colors, fonts, spacing } from '../../theme/tokens';
@@ -21,6 +22,8 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useAnnounce(error);
 
   async function handleLogin() {
     if (!email.trim() || !password) {
@@ -111,8 +114,8 @@ export default function LoginScreen() {
 
               <View style={styles.forgotRow}>
                 <Link href="/(auth)/forgot" asChild>
-                  <Pressable accessibilityRole="button" hitSlop={8} testID="forgot-link">
-                    <ThemedText variant="caption" color={colors.accent}>
+                  <Pressable accessibilityRole="button" hitSlop={LINK_HIT_SLOP} testID="forgot-link">
+                    <ThemedText variant="caption" color={colors.accentText}>
                       Forgot your password?
                     </ThemedText>
                   </Pressable>
@@ -121,8 +124,13 @@ export default function LoginScreen() {
             </View>
 
             {error ? (
-              <View style={styles.errorBox} testID="login-error">
-                <ThemedText variant="bodyStrong" color={colors.accentPressed}>
+              <View
+                style={styles.errorBox}
+                accessibilityRole="alert"
+                accessibilityLiveRegion="assertive"
+                testID="login-error"
+              >
+                <ThemedText variant="bodyStrong" color={colors.accentText}>
                   {error}
                 </ThemedText>
               </View>
@@ -141,8 +149,8 @@ export default function LoginScreen() {
             <View style={styles.footer}>
               <ThemedText variant="sub">First time here?</ThemedText>
               <Link href="/(auth)/signup" asChild>
-                <Pressable accessibilityRole="button" hitSlop={8} testID="signup-link">
-                  <ThemedText variant="sub" color={colors.accent} style={styles.footerLink}>
+                <Pressable accessibilityRole="button" hitSlop={LINK_HIT_SLOP} testID="signup-link">
+                  <ThemedText variant="sub" color={colors.accentText} style={styles.footerLink}>
                     Make your account
                   </ThemedText>
                 </Pressable>

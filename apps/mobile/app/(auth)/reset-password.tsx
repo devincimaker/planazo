@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { supabase } from '../../lib/supabase';
+import { LINK_HIT_SLOP, useAnnounce } from '../../lib/a11y';
 import { Button, FormField, ThemedText } from '../../components/ui';
 import { colors, spacing } from '../../theme/tokens';
 
@@ -46,6 +47,8 @@ export default function ResetPasswordScreen() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  useAnnounce(error);
 
   useEffect(() => {
     if (!url) return;
@@ -146,12 +149,12 @@ export default function ResetPasswordScreen() {
               />
               <Pressable
                 accessibilityRole="button"
-                hitSlop={8}
+                hitSlop={LINK_HIT_SLOP}
                 onPress={() => router.replace('/(auth)/login')}
                 style={styles.quietAction}
                 testID="back-to-login"
               >
-                <ThemedText variant="caption" color={colors.accent}>
+                <ThemedText variant="caption" color={colors.accentText}>
                   Back to sign in
                 </ThemedText>
               </Pressable>
@@ -194,8 +197,13 @@ export default function ResetPasswordScreen() {
             </View>
 
             {error ? (
-              <View style={styles.errorBox} testID="reset-error">
-                <ThemedText variant="bodyStrong" color={colors.accentPressed}>
+              <View
+                style={styles.errorBox}
+                accessibilityRole="alert"
+                accessibilityLiveRegion="assertive"
+                testID="reset-error"
+              >
+                <ThemedText variant="bodyStrong" color={colors.accentText}>
                   {error}
                 </ThemedText>
               </View>

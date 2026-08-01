@@ -69,6 +69,16 @@ function InitialLayout() {
       if (isMounted) {
         setProfile(data);
       }
+
+      return data;
+    }
+
+    // Only register a token if the account still wants pushes. Turning "Notify
+    // me" off clears the token, and without this check the next launch — or any
+    // token-refresh event — would quietly write it back, so the preference
+    // would not survive a restart and the privacy policy would be wrong.
+    function registerIfWanted(userId: string, profile: { push_enabled?: boolean } | null) {
+      if (profile?.push_enabled) void registerPushToken(userId);
     }
 
     async function initialize() {
@@ -78,8 +88,7 @@ function InitialLayout() {
 
         setSession(session);
         if (session?.user) {
-          await syncProfile(session.user.id);
-          void registerPushToken(session.user.id);
+          registerIfWanted(session.user.id, await syncProfile(session.user.id));
         } else {
           setProfile(null);
         }
@@ -114,8 +123,7 @@ function InitialLayout() {
       }
 
       try {
-        await syncProfile(session.user.id);
-        void registerPushToken(session.user.id);
+        registerIfWanted(session.user.id, await syncProfile(session.user.id));
       } catch (error) {
         console.error(
           'Failed to load Supabase profile after auth change. Check EXPO_PUBLIC_SUPABASE_URL and that the host is reachable from the simulator.',

@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link, useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { supabase } from '../../lib/supabase';
+import { LINK_HIT_SLOP, useAnnounce } from '../../lib/a11y';
 import { Button, ConfirmCard, FormField, ThemedText } from '../../components/ui';
 import { colors, fonts, spacing } from '../../theme/tokens';
 
@@ -33,6 +34,8 @@ export default function ForgotPasswordScreen() {
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useAnnounce(error);
 
   async function sendLink(address: string) {
     const clean = address.trim().toLowerCase();
@@ -86,20 +89,25 @@ export default function ForgotPasswordScreen() {
             <Pressable
               accessibilityRole="button"
               disabled={loading}
-              hitSlop={8}
+              hitSlop={LINK_HIT_SLOP}
               onPress={() => sendLink(sentTo)}
               style={styles.resend}
               testID="resend"
             >
-              <ThemedText variant="caption" color={loading ? colors.textFaint : colors.accent}>
+              <ThemedText variant="caption" color={loading ? colors.textFaint : colors.accentText}>
                 {loading ? 'Sending…' : 'Send it again'}
               </ThemedText>
             </Pressable>
           </View>
 
           {error ? (
-            <View style={styles.errorBox} testID="forgot-error">
-              <ThemedText variant="bodyStrong" color={colors.accentPressed}>
+            <View
+              style={styles.errorBox}
+              accessibilityRole="alert"
+              accessibilityLiveRegion="assertive"
+              testID="forgot-error"
+            >
+              <ThemedText variant="bodyStrong" color={colors.accentText}>
                 {error}
               </ThemedText>
             </View>
@@ -114,7 +122,7 @@ export default function ForgotPasswordScreen() {
       <View style={styles.backRow}>
         <Pressable
           accessibilityRole="button"
-          hitSlop={10}
+          hitSlop={LINK_HIT_SLOP}
           onPress={() => router.back()}
           testID="back"
         >
@@ -157,8 +165,13 @@ export default function ForgotPasswordScreen() {
             </View>
 
             {error ? (
-              <View style={styles.errorBox} testID="forgot-error">
-                <ThemedText variant="bodyStrong" color={colors.accentPressed}>
+              <View
+                style={styles.errorBox}
+                accessibilityRole="alert"
+                accessibilityLiveRegion="assertive"
+                testID="forgot-error"
+              >
+                <ThemedText variant="bodyStrong" color={colors.accentText}>
                   {error}
                 </ThemedText>
               </View>
@@ -177,8 +190,8 @@ export default function ForgotPasswordScreen() {
             <View style={styles.footer}>
               <ThemedText variant="sub">Remembered it?</ThemedText>
               <Link href="/(auth)/login" asChild>
-                <Pressable accessibilityRole="button" hitSlop={8} testID="login-link">
-                  <ThemedText variant="sub" color={colors.accent} style={styles.footerLink}>
+                <Pressable accessibilityRole="button" hitSlop={LINK_HIT_SLOP} testID="login-link">
+                  <ThemedText variant="sub" color={colors.accentText} style={styles.footerLink}>
                     Sign in
                   </ThemedText>
                 </Pressable>

@@ -1,9 +1,10 @@
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Constants from 'expo-constants';
 import { supabase } from '../../../lib/supabase';
+import { PRIVACY_URL, SUPPORT_URL, TERMS_URL } from '../../../lib/links';
 import { clearPushToken, registerPushToken } from '../../../lib/push';
 import { purgeOwnedFiles } from '../../../lib/storage';
 import { useAuthStore } from '../../../stores/authStore';
@@ -99,7 +100,18 @@ export default function ProfileSheet() {
       // Files first, while this session is still the owner RLS recognises.
       // The database cannot reach Storage, so if this does not happen here it
       // does not happen at all — and the avatars bucket is public.
-      if (user) await purgeOwnedFiles(user.id);
+      if (user) {
+        const { failed } = await purgeOwnedFiles(user.id);
+        // Stop rather than delete around it. Once the account is gone nobody
+        // can sign in as this user again, so a file left behind is left for
+        // good — a public avatar URL that outlives the account it belonged to.
+        // Better to fail loudly and let them try again in a moment.
+        if (failed.length) {
+          throw new Error(
+            "Your photos couldn't be removed just now, and deleting the account would leave them online for good. Check your connection and try again.",
+          );
+        }
+      }
 
       const { error } = await supabase.rpc('delete_my_account');
       if (error) throw error;
@@ -120,7 +132,7 @@ export default function ProfileSheet() {
   const confirmDelete = () => {
     Alert.alert(
       'Delete your account?',
-      'Your profile, your photo and every answer you gave go for good. Groups you started pass to whoever has been in them longest.',
+      'Your profile, your photo and every answer you gave go for good. Groups you started pass to someone already in them — an admin if there is one.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -137,6 +149,12 @@ export default function ProfileSheet() {
             ]),
         },
       ],
+    );
+  };
+
+  const openLink = (url: string) => {
+    Linking.openURL(url).catch(() =>
+      Alert.alert("Couldn't open that", 'Check your connection and try again.'),
     );
   };
 
@@ -236,6 +254,29 @@ export default function ProfileSheet() {
             ›
           </ThemedText>
         </Pressable>
+
+        {/* Guideline 5.1.1(i) wants the privacy policy reachable from inside
+            the app, not only from the store listing. The terms row is where
+            the objectionable-content rules live, which 1.2 asks for. */}
+        <Card padded={false}>
+          <ListRow
+            title="Privacy policy"
+            onPress={() => openLink(PRIVACY_URL)}
+            testID="privacy-link"
+          />
+          <ListRow
+            title="Terms of use"
+            divider
+            onPress={() => openLink(TERMS_URL)}
+            testID="terms-link"
+          />
+          <ListRow
+            title="Help & support"
+            divider
+            onPress={() => openLink(SUPPORT_URL)}
+            testID="support-link"
+          />
+        </Card>
 
         {/* Deliberately down here rather than beside "Sign out": the two read
             alike in a hurry, and only one of them is recoverable. */}

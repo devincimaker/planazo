@@ -14,6 +14,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '../../lib/supabase';
+import { LINK_HIT_SLOP, useAnnounce } from '../../lib/a11y';
 import { useAuthStore } from '../../stores/authStore';
 import {
   Avatar,
@@ -50,6 +51,8 @@ export default function SignupScreen() {
   const [error, setError] = useState<string | null>(null);
   const [checkInbox, setCheckInbox] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useAnnounce(error);
 
   const step = nextStep(displayName, email, password);
 
@@ -190,7 +193,7 @@ export default function SignupScreen() {
       <View style={styles.backRow}>
         <Pressable
           accessibilityRole="button"
-          hitSlop={10}
+          hitSlop={LINK_HIT_SLOP}
           onPress={() => router.back()}
           testID="back"
         >
@@ -228,8 +231,13 @@ export default function SignupScreen() {
                 </ThemedText>
               </View>
             </Pressable>
-            <Pressable accessibilityRole="button" onPress={pickImage} testID="add-photo">
-              <ThemedText variant="caption" color={colors.accent}>
+            <Pressable
+              accessibilityRole="button"
+              hitSlop={LINK_HIT_SLOP}
+              onPress={pickImage}
+              testID="add-photo"
+            >
+              <ThemedText variant="caption" color={colors.accentText}>
                 Add a photo (optional)
               </ThemedText>
             </Pressable>
@@ -271,8 +279,13 @@ export default function SignupScreen() {
           </View>
 
           {error ? (
-            <View style={styles.errorBox} testID="signup-error">
-              <ThemedText variant="bodyStrong" color={colors.accentPressed}>
+            <View
+              style={styles.errorBox}
+              accessibilityRole="alert"
+              accessibilityLiveRegion="assertive"
+              testID="signup-error"
+            >
+              <ThemedText variant="bodyStrong" color={colors.accentText}>
                 {error}
               </ThemedText>
             </View>
@@ -290,8 +303,8 @@ export default function SignupScreen() {
           <View style={styles.footerRow}>
             <ThemedText variant="sub">Already have an account?</ThemedText>
             <Link href="/(auth)/login" asChild>
-              <Pressable accessibilityRole="button" hitSlop={8} testID="login-link">
-                <ThemedText variant="sub" color={colors.accent} style={styles.footerLink}>
+              <Pressable accessibilityRole="button" hitSlop={LINK_HIT_SLOP} testID="login-link">
+                <ThemedText variant="sub" color={colors.accentText} style={styles.footerLink}>
                   Sign in
                 </ThemedText>
               </Pressable>

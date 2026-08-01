@@ -14,8 +14,12 @@ system, so never hand-edit the PNGs.
 | Splash on paper `#FCF8F4` | done | `apps/mobile/assets/splash-icon.png`, `app.json` |
 | 6.9″ screenshots, 1290×2796 | done | `store-assets/screenshots/ios-6.9/` |
 | Privacy policy URL | done | `https://planazo.me/privacy` |
+| Terms of use URL | done | `https://planazo.me/terms` |
 | Support URL | done | `https://planazo.me/support` |
 | In-app account deletion | done | Profile → Delete my account |
+| In-app privacy policy link | done | Profile → Privacy policy (5.1.1(i)) |
+| Report content, block users | done | plan sheet, group → Manage (1.2) |
+| Terms with an objectionable-content clause | done | `https://planazo.me/terms` |
 | Production Supabase in release builds | done | `eas.json` → `preview` / `production` env |
 | iPhone-only (`supportsTablet: false`) | done | `app.json` |
 | `ITSAppUsesNonExemptEncryption: false` | done | `app.json` |
@@ -104,20 +108,30 @@ data shared with data brokers.
 | Data type | Collected | Linked to identity | Purpose |
 | --- | --- | --- | --- |
 | Contact Info → Email Address | Yes | Yes | App Functionality |
+| Contact Info → Name | Yes | Yes | App Functionality |
 | User Content → Photos or Videos | Yes | Yes | App Functionality |
 | User Content → Other User Content | Yes | Yes | App Functionality |
+| User Content → Customer Support | Yes | Yes | App Functionality |
 | Identifiers → User ID | Yes | Yes | App Functionality |
+| Identifiers → Device ID | Yes | Yes | App Functionality |
 | Diagnostics → Other Diagnostic Data | Yes | Yes | App Functionality |
 
 Notes for each, if asked:
 
 - **Email** — the sign-in identifier. Never used for marketing.
+- **Name** — `profiles.display_name`, the name other members of your groups see.
+  Chosen at sign-up, editable at any time.
 - **Photos** — only the profile photo you choose, and screenshots you attach to
   feedback. The library is read only at the moment you pick something.
 - **Other User Content** — group names, plan titles, descriptions, locations
-  you type, and feedback messages.
-- **User ID** — the account id, plus a push token per device you enabled
-  notifications on.
+  you type.
+- **Customer Support** — feedback messages you send us, and the reason and note
+  on any content you report.
+- **User ID** — the account id (`auth.users.id`).
+- **Device ID** — the Expo push token, one per device where you turned
+  notifications on. Expo's own documentation describes it as identifying the
+  recipient device, so it is declared here rather than folded into User ID.
+  Cleared when you turn notifications off, and on sign-out.
 - **Diagnostics** — app version and device model, attached only to feedback you
   deliberately send.
 
@@ -130,6 +144,8 @@ themes, no gambling, no unrestricted web access. That lands at **4+**.
 
 One judgement call: Planazo carries user-generated text (plan titles,
 descriptions, group names) visible to the invited members of a private group.
+Answer **yes** to the UGC question if asked — the moderation in §6 is what
+backs that up.
 
 ---
 
@@ -154,7 +170,16 @@ What to try
   4. Account deletion: tap the avatar (top right) → "Delete my account".
      Please use a throwaway account for this — it is immediate and final.
 
+Moderation (Guideline 1.2)
+  - Report a plan: open any plan, scroll to the bottom, "Report this plan".
+  - Report a group: open a group, Manage, "Report this group".
+  - Block someone: open a group, Manage, "Block" beside any member. Their
+    plans disappear from your feed immediately. Tap again to undo.
+  - The rules are published at planazo.me/terms.
+
 Account deletion is at Profile → Delete my account, per 5.1.1(v).
+The privacy policy is reachable in-app at Profile → Privacy policy, per
+5.1.1(i).
 Planazo signs in with email and password only. There is no third-party or
 social login, so Sign in with Apple is not required under 4.8.
 ```
@@ -166,12 +191,35 @@ a few plans before you submit.** Reviewers reject on an empty app.
 
 ## 6. Known risks
 
-**Guideline 1.2 — user-generated content.** Plan and group names are free text.
-Apple usually accepts this where content is confined to a private, invite-only
-group, which is the case here. If Review pushes back, the cheapest answer is a
-"Report this plan" row on the plan sheet that emails `hola@planazo.me`, plus a
-line in the group screen making "Leave group" read as the block. Worth having
-designed in advance rather than under a 24-hour clock.
+**Guideline 1.2 — user-generated content.** Covered, and worth walking the
+reviewer through it, because all four parts are required and all four exist:
+
+| Apple asks for | Where it is |
+| --- | --- |
+| Published terms with no tolerance for objectionable content | `planazo.me/terms`, "What you agree not to post" |
+| A way to report content | "Report this plan" on the plan sheet; "Report this group" in group → Manage |
+| A way to block abusive users | group → Manage → **Block** beside any member, and a "Block them too" toggle on the report screen |
+| Published contact details | `planazo.me/support` and `hola@planazo.me` |
+
+Blocking is enforced in the database, not in the client: `has_blocked()` is
+part of the plans SELECT policy, so a blocked person's plans stop existing for
+you in the feed, in the group and by direct link alike. It is one-way and
+silent — the blocked party is never told, and cannot read the block row.
+Reports are insert-only for the reporter, so nobody can discover who reported
+them. Triage happens off the service role.
+
+Two deliberate limits, in case Review asks:
+- Blocking does not eject anybody from a group. Removing a member is an
+  admin's decision; blocking is a personal one, and a personal choice should
+  not silently reshape the group for everyone else.
+- There is no automated profanity filter. Content here is only ever visible to
+  the invited members of a private group — there is no discovery, no public
+  feed, no strangers — so the moderation is report-driven, with a committed
+  24-hour response written into the terms.
+
+**Guideline 5.1.1(i) — privacy policy in the app.** Covered: Profile → Privacy
+policy, next to Terms of use and Help & support, all three opening
+`planazo.me`. The store-listing URL alone is not enough.
 
 **Guideline 5.1.1(v) — account deletion.** Covered. Deleting is immediate and
 hands groups over rather than destroying them; the behaviour is written out in
@@ -187,8 +235,6 @@ submission, re-run `pnpm assets:screenshots`.
 
 - **Android / Play Store.** The adaptive icon and its `#F2542D` background are
   generated and correct, but nothing else here targets Play.
-- **Terms of use.** Apple's standard EULA applies unless we supply our own; the
-  footer slot went to Support, which Apple does require.
 - **Localisation.** The app is English; planazo.me still renders Spanish
   (`LANG` in `apps/web/lib/copy.ts`), and the legal pages follow it. The store
   listing above is English. Worth deciding before launch.

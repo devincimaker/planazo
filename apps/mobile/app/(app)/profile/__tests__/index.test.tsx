@@ -1,4 +1,4 @@
-import { Alert } from 'react-native';
+import { Alert, Linking } from 'react-native';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ProfileSheet from '../index';
@@ -22,6 +22,12 @@ const mockRegisterPushToken: jest.Mock = jest.fn(() => Promise.resolve());
 jest.mock('../../../../lib/push', () => ({
   clearPushToken: (...args: unknown[]) => mockClearPushToken(...args),
   registerPushToken: (...args: unknown[]) => mockRegisterPushToken(...args),
+}));
+
+// Clean by default; individual tests make it fail.
+const mockPurgeOwnedFiles: jest.Mock = jest.fn(() => Promise.resolve({ failed: [] }));
+jest.mock('../../../../lib/storage', () => ({
+  purgeOwnedFiles: (...args: unknown[]) => mockPurgeOwnedFiles(...args),
 }));
 
 jest.mock('expo-router', () => ({
@@ -178,6 +184,22 @@ describe('ProfileSheet', () => {
     });
   });
 
+  // Guideline 5.1.1(i): the policy has to be reachable from inside the app,
+  // not only from the store listing.
+  it.each([
+    ['privacy-link', 'https://planazo.me/privacy'],
+    ['terms-link', 'https://planazo.me/terms'],
+    ['support-link', 'https://planazo.me/support'],
+  ])('opens %s', async (testID, url) => {
+    const openSpy = jest.spyOn(Linking, 'openURL').mockResolvedValue(true as never);
+    await renderSheet();
+
+    await fireEvent.press(screen.getByTestId(testID));
+
+    expect(openSpy).toHaveBeenCalledWith(url);
+    openSpy.mockRestore();
+  });
+
   // App Store Review 5.1.1(v): deleting the account has to be reachable from
   // inside the app, and it must not be one stray tap away either.
   it('deleting the account asks twice before it calls the RPC', async () => {
@@ -216,6 +238,54 @@ describe('ProfileSheet', () => {
 
     expect(supabase.rpc).not.toHaveBeenCalled();
     expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  // The avatars bucket is public, so a file left behind outlives the account
+  // that owned it with nobody able to remove it. Refuse rather than orphan.
+  it('refuses to delete the account while files are still in storage', async () => {
+    mockPurgeOwnedFiles.mockResolvedValueOnce({ failed: ['avatars'] });
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    await renderSheet();
+
+    await fireEvent.press(screen.getByTestId('delete-account'));
+    const first = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    await first.find((b) => b.text === 'Delete')?.onPress?.();
+    const second = alertSpy.mock.calls[1][2] as { text: string; onPress?: () => void }[];
+    await second.find((b) => b.text === 'Delete for good')?.onPress?.();
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith(
+        "Couldn't delete your account",
+        expect.stringContaining('online for good'),
+      );
+    });
+    expect(supabase.rpc).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('purges storage before it deletes the account, not after', async () => {
+    const order: string[] = [];
+    mockPurgeOwnedFiles.mockImplementationOnce(() => {
+      order.push('purge');
+      return Promise.resolve({ failed: [] });
+    });
+    (supabase.rpc as jest.Mock).mockImplementationOnce(() => {
+      order.push('rpc');
+      return Promise.resolve({ error: null });
+    });
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    await renderSheet();
+
+    await fireEvent.press(screen.getByTestId('delete-account'));
+    const first = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    await first.find((b) => b.text === 'Delete')?.onPress?.();
+    const second = alertSpy.mock.calls[1][2] as { text: string; onPress?: () => void }[];
+    await second.find((b) => b.text === 'Delete for good')?.onPress?.();
+
+    // Once the account is gone the session can no longer satisfy the storage
+    // policies, so this order is the whole reason the purge works at all.
+    await waitFor(() => expect(order).toEqual(['purge', 'rpc']));
+    expect(mockPurgeOwnedFiles).toHaveBeenCalledWith('me');
   });
 
   it('keeps the user signed in when the delete fails', async () => {

@@ -929,6 +929,35 @@ export default function PlanDetailScreen() {
         {!d.isCancelled && !d.isExpired && !d.confirmed ? (
           <Button label="Nudge the rest" variant="outline" onPress={nudge} haptic={false} />
         ) : null}
+
+        {/* Guideline 1.2: every piece of user-generated content needs a way to
+            report it from the screen it appears on. Quiet by design — this is
+            not an action anybody should hit by accident. */}
+        <Pressable
+          style={({ pressed }) => [styles.reportRow, pressed && styles.pressed]}
+          onPress={() =>
+            router.push({
+              pathname: '/(app)/report',
+              params: {
+                type: 'plan',
+                id: String(id),
+                subject: plan.title,
+                ...(plan.created_by && plan.created_by !== user?.id
+                  ? {
+                      personId: plan.created_by,
+                      personName: plan.creator?.display_name ?? '',
+                    }
+                  : {}),
+              },
+            })
+          }
+          accessibilityRole="button"
+          testID="report-plan"
+        >
+          <ThemedText variant="caption" color={colors.textMuted}>
+            Report this plan
+          </ThemedText>
+        </Pressable>
       </ScrollView>
 
       {footerContent ? <View style={styles.footer}>{footerContent}</View> : null}
@@ -937,6 +966,14 @@ export default function PlanDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  reportRow: {
+    alignSelf: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+  },
+  pressed: {
+    opacity: 0.7,
+  },
   screen: {
     flex: 1,
     backgroundColor: colors.background,

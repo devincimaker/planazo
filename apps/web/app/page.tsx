@@ -151,6 +151,7 @@ export default function Home() {
                 not required — Apple's standard EULA applies unless we supply
                 our own — so that slot went to Support instead. */}
             <Link href="/privacy">{t.fPrivacy}</Link>
+            <Link href="/terms">{t.fTerms}</Link>
             <Link href="/support">{t.fSupport}</Link>
             <a href={`mailto:${CONTACT_EMAIL}`}>{t.fContact}</a>
           </div>
