@@ -3,8 +3,18 @@ import { createClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
 import { createTimeoutFetch } from './timeoutFetch';
 
-function getRequiredEnv(name: 'EXPO_PUBLIC_SUPABASE_URL' | 'EXPO_PUBLIC_SUPABASE_ANON_KEY') {
-  const value = process.env[name]?.trim();
+// These must stay as static `process.env.EXPO_PUBLIC_*` member expressions:
+// babel-preset-expo inlines those at build time, but leaves a computed access
+// (process.env[name]) alone. Metro's dev server injects env at runtime, so a
+// computed read still works in development and then comes back undefined in
+// release bundles.
+const PUBLIC_ENV = {
+  EXPO_PUBLIC_SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
+  EXPO_PUBLIC_SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+} as const;
+
+function getRequiredEnv(name: keyof typeof PUBLIC_ENV) {
+  const value = PUBLIC_ENV[name]?.trim();
   if (!value) {
     throw new Error(`Missing required env var: ${name}`);
   }

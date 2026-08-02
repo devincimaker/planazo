@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Slot, useRouter, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View, ActivityIndicator, StyleSheet, AppState, AppStateStatus } from 'react-native';
+import { View, StyleSheet, AppState, AppStateStatus } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
@@ -20,9 +20,9 @@ import { supabase } from '../lib/supabase';
 import { signOutOfAccount } from '../lib/signOut';
 import { initNotificationPresentation, registerPushToken } from '../lib/push';
 import { errorCopy, isInvalidSessionError, isOfflineError, retryQuery } from '../lib/queryErrors';
+import { BrandSplash } from '../components/ui';
 import { ErrorState } from '../components/ui/ErrorState';
 import { useAuthStore } from '../stores/authStore';
-import { COLORS } from '../constants/colors';
 import { colors } from '../theme/tokens';
 
 SplashScreen.preventAutoHideAsync();
@@ -240,11 +240,7 @@ function InitialLayout() {
   }, [leavingForLogin, navReady, router]);
 
   if (!isReady || isLoading) {
-    return (
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-      </View>
-    );
+    return <BrandSplash />;
   }
 
   // Takes precedence over initError: the sign-out was the user's last
@@ -312,12 +308,6 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
-  loading: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: COLORS.white,
-  },
   error: {
     flex: 1,
     justifyContent: 'center',

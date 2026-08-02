@@ -63,11 +63,56 @@ When the user says something like *"create a worktree for PLA-20"*:
   a reset there wipes main's data and every other shared-mode worktree's.
 - If `PLANAZO_DB_MODE=shared`, your database **is main's**. Editing
   `supabase/migrations/` changes main's schema. Run `pnpm wt:setup --db` first.
-- Integration tests (`packages/integration-tests`) run from **main** or in CI.
-  They hard-refuse non-loopback URLs, so they can never target a branch DB.
+- Integration tests run from **any checkout** against that checkout's own
+  database — see **Testing & databases** below.
 - No native rebuild is needed for JS-only work: the Dev Client is a generic
   shell and `EXPO_PUBLIC_*` is inlined by Metro at bundle time. Rebuild only
   when `app.json` or the native dependency set changes.
+
+## Testing & databases
+
+One rule: **your database is whatever your checkout's root `.env` says.**
+`wt:setup` writes it — main's local stack in shared mode, the branch's own
+hosted database with `--db` — and main's `.env` points at its local stack.
+Never export another environment's values over it; the suite reads `.env`
+itself.
+
+- **Unit/component tests** (jest in `apps/mobile`, vitest in `packages/shared`):
+  no database at all. Run them anywhere, always.
+- **Integration tests**: `pnpm test:integration` from any checkout. On a
+  loopback stack a full run is ~2s; against a worktree's branch database ~40s.
+  Tests create their own UUID-namespaced users and groups and delete exactly
+  what they created, so concurrent runs from different worktrees never collide
+  and nothing needs resetting between runs.
+- The suite **refuses to run rather than lie**, with the fix in the message:
+  - against a database this checkout doesn't own — only loopback or the
+    worktree's own `PLANAZO_BRANCH_REF` are accepted, so production is
+    unreachable by construction;
+  - from a shared-mode worktree whose branch adds migration files (the verdict
+    would be about main's schema, not yours — `pnpm wt:setup --db` first);
+  - when the checkout has migrations the target database hasn't applied.
+    Fix: `supabase migration up` (loopback) or
+    `supabase db push --db-url "$SUPABASE_DB_URL"` (branch DB).
+- **Migrations flow one way**: your branch → its branch DB (at `wt:setup`, or
+  by hand while iterating) → CI's throwaway stack (every PR) → production (the
+  `deploy` CI job pushes on merge to main, after tests pass — never by hand) →
+  every other checkout pulls and applies (`supabase migration up` on main after
+  a schema PR lands). Nothing ever rolls back on a shared database; a botched
+  branch-DB experiment is discarded with `wt:rm` and rebuilt.
+- **Merged migrations are immutable.** `db push` matches migrations by version
+  timestamp and silently skips edited content, so CI rejects any change — PR or
+  direct push — that modifies, deletes or renames a migration that already
+  existed. Fix forward with a new migration; only your branch's own new
+  migrations are editable.
+- **Editing your own applied migration needs a re-apply.** The same version
+  matching means `db push` skips an already-applied migration whose file you
+  edited. After editing, run `pnpm wt:db:reset` (wipes and rebuilds this
+  worktree's branch DB from the current files + reseeds). The suite refuses to
+  run while an applied migration has uncommitted edits.
+- **CI is the merge gate.** It runs on GitHub's machines with a fresh stack
+  carrying *your branch's* migrations, so a schema branch always gets an
+  honest verdict there even when no local database can give one. Local suite
+  runs are a convenience, not the safety net.
 
 ## iOS Simulator
 

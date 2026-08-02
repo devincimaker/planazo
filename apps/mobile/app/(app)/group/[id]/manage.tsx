@@ -13,6 +13,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../../../lib/supabase';
 import { useAuthStore } from '../../../../stores/authStore';
 import { errorCopy, isNotFoundError } from '../../../../lib/queryErrors';
+import { LINK_HIT_SLOP } from '../../../../lib/a11y';
+import {
+  BLOCKED_QUERY_KEY,
+  blockUser,
+  fetchBlockedIds,
+  unblockUser,
+} from '../../../../lib/moderation';
 import { ThemedText, Card, Avatar, ErrorState } from '../../../../components/ui';
 import { colors, fonts, radii, spacing } from '../../../../theme/tokens';
 
@@ -45,6 +52,32 @@ export default function ManageGroupScreen() {
     queryClient.invalidateQueries({ queryKey: ['group', id] });
     queryClient.invalidateQueries({ queryKey: ['groups'] });
   };
+
+  // Whose plans this user has chosen not to see. Only ever their own list —
+  // RLS on blocked_users makes any other answer impossible.
+  const { data: blockedIds } = useQuery({
+    queryKey: BLOCKED_QUERY_KEY,
+    queryFn: fetchBlockedIds,
+    enabled: !!user,
+  });
+
+  const setBlocked = useMutation({
+    mutationFn: async ({ userId, blocked }: { userId: string; blocked: boolean }) => {
+      if (!user) throw new Error('Not signed in');
+      if (blocked) {
+        await blockUser(user.id, userId);
+      } else {
+        await unblockUser(user.id, userId);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: BLOCKED_QUERY_KEY });
+      // Their plans appear or disappear from every list that shows them.
+      queryClient.invalidateQueries({ queryKey: ['home-plans'] });
+      invalidate();
+    },
+    onError: (error: Error) => Alert.alert('Error', error.message),
+  });
 
   const setRole = useMutation({
     mutationFn: async ({ userId, role }: { userId: string; role: 'admin' | 'member' }) => {
@@ -146,6 +179,7 @@ export default function ManageGroupScreen() {
   const me = members.find((m: any) => m.user_id === user?.id);
   const others = members.filter((m: any) => m.user_id !== user?.id);
   const isAdmin = me?.role === 'admin';
+  const blocked = new Set(blockedIds ?? []);
 
   const confirmRemove = (m: any) =>
     Alert.alert(
@@ -160,6 +194,26 @@ export default function ManageGroupScreen() {
         },
       ]
     );
+
+  const confirmBlock = (m: any) => {
+    const name = m.profile?.display_name ?? 'this person';
+    if (blocked.has(m.user_id)) {
+      setBlocked.mutate({ userId: m.user_id, blocked: false });
+      return;
+    }
+    Alert.alert(
+      `Block ${name}?`,
+      'Their plans stop showing up for you. They are not told, and they stay in the group unless an admin removes them.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Block',
+          style: 'destructive',
+          onPress: () => setBlocked.mutate({ userId: m.user_id, blocked: true }),
+        },
+      ]
+    );
+  };
 
   const confirmLeave = () =>
     Alert.alert(`Leave ${group.name}?`, 'You’ll drop out of plans you said yes to.', [
@@ -240,15 +294,35 @@ export default function ManageGroupScreen() {
                   <ThemedText variant="bodyStrong" numberOfLines={1}>
                     {m.profile?.display_name}
                   </ThemedText>
-                  {isAdmin ? (
+                  <View style={styles.personActions}>
+                    {isAdmin ? (
+                      <Pressable
+                        onPress={() => confirmRemove(m)}
+                        accessibilityRole="button"
+                        hitSlop={LINK_HIT_SLOP}
+                        testID={`remove-${m.user_id}`}
+                      >
+                        <ThemedText variant="caption">Remove</ThemedText>
+                      </Pressable>
+                    ) : null}
+                    {/* Anyone can block anyone — it is a personal choice, not
+                        an admin power, and Guideline 1.2 wants it reachable
+                        without asking permission from the person's friends. */}
                     <Pressable
-                      onPress={() => confirmRemove(m)}
+                      onPress={() => confirmBlock(m)}
                       accessibilityRole="button"
-                      testID={`remove-${m.user_id}`}
+                      hitSlop={LINK_HIT_SLOP}
+                      disabled={setBlocked.isPending}
+                      testID={`block-${m.user_id}`}
                     >
-                      <ThemedText variant="caption">Remove</ThemedText>
+                      <ThemedText
+                        variant="caption"
+                        color={blocked.has(m.user_id) ? colors.accentText : colors.textMuted}
+                      >
+                        {blocked.has(m.user_id) ? 'Blocked · Undo' : 'Block'}
+                      </ThemedText>
                     </Pressable>
-                  ) : null}
+                  </View>
                 </View>
                 {roleChip(m)}
               </View>
@@ -308,6 +382,21 @@ export default function ManageGroupScreen() {
         </View>
 
         <View style={styles.leaveBlock}>
+          <Pressable
+            style={({ pressed }) => [styles.reportRow, pressed && styles.rowPressed]}
+            onPress={() =>
+              router.push({
+                pathname: '/(app)/report',
+                params: { type: 'group', id: String(id), subject: group.name },
+              })
+            }
+            accessibilityRole="button"
+            testID="report-group"
+          >
+            <ThemedText variant="caption" color={colors.textSecondary}>
+              Report this group
+            </ThemedText>
+          </Pressable>
           <Pressable
             style={({ pressed }) => [styles.leaveCard, pressed && styles.rowPressed]}
             onPress={confirmLeave}
@@ -413,6 +502,16 @@ const styles = StyleSheet.create({
   prefBody: {
     flex: 1,
     gap: 3,
+  },
+  personActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  reportRow: {
+    alignSelf: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
   leaveBlock: {
     gap: spacing.sm,

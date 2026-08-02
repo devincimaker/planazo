@@ -1,5 +1,5 @@
 import { Alert } from 'react-native';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ManageGroupScreen from '../manage';
 import { useAuthStore } from '../../../../../stores/authStore';
@@ -29,11 +29,16 @@ let group: any;
 let groupUpdates: jest.Mock[] = [];
 let gmUpdates: jest.Mock[] = [];
 let gmDeletes: jest.Mock[] = [];
+let blockUpserts: jest.Mock[] = [];
+let blockDeletes: jest.Mock[] = [];
+let blockedRows: { blocked_id: string }[] = [];
 
 function primeSupabase() {
   groupUpdates = [];
   gmUpdates = [];
   gmDeletes = [];
+  blockUpserts = [];
+  blockDeletes = [];
   mockFrom.mockImplementation((table: string) => {
     const c: any = {};
     let mutation = false;
@@ -44,17 +49,28 @@ function primeSupabase() {
       mutation = true;
       return c;
     });
+    c.upsert = jest.fn(() => {
+      mutation = true;
+      return c;
+    });
+
     c.delete = jest.fn(() => {
       mutation = true;
       return c;
     });
     if (table === 'groups') groupUpdates.push(c.update);
+    if (table === 'blocked_users') {
+      blockUpserts.push(c.upsert);
+      blockDeletes.push(c.delete);
+    }
     if (table === 'group_members') {
       gmUpdates.push(c.update);
       gmDeletes.push(c.delete);
     }
     c.then = (resolve: (v: unknown) => void) => {
-      const result = mutation ? { error: null } : { data: group, error: null };
+      const result = mutation
+        ? { error: null }
+        : { data: table === 'blocked_users' ? blockedRows : group, error: null };
       return Promise.resolve(result).then(resolve);
     };
     return c;
@@ -73,6 +89,7 @@ async function renderManage() {
 beforeEach(() => {
   jest.clearAllMocks();
   jest.spyOn(Alert, 'alert');
+  blockedRows = [];
   primeSupabase();
   mockRpc.mockResolvedValue({ data: { left: true }, error: null });
   useAuthStore.setState({
@@ -117,6 +134,68 @@ describe('ManageGroupScreen', () => {
         true
       )
     );
+  });
+
+  // Guideline 1.2: blocking is a personal choice, so it is available to every
+  // member — not only admins, who are the only ones who can remove anybody.
+  it('blocking a member asks first, then records it', async () => {
+    await renderManage();
+
+    await fireEvent.press(await screen.findByTestId('block-u2'));
+    expect(Alert.alert).toHaveBeenCalledWith('Block Aina?', expect.any(String), expect.any(Array));
+
+    const buttons = (Alert.alert as jest.Mock).mock.calls.at(-1)![2] as {
+      text: string;
+      onPress?: () => void;
+    }[];
+    await buttons.find((b) => b.text === 'Block')?.onPress?.();
+
+    await waitFor(() =>
+      expect(
+        blockUpserts.some((u) =>
+          u.mock.calls.some((call) => call[0]?.blocked_id === 'u2' && call[0]?.blocker_id === 'me')
+        )
+      ).toBe(true)
+    );
+  });
+
+  it('backing out of the block confirmation records nothing', async () => {
+    await renderManage();
+
+    await fireEvent.press(await screen.findByTestId('block-u2'));
+    const buttons = (Alert.alert as jest.Mock).mock.calls.at(-1)![2] as {
+      text: string;
+      onPress?: () => void;
+    }[];
+    await buttons.find((b) => b.text === 'Cancel')?.onPress?.();
+
+    expect(blockUpserts.every((u) => u.mock.calls.length === 0)).toBe(true);
+  });
+
+  // Undo must not ask again — you already decided once, and the second dialog
+  // would be asking permission to be less strict.
+  it('an already-blocked member offers undo, with no confirmation', async () => {
+    blockedRows = [{ blocked_id: 'u2' }];
+    await renderManage();
+
+    const row = await screen.findByTestId('block-u2');
+    expect(within(row).getByText('Blocked · Undo')).toBeTruthy();
+
+    const alertsBefore = (Alert.alert as jest.Mock).mock.calls.length;
+    await fireEvent.press(row);
+    expect((Alert.alert as jest.Mock).mock.calls.length).toBe(alertsBefore);
+    await waitFor(() => expect(blockDeletes.some((d) => d.mock.calls.length > 0)).toBe(true));
+  });
+
+  it('report this group opens the report screen for the group', async () => {
+    await renderManage();
+
+    await fireEvent.press(await screen.findByTestId('report-group'));
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/(app)/report',
+      params: { type: 'group', id: 'g1', subject: 'Piso Gràcia' },
+    });
   });
 
   it('remove asks first, then deletes the membership', async () => {

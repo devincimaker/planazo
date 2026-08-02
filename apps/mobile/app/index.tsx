@@ -1,8 +1,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'expo-router';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useAuthStore } from '../stores/authStore';
-import { COLORS } from '../constants/colors';
+import { BrandSplash } from '../components/ui';
 
 export default function Index() {
   const router = useRouter();
@@ -21,18 +20,5 @@ export default function Index() {
     return () => clearTimeout(timer);
   }, [session]);
 
-  return (
-    <View style={styles.container}>
-      <ActivityIndicator size="large" color={COLORS.primary} />
-    </View>
-  );
+  return <BrandSplash />;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: COLORS.white,
-  },
-});

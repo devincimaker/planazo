@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useMutation } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
+import { contentViolation } from '../../../lib/moderation';
 import { useAuthStore } from '../../../stores/authStore';
 import { pickFromLibrary, takePhoto, uploadJpeg } from '../../../lib/images';
 import { Avatar, ThemedText } from '../../../components/ui';
@@ -41,6 +42,9 @@ export default function ProfileEdit() {
 
   const save = useMutation({
     mutationFn: async () => {
+      // Guideline 1.2: objectionable language stops here, not in review.
+      const violation = nameChanged ? contentViolation({ name: trimmed }) : null;
+      if (violation) throw new Error(violation);
       const updates: { display_name?: string; avatar_url?: string | null } = {};
       if (nameChanged) updates.display_name = trimmed;
       if (photo.kind === 'new') {

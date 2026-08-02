@@ -72,8 +72,19 @@ export default function PlanDetailScreen() {
   const router = useRouter();
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
-  // null = not editing dates; array = local picks being edited
-  const [editingPicks, setEditingPicks] = useState<string[] | null>(null);
+  // null = not editing dates; array = local picks being edited.
+  //
+  // Stamped with the plan they were made on. A deep link — a push tap, a shared
+  // planazo://plan/<id> — resolves to this same route, so expo-router swaps
+  // `id` under the mounted screen instead of remounting it. Unstamped picks
+  // survived that swap: plan B rendered with zero rows ticked and an enabled
+  // "Update your dates", and sending would have upserted plan A's
+  // date_option_ids against plan B's plan_id (PLA-18). Checked on read below,
+  // not reset in an effect, so there is no frame where the wrong picks are live.
+  const [editingPicks, setEditingPicks] = useState<{ planId: string; picks: string[] } | null>(
+    null
+  );
+  const activePicks = editingPicks && editingPicks.planId === id ? editingPicks.picks : null;
 
   const { data: plan, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ['plan', id],
@@ -458,14 +469,15 @@ export default function PlanDetailScreen() {
   // on "You can't make it" — picks that could never be sent (PLA-17). Send
   // commits the picks and clears the "no" (sendDates); leaving keeps it.
   const editing =
-    d.isOpenFlexible && (editingPicks !== null || (d.myAvail.length === 0 && !d.userRsvp));
-  const picked = editingPicks ?? d.myAvail.map((a) => a.date_option_id);
+    d.isOpenFlexible && (activePicks !== null || (d.myAvail.length === 0 && !d.userRsvp));
+  const picked = activePicks ?? d.myAvail.map((a) => a.date_option_id);
 
   const togglePick = (optionId: string) => {
-    const base = editingPicks ?? d.myAvail.map((a) => a.date_option_id);
-    setEditingPicks(
-      base.includes(optionId) ? base.filter((x) => x !== optionId) : [...base, optionId]
-    );
+    const base = activePicks ?? d.myAvail.map((a) => a.date_option_id);
+    setEditingPicks({
+      planId: id,
+      picks: base.includes(optionId) ? base.filter((x) => x !== optionId) : [...base, optionId],
+    });
   };
 
   const nudge = () =>
@@ -603,7 +615,9 @@ export default function PlanDetailScreen() {
         <AnswerFooter
           answered="yes"
           answerLabel={`You sent ${d.myAvail.length} date${d.myAvail.length === 1 ? '' : 's'}`}
-          onChange={() => setEditingPicks(d.myAvail.map((a) => a.date_option_id))}
+          onChange={() =>
+            setEditingPicks({ planId: id, picks: d.myAvail.map((a) => a.date_option_id) })
+          }
         />
       );
     }
@@ -860,9 +874,11 @@ export default function PlanDetailScreen() {
             ) : null}
             <ListRow
               title={
+                // created_by goes null when the person who posted it deleted
+                // their account — the plan outlives them, the name does not.
                 d.isEnded
-                  ? `${plan.created_by === user?.id ? 'You' : plan.creator?.display_name ?? '?'} set this up`
-                  : `Hosted by ${d.isHost ? 'you' : plan.creator?.display_name ?? '?'}`
+                  ? `${plan.created_by === user?.id ? 'You' : plan.creator?.display_name ?? 'Someone who left'} set this up`
+                  : `Hosted by ${d.isHost ? 'you' : plan.creator?.display_name ?? 'someone who left'}`
               }
               divider={!!plan.location || !!plan.event_date || (d.isLocked && !!plan.locked_date)}
             />
@@ -941,6 +957,35 @@ export default function PlanDetailScreen() {
         {!d.isCancelled && !d.isExpired && !d.confirmed ? (
           <Button label="Nudge the rest" variant="outline" onPress={nudge} haptic={false} />
         ) : null}
+
+        {/* Guideline 1.2: every piece of user-generated content needs a way to
+            report it from the screen it appears on. Quiet by design — this is
+            not an action anybody should hit by accident. */}
+        <Pressable
+          style={({ pressed }) => [styles.reportRow, pressed && styles.pressed]}
+          onPress={() =>
+            router.push({
+              pathname: '/(app)/report',
+              params: {
+                type: 'plan',
+                id: String(id),
+                subject: plan.title,
+                ...(plan.created_by && plan.created_by !== user?.id
+                  ? {
+                      personId: plan.created_by,
+                      personName: plan.creator?.display_name ?? '',
+                    }
+                  : {}),
+              },
+            })
+          }
+          accessibilityRole="button"
+          testID="report-plan"
+        >
+          <ThemedText variant="caption" color={colors.textMuted}>
+            Report this plan
+          </ThemedText>
+        </Pressable>
       </ScrollView>
 
       {footerContent ? <View style={styles.footer}>{footerContent}</View> : null}
@@ -949,6 +994,14 @@ export default function PlanDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  reportRow: {
+    alignSelf: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+  },
+  pressed: {
+    opacity: 0.7,
+  },
   screen: {
     flex: 1,
     backgroundColor: colors.background,

@@ -76,6 +76,7 @@ export const COPY = {
 
     fPrivacy: 'Privacy',
     fTerms: 'Terms',
+    fSupport: 'Support',
     fContact: 'Contact',
   },
   es: {
@@ -142,6 +143,7 @@ export const COPY = {
 
     fPrivacy: 'Privacidad',
     fTerms: 'Términos',
+    fSupport: 'Ayuda',
     fContact: 'Contacto',
   },
 } as const;

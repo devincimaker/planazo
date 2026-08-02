@@ -1,24 +1,46 @@
 import { useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
-  Image,
-  ActivityIndicator,
+  StyleSheet,
+  View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '../../lib/supabase';
+import { contentViolation } from '../../lib/moderation';
+import { LINK_HIT_SLOP, useAnnounce } from '../../lib/a11y';
 import { useAuthStore } from '../../stores/authStore';
-import { COLORS } from '../../constants/colors';
+import {
+  Avatar,
+  Button,
+  ConfirmCard,
+  FormField,
+  ThemedText,
+} from '../../components/ui';
+import { colors, fonts, spacing } from '../../theme/tokens';
+
+const MIN_PASSWORD = 6;
+
+/**
+ * The footer button names the next thing missing rather than sitting there
+ * greyed out and mute — design 1a. Order matches the field order on screen.
+ */
+function nextStep(name: string, email: string, password: string) {
+  if (!name.trim()) return { label: 'Add your name to continue', ready: false };
+  if (!email.trim()) return { label: 'Add your email to continue', ready: false };
+  if (!password) return { label: 'Pick a password to continue', ready: false };
+  if (password.length < MIN_PASSWORD) {
+    return { label: `Make it ${MIN_PASSWORD} characters or more`, ready: false };
+  }
+  return { label: 'Make my account', ready: true };
+}
 
 export default function SignupScreen() {
   const router = useRouter();
@@ -26,14 +48,22 @@ export default function SignupScreen() {
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [checkInbox, setCheckInbox] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  useAnnounce(error);
+
+  const step = nextStep(displayName, email, password);
+
   async function pickImage() {
-    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permissionResult.granted) {
-      Alert.alert('Permission Required', 'Please allow access to your photo library to set a profile picture.');
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(
+        'Photos are off',
+        'Planazo needs access to your photo library to set a profile photo. You can turn it on in Settings.',
+      );
       return;
     }
 
@@ -53,335 +83,329 @@ export default function SignupScreen() {
     if (!avatarUri) return null;
 
     try {
-      const base64 = await FileSystem.readAsStringAsync(avatarUri, {
-        encoding: 'base64',
-      });
-
+      const base64 = await FileSystem.readAsStringAsync(avatarUri, { encoding: 'base64' });
       const filePath = `${userId}/avatar.jpg`;
 
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(filePath, decode(base64), {
-          upsert: true,
-          contentType: 'image/jpeg',
-        });
+        .upload(filePath, decode(base64), { upsert: true, contentType: 'image/jpeg' });
 
       if (uploadError) throw uploadError;
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(filePath);
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from('avatars').getPublicUrl(filePath);
 
       return publicUrl;
-    } catch (error) {
-      console.error('Avatar upload error:', error);
+    } catch (uploadError) {
+      // A missing photo is not worth failing the signup over — the account is
+      // made either way and the photo can be added from the profile screen.
+      console.error('Avatar upload error:', uploadError);
       return null;
     }
   }
 
   async function handleSignup() {
-    if (!displayName || !email || !password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all fields');
+    if (!step.ready) {
+      setError(step.label);
       return;
     }
 
-    if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
-      return;
-    }
-
-    if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+    // Guideline 1.2: a display name is content every group member sees.
+    const violation = contentViolation({ name: displayName });
+    if (violation) {
+      setError(violation);
       return;
     }
 
     try {
       setLoading(true);
-      const { data, error } = await supabase.auth.signUp({
+      setError(null);
+      const { data, error: signUpError } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password,
-        options: {
-          data: {
-            display_name: displayName.trim(),
-          },
-        },
+        options: { data: { display_name: displayName.trim() } },
       });
 
-      if (error) {
-        Alert.alert('Error', error.message);
+      if (signUpError) {
+        setError(signUpError.message);
         return;
       }
 
-      // If session exists (email confirmation disabled), go to app
-      if (data.session) {
-        setSession(data.session);
-
-        // Upload avatar if selected
-        let avatarUrl: string | null = null;
-        if (avatarUri && data.session.user) {
-          avatarUrl = await uploadAvatar(data.session.user.id);
-
-          // Update profile with avatar URL
-          if (avatarUrl) {
-            await supabase
-              .from('profiles')
-              .update({ avatar_url: avatarUrl })
-              .eq('id', data.session.user.id);
-          }
-        }
-
-        // Fetch profile (created by trigger)
-        if (data.session.user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', data.session.user.id)
-            .single();
-
-          if (profile) {
-            setProfile(profile);
-          }
-        }
-
-        router.replace('/(app)/(tabs)');
-      } else {
-        // Email confirmation required
-        Alert.alert(
-          'Success',
-          'Account created! Please check your email to verify your account.',
-          [{ text: 'OK' }]
-        );
+      if (!data.session) {
+        // Email confirmation is on: the account exists but there is no session
+        // to carry into the app yet.
+        setCheckInbox(true);
+        return;
       }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unexpected signup error';
-      Alert.alert('Network Error', message);
+
+      setSession(data.session);
+
+      if (avatarUri && data.session.user) {
+        const avatarUrl = await uploadAvatar(data.session.user.id);
+        if (avatarUrl) {
+          await supabase
+            .from('profiles')
+            .update({ avatar_url: avatarUrl })
+            .eq('id', data.session.user.id);
+        }
+      }
+
+      if (data.session.user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', data.session.user.id)
+          .single();
+
+        if (profile) {
+          setProfile(profile);
+        }
+      }
+
+      router.replace('/(app)/(tabs)');
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "That didn't go through. Check your connection and try again.",
+      );
     } finally {
       setLoading(false);
     }
   }
 
-  return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.header}>
-          <Text style={styles.title}>Join Planazo</Text>
-          <Text style={styles.subtitle}>Create your account to get started</Text>
+  if (checkInbox) {
+    return (
+      <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
+        <View style={styles.noticeBody}>
+          <ConfirmCard title="Your account is made" testID="check-inbox">
+            Confirm it from the link we sent to{' '}
+            <ThemedText variant="bodyStrong">{email.trim().toLowerCase()}</ThemedText>, then sign
+            in. If it hasn&apos;t landed in a minute, check spam.
+          </ConfirmCard>
+          <Button
+            label="Go to sign in"
+            variant="outline"
+            onPress={() => router.replace('/(auth)/login')}
+            style={styles.noticeButton}
+            testID="go-to-login"
+          />
         </View>
+      </SafeAreaView>
+    );
+  }
 
-        <View style={styles.form}>
-          {/* Avatar Picker */}
-          <View style={styles.avatarPickerContainer}>
-            <TouchableOpacity style={styles.avatarPicker} onPress={pickImage}>
-              {avatarUri ? (
-                <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
-              ) : (
-                <View style={styles.avatarPlaceholder}>
-                  <Text style={styles.avatarPlaceholderText}>📷</Text>
-                </View>
-              )}
-              <View style={styles.avatarEditBadge}>
-                <Text style={styles.avatarEditBadgeText}>+</Text>
+  return (
+    <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
+      <View style={styles.backRow}>
+        <Pressable
+          accessibilityRole="button"
+          hitSlop={LINK_HIT_SLOP}
+          onPress={() => router.back()}
+          testID="back"
+        >
+          <ThemedText variant="bodyStrong" color={colors.textSecondary}>
+            ‹ Back
+          </ThemedText>
+        </Pressable>
+      </View>
+
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
+          <ThemedText variant="screenTitle">Make your account</ThemedText>
+          <ThemedText variant="body" color={colors.textSecondary} style={styles.blurb}>
+            One minute, and you can start your first plan.
+          </ThemedText>
+
+          <View style={styles.photoBlock}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={pickImage}
+              style={styles.avatarWrap}
+              testID="avatar-press"
+            >
+              <Avatar name={displayName.trim() || '?'} size={84} imageUrl={avatarUri} />
+              <View style={styles.badge}>
+                <ThemedText variant="caption" color={colors.textOnAccent}>
+                  ✦
+                </ThemedText>
               </View>
-            </TouchableOpacity>
-            <Text style={styles.avatarHint}>Add a photo (optional)</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              hitSlop={LINK_HIT_SLOP}
+              onPress={pickImage}
+              testID="add-photo"
+            >
+              <ThemedText variant="caption" color={colors.accentText}>
+                Add a photo (optional)
+              </ThemedText>
+            </Pressable>
           </View>
 
-          <Text style={styles.label}>Display Name</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Your name"
-            placeholderTextColor={COLORS.gray[400]}
-            value={displayName}
-            onChangeText={setDisplayName}
-            autoComplete="name"
-          />
+          <View style={styles.fields}>
+            <FormField
+              label="Your name"
+              value={displayName}
+              onChangeText={setDisplayName}
+              placeholder="Your name"
+              autoComplete="name"
+              hint="It's what your groups see next to your yes."
+              testID="name-input"
+            />
 
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="your@email.com"
-            placeholderTextColor={COLORS.gray[400]}
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            autoComplete="email"
-          />
+            <FormField
+              label="Email"
+              value={email}
+              onChangeText={setEmail}
+              placeholder="your@email.com"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              autoComplete="email"
+              testID="email-input"
+            />
 
-          <Text style={styles.label}>Password</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="At least 6 characters"
-            placeholderTextColor={COLORS.gray[400]}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            autoComplete="new-password"
-          />
+            <FormField
+              label="Password"
+              value={password}
+              onChangeText={setPassword}
+              placeholder={`At least ${MIN_PASSWORD} characters`}
+              autoCapitalize="none"
+              autoComplete="new-password"
+              secure
+              testID="password-input"
+            />
+          </View>
 
-          <Text style={styles.label}>Confirm Password</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Confirm your password"
-            placeholderTextColor={COLORS.gray[400]}
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            secureTextEntry
-            autoComplete="new-password"
-          />
+          {error ? (
+            <View
+              style={styles.errorBox}
+              accessibilityRole="alert"
+              accessibilityLiveRegion="assertive"
+              testID="signup-error"
+            >
+              <ThemedText variant="bodyStrong" color={colors.accentText}>
+                {error}
+              </ThemedText>
+            </View>
+          ) : null}
+        </ScrollView>
 
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
+        <View style={styles.footer}>
+          <Button
+            label={loading ? 'Making your account…' : step.label}
+            variant={step.ready ? 'primary' : 'secondary'}
+            disabled={!step.ready || loading}
             onPress={handleSignup}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color={COLORS.white} />
-            ) : (
-              <Text style={styles.buttonText}>Create Account</Text>
-            )}
-          </TouchableOpacity>
-
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Already have an account? </Text>
+            testID="create-account"
+          />
+          <View style={styles.footerRow}>
+            <ThemedText variant="sub">Already have an account?</ThemedText>
             <Link href="/(auth)/login" asChild>
-              <TouchableOpacity>
-                <Text style={styles.link}>Sign In</Text>
-              </TouchableOpacity>
+              <Pressable accessibilityRole="button" hitSlop={LINK_HIT_SLOP} testID="login-link">
+                <ThemedText variant="sub" color={colors.accentText} style={styles.footerLink}>
+                  Sign in
+                </ThemedText>
+              </Pressable>
             </Link>
           </View>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    backgroundColor: COLORS.white,
+    backgroundColor: colors.background,
   },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    padding: 24,
+  flex: {
+    flex: 1,
   },
-  header: {
+  backRow: {
+    flexDirection: 'row',
+    paddingHorizontal: spacing.xl,
+    paddingTop: 6,
+  },
+  scroll: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: 18,
+    paddingBottom: spacing.xxl,
+  },
+  blurb: {
+    marginTop: spacing.sm,
+    maxWidth: 300,
+  },
+  photoBlock: {
     alignItems: 'center',
-    marginBottom: 24,
+    gap: 10,
+    marginTop: 22,
   },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: COLORS.gray[500],
-    textAlign: 'center',
-  },
-  form: {
-    width: '100%',
-  },
-  avatarPickerContainer: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  avatarPicker: {
+  avatarWrap: {
     position: 'relative',
   },
-  avatarImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-  },
-  avatarPlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: COLORS.gray[100],
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: COLORS.gray[200],
-    borderStyle: 'dashed',
-  },
-  avatarPlaceholderText: {
-    fontSize: 32,
-  },
-  avatarEditBadge: {
+  badge: {
     position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: COLORS.primary,
+    right: -3,
+    bottom: -3,
+    width: 26,
+    height: 26,
+    borderRadius: 999,
+    backgroundColor: colors.accent,
+    borderWidth: 2.5,
+    borderColor: colors.background,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: COLORS.white,
   },
-  avatarEditBadgeText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.white,
+  fields: {
+    gap: spacing.lg,
+    marginTop: 22,
   },
-  avatarHint: {
-    fontSize: 12,
-    color: COLORS.gray[500],
-    marginTop: 8,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.gray[700],
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: COLORS.gray[50],
-    borderWidth: 1,
-    borderColor: COLORS.gray[200],
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    color: COLORS.gray[900],
-    marginBottom: 16,
-  },
-  button: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-  buttonText: {
-    color: COLORS.white,
-    fontSize: 16,
-    fontWeight: '600',
+  errorBox: {
+    marginTop: spacing.xl,
+    backgroundColor: colors.accentSoft,
+    borderRadius: 14,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
   },
   footer: {
+    backgroundColor: colors.tabBarBackground,
+    borderTopWidth: 1,
+    borderTopColor: colors.tabBarBorder,
+    paddingHorizontal: spacing.xl,
+    paddingTop: 14,
+    paddingBottom: spacing.lg,
+    gap: spacing.md,
+  },
+  footerRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 24,
+    // At accessibility text sizes "First time here?" and its link no longer
+    // fit side by side; wrapping stacks them instead of running off-screen.
+    flexWrap: 'wrap',
+    gap: 6,
   },
-  footerText: {
-    color: COLORS.gray[500],
-    fontSize: 14,
+  footerLink: {
+    fontFamily: fonts.bodyBold,
   },
-  link: {
-    color: COLORS.primary,
-    fontSize: 14,
-    fontWeight: '600',
+  noticeBody: {
+    flex: 1,
+    paddingHorizontal: spacing.xl,
+    paddingTop: 70,
+    gap: spacing.xl,
+  },
+  noticeButton: {
+    marginTop: 0,
   },
 });
