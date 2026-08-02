@@ -230,6 +230,56 @@ describe('FeedScreen', () => {
     expect(screen.getByText('Change')).toBeTruthy();
   });
 
+  // PLA-37: the card carries the same three answers as plan detail, so a full
+  // plan is an invitation to queue rather than a dead end.
+  it('offers the waiting list on a full plan and takes a place in it', async () => {
+    const full = {
+      ...fixedOpen,
+      max_people: 2,
+      rsvps: [
+        { user_id: 'u-marta', response: 'yes', profile: { display_name: 'Marta' } },
+        { user_id: 'u-jordi', response: 'yes', profile: { display_name: 'Jordi' } },
+      ],
+    };
+    primeSupabase([full]);
+    await renderFeed();
+
+    await waitFor(() => expect(screen.getByText('Take the next spot')).toBeTruthy());
+    expect(screen.queryByText("I'm in")).toBeNull();
+
+    await fireEvent.press(screen.getByText('Take the next spot'));
+
+    await waitFor(() => expect(rsvpsChain.upsert).toHaveBeenCalled());
+    expect(rsvpsChain.upsert).toHaveBeenCalledWith(
+      { plan_id: 'p1', user_id: 'me', response: 'pending' },
+      { onConflict: 'plan_id,user_id' }
+    );
+  });
+
+  it('shows where you stand once you are on the list', async () => {
+    const queued = {
+      ...fixedOpen,
+      max_people: 2,
+      rsvps: [
+        { user_id: 'u-marta', response: 'yes', profile: { display_name: 'Marta' } },
+        { user_id: 'u-jordi', response: 'yes', profile: { display_name: 'Jordi' } },
+        {
+          user_id: 'u-ana',
+          response: 'pending',
+          waitlist_seq: 4,
+          profile: { display_name: 'Ana' },
+        },
+        { user_id: 'me', response: 'pending', waitlist_seq: 9, profile: { display_name: 'Me' } },
+      ],
+    };
+    primeSupabase([queued]);
+    await renderFeed();
+
+    await waitFor(() => expect(screen.getByText("You're 2nd in line")).toBeTruthy());
+    expect(screen.queryByText('Take the next spot')).toBeNull();
+    expect(screen.queryByText("You're in")).toBeNull();
+  });
+
   it('PLA-16: a locked plan keeps a way out, and clearing proves the row went', async () => {
     primeSupabase([lockedFlexible]);
     await renderFeed();

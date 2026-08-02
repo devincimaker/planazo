@@ -110,6 +110,13 @@ export interface Rsvp {
   plan_id: string;
   user_id: string;
   response: RsvpResponse | null;
+  /**
+   * Place in the plan's waiting list, set only while response is 'pending'
+   * (PLA-37). Assigned by the database and not writable from a client, or the
+   * queue could be jumped. Read positions with waitlistPosition() rather than
+   * showing this number: it is an ordering key, and gaps in it are normal.
+   */
+  waitlist_seq: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -142,6 +149,7 @@ export type NotificationType =
   | 'plan_locked'
   | 'plan_cancelled'
   | 'plan_reopened'
+  | 'plan_promoted'
   | 'invited_to_group'
   | 'kicked_from_group';
 

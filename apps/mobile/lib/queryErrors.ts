@@ -240,7 +240,9 @@ export function actionErrorCopy(error: unknown): { title: string; body: string }
   if (isPlanFullError(error)) {
     return {
       title: "This one's full",
-      body: 'Every place is taken. One opens up if somebody drops out.',
+      // Used to end at "One opens up if somebody drops out", which was true and
+      // useless. Since PLA-37 there is somewhere to put yourself, so say so.
+      body: "Every place is taken. Take the next spot and we'll tell you if one opens up.",
     };
   }
   const copy = errorCopy(error);

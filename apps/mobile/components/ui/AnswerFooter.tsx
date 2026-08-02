@@ -4,20 +4,41 @@ import { ThemedText } from './ThemedText';
 import { MIN_TOUCH_TARGET } from '../../lib/a11y';
 import { colors, radii } from '../../theme/tokens';
 
+/**
+ * The three ways a plan can already have been answered. Green for a place you
+ * hold, ember for one you are waiting on, grey for one you turned down.
+ */
+const tones = {
+  yes: { bg: colors.confirmedSoft, fg: colors.confirmed, label: "You're in" },
+  pending: {
+    bg: colors.waitingSoft,
+    fg: colors.waiting,
+    label: "You're on the waiting list",
+  },
+  no: { bg: colors.surfaceSunken, fg: colors.textSecondary, label: "You can't make it" },
+} as const;
+
 interface AnswerFooterProps {
   /** When set, shows the collapsed changeable answer instead of the buttons */
-  answered?: 'yes' | 'no' | null;
+  answered?: 'yes' | 'no' | 'pending' | null;
   answerLabel?: string;
   yesLabel?: string;
   noLabel?: string;
+  /** What the primary says once the plan is full and joining means queueing. */
+  waitLabel?: string;
   /**
-   * Every place is taken, so joining would be refused (PLA-20). Only affects
+   * Every place is taken, so saying yes would be refused (PLA-20). Only affects
    * the unanswered state — someone already in is unaffected by the plan being
    * full, and must keep their way out.
+   *
+   * With `onWait` this offers the waiting list (PLA-37); without it the primary
+   * falls back to the dead "Full" button, so a caller that has not been taught
+   * about queueing cannot accidentally promise one.
    */
   full?: boolean;
   onYes?: () => void;
   onNo?: () => void;
+  onWait?: () => void;
   onChange?: () => void;
   size?: 'md' | 'lg';
   testID?: string;
@@ -32,15 +53,17 @@ export function AnswerFooter({
   answerLabel,
   yesLabel = "I'm in",
   noLabel = "Can't make it",
+  waitLabel = 'Take the next spot',
   full = false,
   onYes,
   onNo,
+  onWait,
   onChange,
   size = 'lg',
   testID,
 }: AnswerFooterProps) {
   if (answered) {
-    const isYes = answered === 'yes';
+    const tone = tones[answered];
     return (
       <Pressable
         accessibilityRole="button"
@@ -49,23 +72,19 @@ export function AnswerFooter({
         style={({ pressed }) => [
           styles.answeredRow,
           size === 'md' && styles.answeredRowMd,
-          { backgroundColor: isYes ? colors.confirmedSoft : colors.surfaceSunken },
+          { backgroundColor: tone.bg },
           pressed && styles.pressed,
         ]}
       >
         <ThemedText
           variant="bodyStrong"
-          color={isYes ? colors.confirmed : colors.textSecondary}
+          color={tone.fg}
           numberOfLines={1}
           style={styles.answerLabel}
         >
-          {answerLabel ?? (isYes ? "You're in" : "You can't make it")}
+          {answerLabel ?? tone.label}
         </ThemedText>
-        <ThemedText
-          variant="caption"
-          color={isYes ? colors.confirmed : colors.textSecondary}
-          style={styles.change}
-        >
+        <ThemedText variant="caption" color={tone.fg} style={styles.change}>
           Change
         </ThemedText>
       </Pressable>
@@ -74,17 +93,26 @@ export function AnswerFooter({
 
   // "Can't make it" stays live on a full plan: declining still takes you off
   // the list of people it's waiting on, and it's the honest answer to give.
+  //
+  // A full plan offers the queue rather than refusing (PLA-37), in the outline
+  // accent rather than the filled ember: taking a place in a line is a smaller
+  // thing than saying you'll be there, and the button should say so.
   return (
     <ButtonRow
       size={size}
       testID={testID}
       secondary={{ label: noLabel, variant: 'secondary', onPress: onNo, testID: 'answer-no' }}
-      primary={{
-        label: full ? 'Full' : yesLabel,
-        disabled: full,
-        onPress: onYes,
-        testID: 'answer-yes',
-      }}
+      primary={
+        full
+          ? {
+              label: onWait ? waitLabel : 'Full',
+              variant: 'accentOutline',
+              disabled: !onWait,
+              onPress: onWait,
+              testID: 'answer-wait',
+            }
+          : { label: yesLabel, onPress: onYes, testID: 'answer-yes' }
+      }
     />
   );
 }

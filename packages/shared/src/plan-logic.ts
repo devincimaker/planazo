@@ -26,6 +26,8 @@ export interface NestedDateOption extends DateOption {
 export interface RsvpLike {
   user_id?: string;
   response: string | null;
+  /** Ordering key for the waiting list, non-null only while pending. */
+  waitlist_seq?: number | null;
 }
 
 export interface PlanConfirmationData {
@@ -136,6 +138,37 @@ export function seatsLeft(data: PlanCapacityData): number | null {
  */
 export function isPlanFull(data: PlanCapacityData): boolean {
   return seatsLeft(data) === 0;
+}
+
+/** How many people are waiting for a place (PLA-37). */
+export function getWaitingCount(rsvps: RsvpLike[] | null | undefined): number {
+  return (rsvps ?? []).filter((r) => r.response === 'pending').length;
+}
+
+/**
+ * Someone's place in the queue, 1-based, or null if they are not in it.
+ *
+ * Counted rather than read off waitlist_seq, because the numbers are an
+ * ordering key with gaps in it: a promotion clears one, a withdrawal takes one
+ * out of the middle, and a re-lock starts the new arrivals above the people
+ * already waiting. What is honest is how many people are ahead of you.
+ *
+ * The number only ever gets smaller. People join behind you, and the only
+ * things that move you are somebody ahead being promoted or dropping out.
+ */
+export function waitlistPosition(
+  rsvps: RsvpLike[] | null | undefined,
+  userId: string | null | undefined
+): number | null {
+  if (!userId) return null;
+
+  const waiting = (rsvps ?? []).filter(
+    (r) => r.response === 'pending' && r.waitlist_seq != null
+  );
+  const mine = waiting.find((r) => r.user_id === userId);
+  if (!mine) return null;
+
+  return waiting.filter((r) => r.waitlist_seq! < mine.waitlist_seq!).length + 1;
 }
 
 /**

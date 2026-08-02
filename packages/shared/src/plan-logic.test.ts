@@ -7,6 +7,8 @@ import {
   getYesCount,
   seatsLeft,
   isPlanFull,
+  getWaitingCount,
+  waitlistPosition,
   earliestViableDate,
   bestViableOption,
   isPlanConfirmed,
@@ -252,6 +254,67 @@ describe('seatsLeft / isPlanFull', () => {
   it('is empty-safe', () => {
     expect(seatsLeft({ max_people: 4, rsvps: null })).toBe(4);
     expect(isPlanFull({ max_people: 4, rsvps: undefined })).toBe(false);
+  });
+});
+
+// PLA-37. The numbers are an ordering key with gaps in it, so position is
+// counted rather than read: what is honest is how many people are ahead.
+describe('getWaitingCount / waitlistPosition', () => {
+  const queue = [
+    { user_id: 'a', response: 'yes', waitlist_seq: null },
+    { user_id: 'b', response: 'pending', waitlist_seq: 3 },
+    { user_id: 'c', response: 'pending', waitlist_seq: 7 },
+    { user_id: 'd', response: 'pending', waitlist_seq: 12 },
+    { user_id: 'e', response: 'no', waitlist_seq: null },
+  ];
+
+  it('counts only the people waiting', () => {
+    expect(getWaitingCount(queue)).toBe(3);
+    expect(getWaitingCount(null)).toBe(0);
+    expect(getWaitingCount(undefined)).toBe(0);
+  });
+
+  it('reads position off the order, not off the number', () => {
+    expect(waitlistPosition(queue, 'b')).toBe(1);
+    expect(waitlistPosition(queue, 'c')).toBe(2);
+    expect(waitlistPosition(queue, 'd')).toBe(3);
+  });
+
+  it('survives the gaps a promotion and a withdrawal leave behind', () => {
+    // b was promoted (number cleared), c left. d is now at the front.
+    const after = [
+      { user_id: 'a', response: 'yes', waitlist_seq: null },
+      { user_id: 'b', response: 'yes', waitlist_seq: null },
+      { user_id: 'd', response: 'pending', waitlist_seq: 12 },
+    ];
+    expect(waitlistPosition(after, 'd')).toBe(1);
+  });
+
+  it('has no position for someone who is in, out, or absent', () => {
+    expect(waitlistPosition(queue, 'a')).toBeNull();
+    expect(waitlistPosition(queue, 'e')).toBeNull();
+    expect(waitlistPosition(queue, 'nobody')).toBeNull();
+    expect(waitlistPosition(queue, null)).toBeNull();
+    expect(waitlistPosition(null, 'b')).toBeNull();
+  });
+});
+
+// A pending row is a third state the rest of the logic predates. These pin the
+// behaviour it already has rather than changing it: waiting means you have
+// answered, and it does not mean you are in.
+describe('a pending row', () => {
+  const waiting = [{ user_id: 'u1', response: 'pending', waitlist_seq: 1 }];
+
+  it('stops the plan nagging you for an answer', () => {
+    expect(
+      needsUserResponse({ plan_type: 'fixed', status: 'open', rsvps: waiting }, 'u1')
+    ).toBe(false);
+  });
+
+  it('does not make you a participant', () => {
+    expect(
+      isUserParticipating({ plan_type: 'fixed', rsvps: waiting }, 'u1')
+    ).toBe(false);
   });
 });
 

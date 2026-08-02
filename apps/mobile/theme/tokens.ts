@@ -60,6 +60,15 @@ export const colors = {
   confirmed: palette.green,
   confirmedSoft: palette.greenSoft,
 
+  // On the waiting list (PLA-37): the third answer, between the green of a
+  // place you hold and the grey of one you turned down. Warm rather than
+  // settled — you have acted, and it is not resolved yet. Named separately
+  // from the accent because it means something the accent does not, even
+  // while it borrows the same two values; `waiting` is the darker ember for
+  // the same contrast reason accentText exists.
+  waiting: palette.emberPressed,
+  waitingSoft: palette.emberSoft,
+
   border: palette.eggshell,
   borderStrong: palette.oat,
   divider: palette.parchment,

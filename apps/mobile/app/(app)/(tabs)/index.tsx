@@ -19,9 +19,10 @@ import {
   isPlanFull,
   isPlanPast,
   needsUserResponse,
+  waitlistPosition,
 } from '@planazo/shared';
 import { supabase } from '../../../lib/supabase';
-import { deleteOwnRsvp } from '../../../lib/rsvp';
+import { deleteOwnRsvp, offerWaitingList, waitingLabel } from '../../../lib/rsvp';
 import { actionErrorCopy, errorCopy } from '../../../lib/queryErrors';
 import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
 import { useAuthStore } from '../../../stores/authStore';
@@ -80,7 +81,7 @@ export default function FeedScreen() {
         .select(
           `*,
           groups(id, name, color),
-          rsvps(user_id, response, profile:profiles(display_name)),
+          rsvps(user_id, response, waitlist_seq, profile:profiles(display_name)),
           plan_date_options(id, date, date_availability(user_id, profile:profiles(display_name)))`
         )
         .in('group_id', groupIds)
@@ -145,7 +146,13 @@ export default function FeedScreen() {
   });
 
   const answerFixed = useMutation({
-    mutationFn: async ({ planId, response }: { planId: string; response: 'yes' | 'no' }) => {
+    mutationFn: async ({
+      planId,
+      response,
+    }: {
+      planId: string;
+      response: 'yes' | 'no' | 'pending';
+    }) => {
       const { error } = await supabase.from('rsvps').upsert(
         { plan_id: planId, user_id: user?.id, response },
         { onConflict: 'plan_id,user_id' }
@@ -153,7 +160,12 @@ export default function FeedScreen() {
       if (error) throw error;
     },
     onSuccess: invalidate,
-    onError: alertActionError,
+    // The plan can fill between the render and the tap. Rather than a dead end,
+    // offer the thing that now exists (PLA-37).
+    onError: (error, variables) =>
+      offerWaitingList(error, () =>
+        answerFixed.mutate({ planId: variables.planId, response: 'pending' })
+      ),
   });
 
   const clearAnswer = useMutation({
@@ -261,6 +273,9 @@ export default function FeedScreen() {
       // wants — a running vote hands out no seats until it locks.
       const isFull = rsvpDriven && isPlanFull({ max_people: plan.max_people, rsvps: plan.rsvps });
 
+      // Only you see your own place in the queue (PLA-37).
+      const waitPosition = waitlistPosition(plan.rsvps, user?.id);
+
       return {
         plan,
         isPast,
@@ -269,6 +284,7 @@ export default function FeedScreen() {
         userRsvp,
         rsvpDriven,
         isFull,
+        waitPosition,
         myDates,
         when,
         goingNames,
@@ -302,6 +318,18 @@ export default function FeedScreen() {
     // It has to stay reachable — locking seeds every available member into a
     // 'yes' they never tapped, and that's exactly when a clash shows up.
     if (d.rsvpDriven) {
+      // The card stays dense: the position is the whole message, and the
+      // promise behind it ("we'll tell you") lives on plan detail.
+      if (d.userRsvp?.response === 'pending') {
+        return (
+          <AnswerFooter
+            size="md"
+            answered="pending"
+            answerLabel={waitingLabel(d.waitPosition)}
+            onChange={() => clearAnswer.mutate(plan.id)}
+          />
+        );
+      }
       if (d.userRsvp?.response === 'yes' || d.userRsvp?.response === 'no') {
         return (
           <AnswerFooter
@@ -317,6 +345,7 @@ export default function FeedScreen() {
           full={d.isFull}
           onYes={() => answerFixed.mutate({ planId: plan.id, response: 'yes' })}
           onNo={() => answerFixed.mutate({ planId: plan.id, response: 'no' })}
+          onWait={() => answerFixed.mutate({ planId: plan.id, response: 'pending' })}
         />
       );
     }

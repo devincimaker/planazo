@@ -552,6 +552,7 @@ export type Database = {
           response: string | null
           updated_at: string | null
           user_id: string
+          waitlist_seq: number | null
         }
         Insert: {
           created_at?: string | null
@@ -560,6 +561,7 @@ export type Database = {
           response?: string | null
           updated_at?: string | null
           user_id: string
+          waitlist_seq?: number | null
         }
         Update: {
           created_at?: string | null
@@ -568,6 +570,7 @@ export type Database = {
           response?: string | null
           updated_at?: string | null
           user_id?: string
+          waitlist_seq?: number | null
         }
         Relationships: [
           {
