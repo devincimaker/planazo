@@ -16,10 +16,15 @@ export interface ButtonProps {
   style?: ViewStyle;
   /**
    * One line by default — a button is a target, not a paragraph. Layouts that
-   * can give a label the whole width (see ButtonRow) allow more, so a long
-   * label wraps at a space instead of losing its end to an ellipsis. Raising it
-   * doesn't widen the button: text still measures at its single-line width, so
-   * the extra lines only ever get used once the box is already too narrow.
+   * can give a label the whole width (see ButtonRow) pass `0`, RN's "as many
+   * lines as it takes", so a long label wraps at spaces instead of losing its
+   * end to an ellipsis. Any cap is a guess at how many lines a label needs, and
+   * the text size is the caller's to change: "Tap the dates you can do" wants
+   * three lines at the largest accessibility size (PLA-22 review).
+   *
+   * Allowing more doesn't widen the button — text measures at its single-line
+   * width whatever this says, so extra lines are only used once the box is
+   * already too narrow, and the surrounding layout is unaffected.
    */
   numberOfLines?: number;
   testID?: string;

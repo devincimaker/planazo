@@ -26,11 +26,12 @@ interface ButtonRowProps {
  * label, whatever the string, font or text size.
  *
  * `flexWrap` is what makes it safe when they no longer fit: the primary drops
- * onto its own line and both go full width, so the words wrap instead of being
- * cut. A lone button on a wrapped line fills that line whatever its grow factor
- * — which is why the secondary needs a non-zero grow too, and why the primary's
- * is large rather than 1: on a single line the slack should nearly all go to
- * the primary, leaving the secondary hugging its label.
+ * onto its own line and both go full width, so the words wrap — over as many
+ * lines as the label needs, since a cap is just another guess — instead of
+ * being cut. A lone button on a wrapped line fills that line whatever its grow
+ * factor — which is why the secondary needs a non-zero grow too, and why the
+ * primary's is large rather than 1: on a single line the slack should nearly
+ * all go to the primary, leaving the secondary hugging its label.
  *
  * The primary asking for half the row is what decides *when* they stack: they
  * split only once the way out wants more than the other half, which is a
@@ -42,8 +43,8 @@ interface ButtonRowProps {
 export function ButtonRow({ secondary, primary, size = 'lg', style, testID }: ButtonRowProps) {
   return (
     <View style={[styles.row, style]} testID={testID}>
-      <Button {...secondary} size={size} style={styles.secondary} numberOfLines={2} />
-      <Button {...primary} size={size} style={styles.primary} numberOfLines={2} />
+      <Button {...secondary} size={size} style={styles.secondary} numberOfLines={0} />
+      <Button {...primary} size={size} style={styles.primary} numberOfLines={0} />
     </View>
   );
 }

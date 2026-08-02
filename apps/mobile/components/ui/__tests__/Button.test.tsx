@@ -32,7 +32,8 @@ describe('Button', () => {
     const { rerender } = await render(<Button label="None of them" />);
     expect(screen.getByText('None of them').props.numberOfLines).toBe(1);
 
-    await rerender(<Button label="None of them" numberOfLines={2} />);
-    expect(screen.getByText('None of them').props.numberOfLines).toBe(2);
+    // 0 is RN's "as many as it takes" — what ButtonRow passes
+    await rerender(<Button label="None of them" numberOfLines={0} />);
+    expect(screen.getByText('None of them').props.numberOfLines).toBe(0);
   });
 });

@@ -69,17 +69,22 @@ describe('ButtonRow', () => {
   // When the two no longer fit side by side, the primary drops to its own line
   // and both go full width — that is what lets the words wrap instead of being
   // cut at accessibility text sizes.
-  it('wraps rather than squeezing, and lets a wrapped label take two lines', async () => {
+  //
+  // The line count is uncapped (RN's `0`) rather than a small number: a cap is
+  // a guess at how many lines a label needs, and it was wrong at the largest
+  // accessibility size, where "Tap the dates you can do" wants three and a cap
+  // of two ellipsised it (PLA-22 review).
+  it('wraps rather than squeezing, over as many lines as the label needs', async () => {
     await render(
       <ButtonRow
         testID="row"
         secondary={{ label: 'None of them', variant: 'secondary', testID: 'no' }}
-        primary={{ label: 'Send 2 dates', testID: 'yes' }}
+        primary={{ label: 'Tap the dates you can do', testID: 'yes' }}
       />
     );
 
     expect(flat('row').flexWrap).toBe('wrap');
-    expect(screen.getByText('None of them').props.numberOfLines).toBe(2);
-    expect(screen.getByText('Send 2 dates').props.numberOfLines).toBe(2);
+    expect(screen.getByText('None of them').props.numberOfLines).toBe(0);
+    expect(screen.getByText('Tap the dates you can do').props.numberOfLines).toBe(0);
   });
 });
