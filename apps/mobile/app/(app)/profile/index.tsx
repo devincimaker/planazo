@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Constants from 'expo-constants';
 import { supabase } from '../../../lib/supabase';
+import { signOutOfAccount } from '../../../lib/signOut';
 import { PRIVACY_URL, SUPPORT_URL, TERMS_URL } from '../../../lib/links';
 import { clearPushToken, registerPushToken } from '../../../lib/push';
 import { purgeOwnedFiles } from '../../../lib/storage';
@@ -19,7 +20,7 @@ import { colors, fonts, spacing } from '../../../theme/tokens';
 export default function ProfileSheet() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { user, profile, setProfile, logout } = useAuthStore();
+  const { user, profile, setProfile } = useAuthStore();
 
   const { data: groupCount } = useQuery({
     queryKey: ['profile-group-count', user?.id],
@@ -81,15 +82,16 @@ export default function ProfileSheet() {
         text: 'Sign out',
         style: 'destructive',
         onPress: async () => {
-          try {
-            if (user) await clearPushToken(user.id);
-          } catch {
-            // best-effort — never block sign-out
+          if (await signOutOfAccount(user?.id, queryClient)) {
+            router.replace('/(auth)/login');
+            return;
           }
-          await supabase.auth.signOut();
-          queryClient.clear();
-          logout();
-          router.replace('/(auth)/login');
+          // The credentials would not delete. Sending them to the login screen
+          // now would just sign them back in on the next launch (PLA-36).
+          Alert.alert(
+            "Couldn't sign out",
+            'Your account is still signed in on this device. Check your connection and try again.'
+          );
         },
       },
     ]);
@@ -117,12 +119,19 @@ export default function ProfileSheet() {
       if (error) throw error;
     },
     onSuccess: async () => {
-      // The account is already gone, so the token this session holds is dead —
-      // sign out locally rather than asking a server that will refuse.
-      await supabase.auth.signOut({ scope: 'local' });
-      queryClient.clear();
-      logout();
-      router.replace('/(auth)/login');
+      // The account is already gone, so the token this session holds is dead.
+      // It still has to leave the device: supabase-js only clears its storage
+      // when its own /logout call succeeds, and here that call is answered by a
+      // server with no such user — so without this the next launch would
+      // restore a session for a deleted account (PLA-36).
+      if (await signOutOfAccount(user?.id, queryClient)) {
+        router.replace('/(auth)/login');
+        return;
+      }
+      Alert.alert(
+        'Your account is deleted',
+        "It couldn't be signed out on this device. Check your connection and sign out from this screen."
+      );
     },
     onError: (error: Error) => Alert.alert("Couldn't delete your account", error.message),
   });

@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ProfileSheet from '../index';
 import { useAuthStore } from '../../../../stores/authStore';
 import { supabase } from '../../../../lib/supabase';
+import { signOutOfAccount } from '../../../../lib/signOut';
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
@@ -26,6 +27,10 @@ jest.mock('../../../../lib/push', () => ({
 
 // Clean by default; individual tests make it fail.
 const mockPurgeOwnedFiles: jest.Mock = jest.fn(() => Promise.resolve({ failed: [] }));
+jest.mock('../../../../lib/signOut', () => ({
+  signOutOfAccount: jest.fn(() => Promise.resolve(true)),
+}));
+
 jest.mock('../../../../lib/storage', () => ({
   purgeOwnedFiles: (...args: unknown[]) => mockPurgeOwnedFiles(...args),
 }));
@@ -178,10 +183,26 @@ describe('ProfileSheet', () => {
     await confirm?.onPress?.();
 
     await waitFor(() => {
-      expect(mockClearPushToken).toHaveBeenCalledWith('me');
-      expect(supabase.auth.signOut).toHaveBeenCalled();
+      expect(signOutOfAccount).toHaveBeenCalledWith('me', expect.anything());
       expect(mockReplace).toHaveBeenCalledWith('/(auth)/login');
     });
+  });
+
+  // Credentials still on disk mean the user is not signed out, so a login
+  // screen here would be undone by the very next launch (PLA-36).
+  it('says so, and stays put, when the credentials would not delete', async () => {
+    (signOutOfAccount as jest.Mock).mockResolvedValueOnce(false);
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    await renderSheet();
+
+    await fireEvent.press(screen.getByTestId('sign-out'));
+    const buttons = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    await buttons.find((b) => b.text === 'Sign out')?.onPress?.();
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith("Couldn't sign out", expect.stringMatching(/still signed in/i));
+    });
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 
   // Guideline 5.1.1(i): the policy has to be reachable from inside the app,
@@ -217,7 +238,7 @@ describe('ProfileSheet', () => {
 
     await waitFor(() => {
       expect(supabase.rpc).toHaveBeenCalledWith('delete_my_account');
-      expect(supabase.auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
+      expect(signOutOfAccount).toHaveBeenCalled();
       expect(mockReplace).toHaveBeenCalledWith('/(auth)/login');
     });
   });
@@ -304,7 +325,29 @@ describe('ProfileSheet', () => {
     await waitFor(() => {
       expect(alertSpy).toHaveBeenCalledWith("Couldn't delete your account", 'network is down');
     });
-    expect(supabase.auth.signOut).not.toHaveBeenCalled();
+    expect(signOutOfAccount).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  // The account is gone server-side, so a token left on the device would let
+  // the next launch restore a session for a user that no longer exists.
+  it('says the account is deleted but the device is not signed out', async () => {
+    (signOutOfAccount as jest.Mock).mockResolvedValueOnce(false);
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    await renderSheet();
+
+    await fireEvent.press(screen.getByTestId('delete-account'));
+    const first = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    await first.find((b) => b.text === 'Delete')?.onPress?.();
+    const second = alertSpy.mock.calls[1][2] as { text: string; onPress?: () => void }[];
+    await second.find((b) => b.text === 'Delete for good')?.onPress?.();
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith(
+        'Your account is deleted',
+        expect.stringMatching(/signed out on this device/i)
+      );
+    });
     expect(mockReplace).not.toHaveBeenCalled();
   });
 });

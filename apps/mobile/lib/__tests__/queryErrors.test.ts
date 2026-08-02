@@ -2,7 +2,9 @@ import {
   actionErrorCopy,
   errorCopy,
   isAuthError,
+  isInvalidSessionError,
   isNotFoundError,
+  isOfflineError,
   isPlanFullError,
   isTimeoutError,
   retryQuery,
@@ -23,6 +25,55 @@ const signInRequired = { code: 'PGRST302', message: 'Anonymous access is disable
 /** Group-3 as well — but this one is OUR server missing its JWT secret. */
 const serverMisconfigured = { code: 'PGRST300', message: 'JWT secret missing' };
 const unreachable = new Error('Failed to reach Supabase at https://x.supabase.co/rest/v1/plans.');
+
+/**
+ * On the auth path supabase-js catches whatever our fetch wrapper threw and
+ * re-throws it as its own class, keeping only the message. These are what
+ * `getSession()` actually hands back, and telling them apart is the whole of
+ * PLA-36.
+ */
+const goTrue = (name: string, message: string, status: number) =>
+  Object.assign(new Error(message), { name, status, __isAuthError: true });
+
+const wrappedUnreachable = goTrue(
+  'AuthRetryableFetchError',
+  'Failed to reach Supabase at https://x.supabase.co/auth/v1/token.',
+  0
+);
+const wrappedTimeout = goTrue(
+  'AuthRetryableFetchError',
+  'The request took longer than 15s and was given up on.',
+  0
+);
+/** GoTrue also marks a gateway failure retryable — our server, not the token. */
+const serverDown = goTrue('AuthRetryableFetchError', 'Service Unavailable', 503);
+/** The one that means the session is genuinely dead. */
+const rejectedToken = goTrue(
+  'AuthApiError',
+  'Invalid Refresh Token: Refresh Token Not Found',
+  400
+);
+/**
+ * The other one. GoTrue peels `session_not_found` out of the response and
+ * raises this instead of an AuthApiError — a session revoked, signed out
+ * elsewhere, or whose user was deleted.
+ */
+const revokedSession = goTrue('AuthSessionMissingError', 'Auth session missing!', 400);
+
+/**
+ * And what postgrest-js does with the same two failures: flatten them into a
+ * plain object, folding the class name into the message. This is the shape
+ * every screen's `{ data, error }` actually receives, so it is the one that has
+ * to be recognised.
+ */
+const flattened = (message: string) => ({ message, details: 'at fetch (…)', hint: '', code: '' });
+
+const flatUnreachable = flattened(
+  'Error: Failed to reach Supabase at http://127.0.0.1:55321/rest/v1/profiles.'
+);
+const flatTimeout = flattened(
+  'RequestTimeoutError: The request took longer than 15s and was given up on.'
+);
 
 describe('isNotFoundError', () => {
   it('recognises a zero-row .single()', () => {
@@ -68,6 +119,93 @@ describe('isTimeoutError', () => {
     expect(isTimeoutError(new RequestTimeoutError(15000))).toBe(true);
     expect(isTimeoutError(unreachable)).toBe(false);
   });
+
+  it('still recognises it after supabase-js has re-wrapped it', () => {
+    expect(isTimeoutError(wrappedTimeout)).toBe(true);
+    expect(isTimeoutError(wrappedUnreachable)).toBe(false);
+  });
+
+  // The shape every query returns. Missing it is why a dead connection used to
+  // read as a generic "That didn't load" on every screen.
+  it('still recognises it once postgrest-js has flattened it', () => {
+    expect(isTimeoutError(flatTimeout)).toBe(true);
+    expect(isTimeoutError(flatUnreachable)).toBe(false);
+  });
+});
+
+describe('isOfflineError', () => {
+  it('covers every way the request can fail to reach the server', () => {
+    expect(isOfflineError(new RequestTimeoutError(15000))).toBe(true);
+    expect(isOfflineError(unreachable)).toBe(true);
+    expect(isOfflineError(wrappedTimeout)).toBe(true);
+    expect(isOfflineError(wrappedUnreachable)).toBe(true);
+    expect(isOfflineError(serverDown)).toBe(true);
+    expect(isOfflineError(flatUnreachable)).toBe(true);
+    expect(isOfflineError(flatTimeout)).toBe(true);
+  });
+
+  it('does not mistake an answered request for a missing connection', () => {
+    expect(isOfflineError(rejectedToken)).toBe(false);
+    expect(isOfflineError(expiredJwt)).toBe(false);
+    expect(isOfflineError(notFound)).toBe(false);
+    expect(isOfflineError(new Error('boom'))).toBe(false);
+    expect(isOfflineError(undefined)).toBe(false);
+  });
+});
+
+describe('isInvalidSessionError', () => {
+  it('recognises a token the server read and refused', () => {
+    expect(isInvalidSessionError(rejectedToken)).toBe(true);
+    expect(isInvalidSessionError(expiredJwt)).toBe(true);
+    expect(isInvalidSessionError(signInRequired)).toBe(true);
+  });
+
+  // A revoked session comes back under a different class than a bad refresh
+  // token. Matching only AuthApiError left it on a retry screen that could
+  // never succeed, since supabase-js had already dropped the session.
+  it('recognises a session the server no longer has', () => {
+    expect(isInvalidSessionError(revokedSession)).toBe(true);
+    expect(isOfflineError(revokedSession)).toBe(false);
+  });
+
+  /**
+   * The rule is GoTrue's, not a list of names: it deletes the stored session
+   * for every error of its own except the retryable-fetch one. Anything we
+   * classify as recoverable that it has already deleted becomes a retry screen
+   * over a session that no longer exists.
+   */
+  it.each([
+    ['AuthUnknownError', 'Unexpected token < in JSON'],
+    ['AuthInvalidTokenResponseError', 'Invalid token response'],
+    ['AuthImplicitGrantRedirectError', 'Invalid Refresh Token'],
+    ['AuthPKCEGrantCodeExchangeError', 'Code verifier missing'],
+  ])('treats %s as final, because GoTrue has already dropped the session', (name, message) => {
+    expect(isInvalidSessionError(goTrue(name, message, 500))).toBe(true);
+  });
+
+  it('still spares the one class GoTrue leaves the session alone for', () => {
+    expect(isInvalidSessionError(serverDown)).toBe(false);
+    expect(isInvalidSessionError(wrappedUnreachable)).toBe(false);
+  });
+
+  // The whole point of PLA-36: a blip must never be grounds for throwing the
+  // user's session away and asking for their password again.
+  it('never blames the session for a request that never landed', () => {
+    expect(isInvalidSessionError(new RequestTimeoutError(15000))).toBe(false);
+    expect(isInvalidSessionError(unreachable)).toBe(false);
+    expect(isInvalidSessionError(wrappedTimeout)).toBe(false);
+    expect(isInvalidSessionError(wrappedUnreachable)).toBe(false);
+    expect(isInvalidSessionError(serverDown)).toBe(false);
+    expect(isInvalidSessionError(flatUnreachable)).toBe(false);
+    expect(isInvalidSessionError(flatTimeout)).toBe(false);
+  });
+
+  it('leaves the session alone for a data problem', () => {
+    expect(isInvalidSessionError(notFound)).toBe(false);
+    expect(isInvalidSessionError(forbidden)).toBe(false);
+    expect(isInvalidSessionError(serverMisconfigured)).toBe(false);
+    expect(isInvalidSessionError(new Error('boom'))).toBe(false);
+  });
 });
 
 describe('retryQuery', () => {
@@ -107,6 +245,18 @@ describe('errorCopy', () => {
 
   it('names the connection for an unreachable host', () => {
     expect(errorCopy(unreachable).title).toBe("Couldn't reach Planazo");
+  });
+
+  it('keeps the same diagnosis once supabase-js has re-wrapped the failure', () => {
+    expect(errorCopy(wrappedTimeout).title).toBe('That took too long');
+    expect(errorCopy(wrappedUnreachable).title).toBe("Couldn't reach Planazo");
+    // "or we are" is the honest half of the copy for a gateway failure.
+    expect(errorCopy(serverDown).title).toBe("Couldn't reach Planazo");
+  });
+
+  it('names the connection on the query path too, not just a raw rejection', () => {
+    expect(errorCopy(flatUnreachable).title).toBe("Couldn't reach Planazo");
+    expect(errorCopy(flatTimeout).title).toBe('That took too long');
   });
 
   it('never blames group membership for an expired token', () => {

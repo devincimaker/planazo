@@ -4,7 +4,11 @@
  * Every screen that renders `isLoading ? spinner : content` needs an error
  * branch too — without one, a query that settles with no data leaves the
  * spinner up forever (PLA-15, PLA-19).
+ *
+ * It also decides when a failure is bad enough to throw the user's session
+ * away, which is why the auth-side shapes are read here too (PLA-36).
  */
+import { TIMED_OUT_PREFIX, UNREACHABLE_PREFIX } from './timeoutFetch';
 
 /**
  * PostgREST's code for a singular query (`.single()`) that didn't match exactly
@@ -31,6 +35,20 @@ const SIGN_IN_REQUIRED_CODE = 'PGRST302';
  */
 const PLAN_FULL_CODE = 'PT409';
 
+/**
+ * GoTrue's two verdicts that matter to us. It marks a failure it wants retried
+ * — anything fetch threw, plus 502/503/504 — and pointedly does *not* delete
+ * the stored session for those. `AuthApiError` is the opposite: the server read
+ * the token and refused it, and supabase-js has already dropped the session.
+ */
+/**
+ * The single name GoTrue treats as "try again" — anything fetch threw, plus
+ * 502/503/504. It is the one error class for which the SDK leaves the stored
+ * session alone; for every other error of its own it calls _removeSession().
+ * That asymmetry is the whole of the classification below.
+ */
+const RETRYABLE_FETCH_ERROR = 'AuthRetryableFetchError';
+
 const codeOf = (error: unknown): string | undefined => {
   if (error && typeof error === 'object' && 'code' in error) {
     const code = (error as { code?: unknown }).code;
@@ -47,8 +65,41 @@ const detailsOf = (error: unknown): string | undefined => {
   return undefined;
 };
 
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+const nameOf = (error: unknown): string | undefined => {
+  if (error && typeof error === 'object' && 'name' in error) {
+    const name = (error as { name?: unknown }).name;
+    if (typeof name === 'string') return name;
+  }
+  return undefined;
+};
+
+const messageOf = (error: unknown): string => {
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string') return message;
+  }
+  return typeof error === 'string' ? error : '';
+};
+
+/**
+ * Neither client hands our own errors back intact. postgrest-js flattens a
+ * thrown fetch error into a plain object and folds the class name into the
+ * message ("Error: Failed to reach Supabase…"); GoTrue re-throws it as its own
+ * class, keeping the message bare. Strip the name so one prefix matches both.
+ */
+const NAME_PREFIX = /^[A-Za-z]*Error: /;
+const bareMessage = (error: unknown): string => messageOf(error).replace(NAME_PREFIX, '');
+
+/**
+ * GoTrue tags its own errors with a hidden flag rather than a code. Duck-typed
+ * like the PostgREST readers above so this module stays free of the SDK — and
+ * so a test can describe one without constructing it.
+ */
+const isGoTrueError = (error: unknown): boolean =>
+  !!error && typeof error === 'object' && '__isAuthError' in error;
+
+const isRetryableFetchError = (error: unknown): boolean =>
+  isGoTrueError(error) && nameOf(error) === RETRYABLE_FETCH_ERROR;
 
 /**
  * True when the row isn't there *for this user* — deleted, or hidden by RLS.
@@ -82,7 +133,42 @@ export function isAuthError(error: unknown): boolean {
 }
 
 export function isTimeoutError(error: unknown): boolean {
-  return error instanceof Error && error.name === 'RequestTimeoutError';
+  // Only a raw rejection still carries the class. Everywhere else the message
+  // we wrote in timeoutFetch is all that survives the client's re-wrapping.
+  return nameOf(error) === 'RequestTimeoutError' || bareMessage(error).startsWith(TIMED_OUT_PREFIX);
+}
+
+/**
+ * The request never reached the server: it timed out, the host was unreachable,
+ * or GoTrue itself said try again. Nothing that comes back this way says
+ * anything about whether the stored session is good, so it must never be the
+ * reason one gets thrown away (PLA-36).
+ */
+export function isOfflineError(error: unknown): boolean {
+  return (
+    isTimeoutError(error) ||
+    isRetryableFetchError(error) ||
+    bareMessage(error).startsWith(UNREACHABLE_PREFIX)
+  );
+}
+
+/**
+ * The stored session is gone or worthless — the one case where finishing the
+ * job and signing out beats offering a retry.
+ *
+ * This mirrors GoTrue's own rule rather than naming error classes, because
+ * GoTrue has already acted by the time we see the error: it deletes the stored
+ * session for every error of its own except the retryable-fetch one. Listing
+ * names instead means the two disagree, and the app offers to retry into a
+ * session the SDK has already thrown away — `session_not_found` arrives as
+ * AuthSessionMissingError and a mangled response as AuthUnknownError, neither
+ * of which is an AuthApiError.
+ *
+ * PGRST301/302 is the same verdict reached from PostgREST's side.
+ */
+export function isInvalidSessionError(error: unknown): boolean {
+  if (isOfflineError(error)) return false;
+  return isAuthError(error) || isGoTrueError(error);
 }
 
 /**
@@ -131,7 +217,9 @@ export function errorCopy(error: unknown): { title: string; body: string } {
       body: "Try again — we'll refresh it. If it keeps happening, sign out and back in.",
     };
   }
-  if (messageOf(error).startsWith('Failed to reach Supabase')) {
+  // Covers a dead host and a 5xx alike — "or we are" is true of both, and the
+  // user can act on neither beyond waiting.
+  if (isOfflineError(error)) {
     return {
       title: "Couldn't reach Planazo",
       body: "You're offline, or we are. Try again in a moment.",
