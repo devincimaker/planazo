@@ -73,6 +73,38 @@ Or, if these changes are not yours to keep, revert them and start again."
   fi
 fi
 
+# Warn (don't stop) when this checkout carries migrations its database has not
+# applied — after pulling main before its stack caught up, or rebasing a --db
+# branch over someone else's schema PR. The integration suite refuses to run in
+# this state; the app just misbehaves in subtler ways, hence the early warning.
+db_url=$(wt_read_value "$target/.env" "SUPABASE_DB_URL" 2>/dev/null || true)
+if [ -n "$db_url" ]; then
+  missing=$(cd "$target/packages/integration-tests" 2>/dev/null && WT_DB_URL="$db_url" node -e '
+    const { Client } = require("pg");
+    const fs = require("fs");
+    (async () => {
+      const c = new Client({ connectionString: process.env.WT_DB_URL, connectionTimeoutMillis: 5000 });
+      try {
+        await c.connect();
+        const r = await c.query("select version from supabase_migrations.schema_migrations");
+        const applied = new Set(r.rows.map((x) => x.version));
+        const files = fs.readdirSync("../../supabase/migrations").filter((f) => f.endsWith(".sql"));
+        const miss = files.map((f) => f.split("_")[0]).filter((v) => !applied.has(v));
+        if (miss.length) console.log(miss.join(", "));
+      } catch {} finally { await c.end().catch(() => {}); }
+    })();' 2>/dev/null) || true
+  if [ -n "$missing" ]; then
+    echo
+    echo "WARNING: this checkout has migrations its database has not applied: $missing"
+    if [ "$db_mode" = "shared" ]; then
+      echo "Apply them to main's local stack:  (cd $primary && supabase migration up)"
+    else
+      echo "Apply them to this branch's database:  supabase db push --db-url \"\$SUPABASE_DB_URL\""
+    fi
+    echo
+  fi
+fi
+
 wt_step "Simulator $sim_name"
 if wt_sim_is_booted "$udid"; then
   wt_info "already booted"

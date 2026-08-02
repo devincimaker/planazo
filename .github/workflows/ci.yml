@@ -71,3 +71,29 @@ jobs:
 
       - name: Integration tests (RLS, RPCs, triggers)
         run: pnpm --filter @planazo/integration-tests test
+
+  deploy:
+    name: Push migrations to production
+    runs-on: ubuntu-latest
+    # Merges to main only, and only after the same commit passed every test —
+    # this is the one automated writer production has.
+    needs: [checks, migrations]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.90.0
+
+      # The access token alone is enough: link mints a login role for the
+      # session pooler, no database password required (verified in a clean
+      # container). `db push` applies only migrations missing from the remote
+      # history table, so re-runs are no-ops.
+      - name: Link to production
+        run: supabase link --project-ref leszgvpjonzjclhbgzju
+
+      - name: Push migrations
+        run: supabase db push --yes

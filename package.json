@@ -13,6 +13,7 @@
     "db:gen:types": "npx supabase gen types typescript --local > packages/shared/src/database.types.ts",
     "db:seed:demo": "node scripts/seed-demo-data.mjs",
     "test": "turbo test",
+    "test:integration": "pnpm --filter @planazo/integration-tests test",
     "wt:new": "bash scripts/worktree-create.sh",
     "wt:setup": "bash scripts/worktree-setup.sh",
     "wt:start": "bash scripts/worktree-start.sh",
