@@ -13,8 +13,11 @@ const mockPush = jest.fn();
 const mockReplace = jest.fn();
 const mockBack = jest.fn();
 let mockCanGoBack = true;
+// Mutable so a test can swap the route param under a mounted screen — what a
+// deep link does to this route (PLA-18).
+let mockParamId = 'plan-1';
 jest.mock('expo-router', () => ({
-  useLocalSearchParams: () => ({ id: 'plan-1' }),
+  useLocalSearchParams: () => ({ id: mockParamId }),
   useRouter: () => ({
     push: mockPush,
     back: mockBack,
@@ -127,18 +130,25 @@ function iso(daysFromNow: number, hour = 19) {
   ).toISOString();
 }
 
-function renderDetail() {
+async function renderDetail() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
-  return render(
+  // A fresh element each time: React bails out of re-rendering an identical
+  // element reference, which would make the swap below a silent no-op.
+  const tree = () => (
     <QueryClientProvider client={client}>
       <PlanDetailScreen />
     </QueryClientProvider>
   );
+  const utils = await render(tree());
+  // Re-render the *same* instance — how new params reach an already-mounted
+  // screen. Remounting would hide the bug this covers.
+  return { ...utils, rerenderSameInstance: () => utils.rerender(tree()) };
 }
 
 beforeEach(() => {
   jest.clearAllMocks();
   mockCanGoBack = true;
+  mockParamId = 'plan-1';
   jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   jest.spyOn(ActionSheetIOS, 'showActionSheetWithOptions').mockImplementation(() => {});
   useAuthStore.setState({ user: { id: 'me' } as any, profile: { id: 'me' } as any });
@@ -389,6 +399,86 @@ describe('PlanDetailScreen — flexible plans', () => {
     expect(rsvpsChain.eq).toHaveBeenCalledWith('response', 'no');
     // The whole mutation succeeded — no error alert
     await waitFor(() => expect(Alert.alert).not.toHaveBeenCalled());
+  });
+
+  // "Change" on a plan you've already voted on reopens the picker seeded with
+  // your own picks — the only other way into editing, and previously uncovered.
+  it('reopens the picker on "Change" with the dates you already sent', async () => {
+    prime({
+      plan: { ...basePlan, plan_type: 'flexible', status: 'open', event_date: null },
+      options,
+      avail: [{ id: 'a1', date_option_id: 'd1', user_id: 'me', profile: { display_name: 'Me' } }],
+    });
+    await renderDetail();
+
+    await waitFor(() => expect(screen.getByText('You sent 1 date')).toBeTruthy());
+    await fireEvent.press(screen.getByText('Change'));
+
+    // The picker is live and still holds d1 — not an empty or dead footer
+    expect(screen.getByText('Update your dates')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('vote-d2'));
+    await fireEvent.press(screen.getByText('Update your dates'));
+
+    await waitFor(() =>
+      expect(availChain.upsert).toHaveBeenCalledWith(
+        [
+          { plan_id: 'plan-1', user_id: 'me', date_option_id: 'd1', available: true },
+          { plan_id: 'plan-1', user_id: 'me', date_option_id: 'd2', available: true },
+        ],
+        { onConflict: 'plan_id,user_id,date_option_id' }
+      )
+    );
+  });
+
+  // PLA-18 regression: a deep link — a push tap, a shared planazo://plan/<id> —
+  // resolves to this same route, so expo-router swaps `id` under the mounted
+  // screen instead of remounting it. Plan A's picks used to survive that swap:
+  // plan B rendered with no rows ticked but an enabled Send, and pressing it
+  // would have written A's date_option_ids against B's plan_id.
+  it("drops the previous plan's picks when a deep link swaps the id", async () => {
+    prime({
+      plan: { ...basePlan, plan_type: 'flexible', status: 'open', event_date: null },
+      options,
+    });
+    const { rerenderSameInstance } = await renderDetail();
+
+    await waitFor(() => expect(screen.getByTestId('vote-d1')).toBeTruthy());
+    await fireEvent.press(screen.getByTestId('vote-d1'));
+    expect(screen.getByText('Send 1 date')).toBeTruthy();
+
+    // Plan B arrives by deep link: same screen instance, new id, its own dates
+    prime({
+      plan: {
+        ...basePlan,
+        id: 'plan-2',
+        title: 'Vermut al Poblenou',
+        plan_type: 'flexible',
+        status: 'open',
+        event_date: null,
+      },
+      options: [
+        { id: 'd3', date: '2026-08-20T12:00:00Z' },
+        { id: 'd4', date: '2026-08-21T12:00:00Z' },
+      ],
+    });
+    mockParamId = 'plan-2';
+    await rerenderSameInstance();
+
+    await waitFor(() => expect(screen.getByTestId('vote-d3')).toBeTruthy());
+    // Nothing inherited: no phantom Send over zero ticked rows, and the prompt
+    // is back to the first-vote one
+    expect(screen.queryByText('Send 1 date')).toBeNull();
+    expect(screen.getByText('Tap the dates you can do')).toBeTruthy();
+
+    // ...and picking on B writes B's option under B's plan
+    await fireEvent.press(screen.getByTestId('vote-d3'));
+    await fireEvent.press(screen.getByText('Send 1 date'));
+    await waitFor(() =>
+      expect(availChain.upsert).toHaveBeenCalledWith(
+        [{ plan_id: 'plan-2', user_id: 'me', date_option_id: 'd3', available: true }],
+        { onConflict: 'plan_id,user_id,date_option_id' }
+      )
+    );
   });
 
   // A reopened plan leaves seeded "yes" rows standing as held seats
