@@ -72,11 +72,11 @@ allowed_cidrs = ["0.0.0.0/0"]
 # Defaults to allow all IPv6 connections. Set empty array to block all IPs.
 allowed_cidrs_v6 = ["::/0"]
 
-# Disabled: the app subscribes to nothing (no .channel / postgres_changes
-# anywhere in apps/mobile), and the integration suite doesn't use it either.
-# Costs ~250MB when on. Re-enable the day a subscription lands.
+# The app's cache-sync channel (apps/mobile/lib/realtime.ts, PLA-28) subscribes
+# to postgres_changes, so local stacks need the realtime service. Costs ~250MB.
+# Restart the stack (supabase stop && supabase start) after pulling this change.
 [realtime]
-enabled = false
+enabled = true
 # Bind realtime via either IPv4 or IPv6. (default: IPv4)
 # ip_version = "IPv6"
 # The maximum length in bytes of HTTP request headers. (default: 4096)
