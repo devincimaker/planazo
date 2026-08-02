@@ -35,6 +35,7 @@ import {
   Avatar,
   AnswerFooter,
   Button,
+  ButtonRow,
   SlotBar,
   ListRow,
   ErrorState,
@@ -85,6 +86,13 @@ export default function PlanDetailScreen() {
     null
   );
   const activePicks = editingPicks && editingPicks.planId === id ? editingPicks.picks : null;
+
+  // The footer floats over the scroll, so the content has to end above it. Its
+  // height was a hand-measured constant, which stopped clearing it the moment a
+  // footer button wrapped to two lines at large text sizes — the last date row
+  // ended up underneath the bar. Measured instead, it clears whatever the bar
+  // actually is.
+  const [footerHeight, setFooterHeight] = useState(0);
 
   const { data: plan, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ['plan', id],
@@ -623,33 +631,30 @@ export default function PlanDetailScreen() {
     }
 
     return (
-      <View style={styles.footerRow}>
-        <Button
-          label="None of them"
-          variant="secondary"
-          onPress={() => declineAll.mutate()}
-          style={styles.footerNo}
-        />
-        {picked.length === 0 ? (
-          <Button
-            label="Tap the dates you can do"
-            variant="secondary"
-            disabled
-            haptic={false}
-            style={styles.footerYes}
-          />
-        ) : (
-          <Button
-            label={
-              d.myAvail.length > 0
-                ? 'Update your dates'
-                : `Send ${picked.length} date${picked.length === 1 ? '' : 's'}`
-            }
-            onPress={() => sendDates.mutate(picked)}
-            style={styles.footerYes}
-          />
-        )}
-      </View>
+      <ButtonRow
+        secondary={{
+          label: 'None of them',
+          variant: 'secondary',
+          onPress: () => declineAll.mutate(),
+          testID: 'decline-all',
+        }}
+        primary={
+          picked.length === 0
+            ? {
+                label: 'Tap the dates you can do',
+                variant: 'secondary',
+                disabled: true,
+                haptic: false,
+              }
+            : {
+                label:
+                  d.myAvail.length > 0
+                    ? 'Update your dates'
+                    : `Send ${picked.length} date${picked.length === 1 ? '' : 's'}`,
+                onPress: () => sendDates.mutate(picked),
+              }
+        }
+      />
     );
   };
 
@@ -684,7 +689,7 @@ export default function PlanDetailScreen() {
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: footerHeight + spacing.xxl }]}
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} />}
       >
         <View style={styles.titleBlock}>
@@ -988,7 +993,15 @@ export default function PlanDetailScreen() {
         </Pressable>
       </ScrollView>
 
-      {footerContent ? <View style={styles.footer}>{footerContent}</View> : null}
+      {footerContent ? (
+        <View
+          style={styles.footer}
+          onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
+          testID="plan-footer"
+        >
+          {footerContent}
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -1028,7 +1041,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: spacing.xl,
-    paddingBottom: 150,
+    // paddingBottom is measured from the footer at runtime — see footerHeight.
     gap: spacing.xl,
   },
   titleBlock: {
@@ -1162,16 +1175,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.lg,
     paddingBottom: 30,
-  },
-  footerRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  footerNo: {
-    flexBasis: 130,
-    flexGrow: 0,
-  },
-  footerYes: {
-    flex: 1,
   },
 });

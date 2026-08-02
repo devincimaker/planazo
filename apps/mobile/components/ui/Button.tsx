@@ -4,9 +4,9 @@ import { ThemedText } from './ThemedText';
 import { colors, fonts, radii } from '../../theme/tokens';
 
 type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ink' | 'accentOutline' | 'danger';
-type ButtonSize = 'md' | 'lg';
+export type ButtonSize = 'md' | 'lg';
 
-interface ButtonProps {
+export interface ButtonProps {
   label: string;
   onPress?: () => void;
   variant?: ButtonVariant;
@@ -14,6 +14,14 @@ interface ButtonProps {
   disabled?: boolean;
   haptic?: boolean;
   style?: ViewStyle;
+  /**
+   * One line by default — a button is a target, not a paragraph. Layouts that
+   * can give a label the whole width (see ButtonRow) allow more, so a long
+   * label wraps at a space instead of losing its end to an ellipsis. Raising it
+   * doesn't widen the button: text still measures at its single-line width, so
+   * the extra lines only ever get used once the box is already too narrow.
+   */
+  numberOfLines?: number;
   testID?: string;
 }
 
@@ -34,6 +42,7 @@ export function Button({
   disabled = false,
   haptic = true,
   style,
+  numberOfLines = 1,
   testID,
 }: ButtonProps) {
   const handlePress = () => {
@@ -63,7 +72,7 @@ export function Button({
       <ThemedText
         variant={size === 'md' ? 'bodyStrong' : 'body'}
         color={textColor[variant]}
-        numberOfLines={1}
+        numberOfLines={numberOfLines}
         style={[styles.label, size === 'md' ? styles.labelMd : styles.labelLg]}
       >
         {label}
@@ -124,6 +133,9 @@ const styles = StyleSheet.create({
   },
   label: {
     fontFamily: fonts.bodyBold,
+    // A no-op on one line (the text box hugs its own width) — it's the wrapped
+    // label that would otherwise sit ragged-right inside a centred button.
+    textAlign: 'center',
   },
   labelMd: {
     fontSize: 14,

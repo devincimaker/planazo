@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
-import { ActionSheetIOS, Alert } from 'react-native';
+import { ActionSheetIOS, Alert, StyleSheet, type ViewStyle } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import PlanDetailScreen from '../index';
 import { useAuthStore } from '../../../../../stores/authStore';
@@ -298,6 +298,32 @@ describe('PlanDetailScreen — flexible plans', () => {
       expect(availChain.upsert).toHaveBeenCalledWith(
         [{ plan_id: 'plan-1', user_id: 'me', date_option_id: 'd2', available: true }],
         { onConflict: 'plan_id,user_id,date_option_id' }
+      )
+    );
+  });
+
+  // PLA-22 regression: the way out of the picker was pinned to a 130pt box and
+  // rendered "None of t…". Nothing in the footer may carry a fixed width, and
+  // the button it names has to still decline.
+  it('offers the whole "None of them" label, on a button with no fixed width', async () => {
+    prime({
+      plan: { ...basePlan, plan_type: 'flexible', status: 'open', event_date: null },
+      options,
+    });
+    await renderDetail();
+
+    await waitFor(() => expect(screen.getByText('None of them')).toBeTruthy());
+    const style = StyleSheet.flatten(
+      screen.getByTestId('decline-all').props.style
+    ) as ViewStyle;
+    expect(style.width).toBeUndefined();
+    expect(style.flexBasis).toBeUndefined();
+
+    await fireEvent.press(screen.getByTestId('decline-all'));
+    await waitFor(() =>
+      expect(rsvpsChain.upsert).toHaveBeenCalledWith(
+        { plan_id: 'plan-1', user_id: 'me', response: 'no' },
+        { onConflict: 'plan_id,user_id' }
       )
     );
   });

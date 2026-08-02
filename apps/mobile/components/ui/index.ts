@@ -1,5 +1,6 @@
 export { ThemedText } from './ThemedText';
 export { Button } from './Button';
+export { ButtonRow } from './ButtonRow';
 export { BrandMark } from './BrandMark';
 export { BrandSplash } from './BrandSplash';
 export { ConfirmCard } from './ConfirmCard';

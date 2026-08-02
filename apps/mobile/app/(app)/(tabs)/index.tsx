@@ -32,7 +32,7 @@ import {
   Avatar,
   AvatarStack,
   AnswerFooter,
-  Button,
+  ButtonRow,
   DateOptionRow,
   EmptyState,
   ErrorState,
@@ -358,32 +358,28 @@ export default function FeedScreen() {
             testID={`date-option-${opt.id}`}
           />
         ))}
-        <View style={styles.chipButtons}>
-          <Button
-            label="Can't make it"
-            variant="secondary"
-            size="md"
-            onPress={() => declineFlexible.mutate({ planId: plan.id, optionIds: d.optionIds })}
-            style={styles.noButton}
-          />
-          {picked.length === 0 ? (
-            <Button
-              label="Tap the dates you can do"
-              variant="secondary"
-              size="md"
-              disabled
-              haptic={false}
-              style={styles.sendButton}
-            />
-          ) : (
-            <Button
-              label={`Send ${picked.length} date${picked.length === 1 ? '' : 's'}`}
-              size="md"
-              onPress={() => sendDates.mutate({ planId: plan.id, optionIds: picked })}
-              style={styles.sendButton}
-            />
-          )}
-        </View>
+        <ButtonRow
+          size="md"
+          style={styles.chipButtons}
+          secondary={{
+            label: "Can't make it",
+            variant: 'secondary',
+            onPress: () => declineFlexible.mutate({ planId: plan.id, optionIds: d.optionIds }),
+          }}
+          primary={
+            picked.length === 0
+              ? {
+                  label: 'Tap the dates you can do',
+                  variant: 'secondary',
+                  disabled: true,
+                  haptic: false,
+                }
+              : {
+                  label: `Send ${picked.length} date${picked.length === 1 ? '' : 's'}`,
+                  onPress: () => sendDates.mutate({ planId: plan.id, optionIds: picked }),
+                }
+          }
+        />
       </View>
     );
   };
@@ -655,15 +651,6 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   chipButtons: {
-    flexDirection: 'row',
-    gap: 10,
     marginTop: spacing.xxs,
-  },
-  noButton: {
-    flexBasis: 118,
-    flexGrow: 0,
-  },
-  sendButton: {
-    flex: 1,
   },
 });

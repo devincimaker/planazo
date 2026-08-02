@@ -25,4 +25,14 @@ describe('Button', () => {
 
     expect(screen.getByRole('button', { disabled: true })).toBeTruthy();
   });
+
+  // A button is a target, not a paragraph — but a layout that can give the
+  // label the whole width may say so, and then it wraps instead of truncating.
+  it('keeps its label on one line unless the caller allows more', async () => {
+    const { rerender } = await render(<Button label="None of them" />);
+    expect(screen.getByText('None of them').props.numberOfLines).toBe(1);
+
+    await rerender(<Button label="None of them" numberOfLines={2} />);
+    expect(screen.getByText('None of them').props.numberOfLines).toBe(2);
+  });
 });
