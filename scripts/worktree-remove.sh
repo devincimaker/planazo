@@ -132,8 +132,24 @@ fi
 git worktree prune
 wt_info "$target"
 
+# Ancestry answers "is this commit in main", which is the wrong question for a
+# squash merge: it lands a NEW commit on main and the branch's own commit is
+# never an ancestor. Asking ancestry alone told us "not merged" for every PR
+# this repo has ever landed, and left the branch behind every time — so ask
+# GitHub, which is the authority on whether the PR merged.
+merged=""
 if git merge-base --is-ancestor "$branch" main 2>/dev/null; then
-  git branch -d "$branch" >/dev/null 2>&1 && wt_info "branch $branch deleted (already merged into main)"
+  merged="already merged into main"
+elif command -v gh >/dev/null 2>&1 &&
+     [ "$(gh pr list --head "$branch" --state merged --json number --jq 'length' 2>/dev/null || echo 0)" -gt 0 ]; then
+  merged="squash-merged via PR"
+fi
+
+# -D rather than -d precisely because the squash case cannot pass -d's ancestry
+# check. Forcing is only safe because the branch above is *proven* merged; the
+# else arm keeps anything unproven, including when gh is missing or offline.
+if [ -n "$merged" ]; then
+  git branch -D "$branch" >/dev/null 2>&1 && wt_info "branch $branch deleted ($merged)"
 else
-  wt_info "branch $branch kept (not merged into main)"
+  wt_info "branch $branch kept (no merge found — delete by hand once you are sure)"
 fi
