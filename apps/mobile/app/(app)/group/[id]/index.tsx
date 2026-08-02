@@ -15,6 +15,7 @@ import { isPlanPast, planLastDate } from '@planazo/shared';
 import { supabase } from '../../../../lib/supabase';
 import { useAuthStore } from '../../../../stores/authStore';
 import { errorCopy, isNotFoundError } from '../../../../lib/queryErrors';
+import { MIN_TOUCH_TARGET } from '../../../../lib/a11y';
 import {
   ThemedText,
   Card,
@@ -253,6 +254,7 @@ export default function GroupDetailScreen() {
           }
           accessibilityRole="button"
           testID="back"
+          style={styles.navAction}
         >
           <ThemedText variant="bodyStrong" color={colors.accent}>
             ‹ Groups
@@ -262,6 +264,7 @@ export default function GroupDetailScreen() {
           onPress={() => router.push(`/(app)/group/${id}/manage`)}
           accessibilityRole="button"
           testID="manage"
+          style={[styles.navAction, styles.navActionEnd]}
         >
           <ThemedText variant="bodyStrong" color={colors.textSecondary}>
             Manage
@@ -300,6 +303,7 @@ export default function GroupDetailScreen() {
               onPress={() => router.push(`/(app)/group/${id}/invite`)}
               accessibilityRole="button"
               testID="invite"
+              style={styles.inviteAction}
             >
               <ThemedText variant="bodyStrong" color={colors.accent}>
                 Invite
@@ -393,8 +397,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
-    paddingTop: 14,
-    paddingBottom: 6,
+  },
+  // Row padding moved onto the buttons (PLA-40). This row was only 40 tall
+  // (14 + 20 + 6), so it gains 4 — both labels are already wider than 44.
+  navAction: {
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
+  },
+  navActionEnd: {
+    alignItems: 'flex-end',
   },
   content: {
     paddingHorizontal: spacing.xl,
@@ -419,6 +430,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  // "Invite" was a ~40×20 word. The row is 30 tall (the avatar stack), so the
+  // box takes its 44 and gives the surplus straight back (PLA-40).
+  inviteAction: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    minWidth: MIN_TOUCH_TARGET,
+    minHeight: MIN_TOUCH_TARGET,
+    marginVertical: -(MIN_TOUCH_TARGET - 30) / 2,
   },
   emptyCard: {
     backgroundColor: colors.surface,
@@ -459,6 +479,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    // Its content is 17pt tall. Reach the 44 by growing up into the 24pt gap
+    // above rather than down into the 10pt one below, where the first past
+    // card — tappable itself — would have ended up under this box (PLA-40).
+    minHeight: MIN_TOUCH_TARGET,
+    marginTop: -20,
+    marginBottom: -7,
   },
   // 19d past cards: a happened plan keeps its white card and the faces of
   // who was there; called off and never-quite sink into flat stone.

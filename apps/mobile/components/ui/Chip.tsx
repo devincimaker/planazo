@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet } from 'react-native';
 import { ThemedText } from './ThemedText';
+import { MIN_TOUCH_TARGET } from '../../lib/a11y';
 import { colors, radii } from '../../theme/tokens';
 
 interface ChipProps {
@@ -40,6 +41,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: radii.pill,
     borderWidth: 1.5,
+    // The one control in the app that genuinely grows: it sat at 37 (8 + 18 +
+    // 8 + border) and its row has no padding to reclaim, so the pill itself
+    // gets taller. The feed's filter row gives 4 of the 7 back from its own
+    // bottom padding.
+    minHeight: MIN_TOUCH_TARGET,
+    justifyContent: 'center',
   },
   active: {
     backgroundColor: colors.ink,

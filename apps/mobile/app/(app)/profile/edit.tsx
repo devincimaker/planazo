@@ -16,6 +16,7 @@ import { supabase } from '../../../lib/supabase';
 import { contentViolation } from '../../../lib/moderation';
 import { useAuthStore } from '../../../stores/authStore';
 import { pickFromLibrary, takePhoto, uploadJpeg } from '../../../lib/images';
+import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
 import { Avatar, ThemedText } from '../../../components/ui';
 import { colors, fonts, spacing } from '../../../theme/tokens';
 
@@ -113,7 +114,12 @@ export default function ProfileEdit() {
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <View style={styles.header}>
-        <Pressable accessibilityRole="button" onPress={() => router.back()} testID="cancel">
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.back()}
+          testID="cancel"
+          style={styles.headerAction}
+        >
           <ThemedText variant="bodyStrong" color={colors.textSecondary}>
             Cancel
           </ThemedText>
@@ -124,6 +130,7 @@ export default function ProfileEdit() {
           disabled={!dirty || save.isPending}
           onPress={() => save.mutate()}
           testID="save"
+          style={[styles.headerAction, styles.headerActionEnd]}
         >
           <ThemedText variant="bodyStrong" color={dirty ? colors.accent : colors.textFaint}>
             Save
@@ -150,7 +157,12 @@ export default function ProfileEdit() {
                 </ThemedText>
               </View>
             </Pressable>
-            <Pressable accessibilityRole="button" onPress={openPhotoOptions} testID="change-photo">
+            <Pressable
+              accessibilityRole="button"
+              onPress={openPhotoOptions}
+              testID="change-photo"
+              style={styles.changePhotoAction}
+            >
               <ThemedText variant="bodyStrong" color={colors.accent} style={styles.changePhoto}>
                 Change photo
               </ThemedText>
@@ -194,8 +206,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
-    paddingBottom: 10,
+  },
+  // Row padding moved onto the buttons (PLA-40); "Save" needs the width floor
+  // as well as the height one.
+  headerAction: {
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
+    minWidth: MIN_TOUCH_TARGET,
+  },
+  headerActionEnd: {
+    alignItems: 'flex-end',
   },
   headerTitle: {
     fontFamily: fonts.displayHeavy,
@@ -228,6 +248,15 @@ const styles = StyleSheet.create({
     borderColor: colors.background,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  // The text and its padding came to 32. The box takes 44 and gives the
+  // surplus back, so the gap under the avatar is unchanged — and 6 is well
+  // inside the 12pt gap, so this never reaches the avatar's own target.
+  changePhotoAction: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
+    marginVertical: -6,
   },
   changePhoto: {
     paddingVertical: 6,

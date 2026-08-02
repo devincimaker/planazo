@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet } from 'react-native';
 import { ThemedText } from './ThemedText';
+import { MIN_TOUCH_TARGET } from '../../lib/a11y';
 import { colors, radii } from '../../theme/tokens';
 
 interface DateOptionRowProps {
@@ -52,6 +53,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: radii.input,
     borderWidth: 1.5,
+    // Clears 44 on padding alone (11 + 20 + 11 + border), but only while the
+    // label stays one line of `bodyStrong`. Pin the floor so a smaller variant
+    // can't quietly drop under it.
+    minHeight: MIN_TOUCH_TARGET,
   },
   selected: {
     backgroundColor: colors.accentSoft,

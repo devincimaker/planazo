@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../../../lib/supabase';
 import { contentViolation } from '../../../../lib/moderation';
+import { MIN_TOUCH_TARGET } from '../../../../lib/a11y';
 import { ThemedText, GroupTile } from '../../../../components/ui';
 import { colors, fonts, groupColors, spacing } from '../../../../theme/tokens';
 
@@ -61,7 +62,12 @@ export default function EditGroupScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} accessibilityRole="button" testID="cancel">
+        <Pressable
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          testID="cancel"
+          style={styles.headerAction}
+        >
           <ThemedText variant="bodyStrong" color={colors.textMuted}>
             Cancel
           </ThemedText>
@@ -72,6 +78,7 @@ export default function EditGroupScreen() {
           disabled={!dirty || !valid || save.isPending}
           accessibilityRole="button"
           testID="save"
+          style={[styles.headerAction, styles.headerActionEnd]}
         >
           <ThemedText
             variant="bodyStrong"
@@ -131,8 +138,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
-    paddingTop: 14,
-    paddingBottom: 10,
+  },
+  // Row padding moved onto the buttons (PLA-40). "Save" is only ~36 wide, so
+  // this needs the width floor too — the box grows, the word does not move.
+  headerAction: {
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
+    minWidth: MIN_TOUCH_TARGET,
+  },
+  // On the right of the row, so grow leftwards and keep the label flush.
+  headerActionEnd: {
+    alignItems: 'flex-end',
   },
   headerTitle: {
     fontFamily: fonts.display,

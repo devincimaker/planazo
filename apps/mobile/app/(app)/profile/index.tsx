@@ -8,6 +8,7 @@ import { signOutOfAccount } from '../../../lib/signOut';
 import { PRIVACY_URL, SUPPORT_URL, TERMS_URL } from '../../../lib/links';
 import { clearPushToken, registerPushToken } from '../../../lib/push';
 import { purgeOwnedFiles } from '../../../lib/storage';
+import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
 import { useAuthStore } from '../../../stores/authStore';
 import { Avatar, Card, ListRow, ThemedText } from '../../../components/ui';
 import { colors, fonts, spacing } from '../../../theme/tokens';
@@ -382,8 +383,14 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
+  // 33 (8 + 17 + 8). Irreversible, so it should be neither hard to hit nor
+  // easy to hit by accident — 44 with the surplus handed back keeps the
+  // spacing around it exactly as it was (PLA-40).
   deleteAccount: {
     alignSelf: 'center',
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
+    marginVertical: -(MIN_TOUCH_TARGET - 33) / 2,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
   },

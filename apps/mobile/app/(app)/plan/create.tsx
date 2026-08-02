@@ -17,6 +17,7 @@ import Animated, { FadeInDown, FadeOutUp, LinearTransition } from 'react-native-
 import { supabase } from '../../../lib/supabase';
 import { contentViolation } from '../../../lib/moderation';
 import { useAuthStore } from '../../../stores/authStore';
+import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
 import { ThemedText, Button, MonthCalendar, colorForName } from '../../../components/ui';
 import { colors, fonts, radii, spacing } from '../../../theme/tokens';
 import { type } from '../../../theme/tokens';
@@ -211,7 +212,12 @@ export default function CreatePlanScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} accessibilityRole="button" testID="cancel">
+        <Pressable
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          testID="cancel"
+          style={styles.headerAction}
+        >
           <ThemedText variant="bodyStrong" color={colors.textMuted}>
             Cancel
           </ThemedText>
@@ -497,8 +503,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
-    paddingTop: 14,
-    paddingBottom: 10,
+  },
+  // The 14/10 that used to pad this row now lives on the button, which is what
+  // makes the full bar height tappable rather than just the word (PLA-40).
+  // "Cancel" is already wider than 44, so only the height needed fixing; the
+  // row lands at 44 where it used to be 45.
+  headerAction: {
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
   },
   headerTitle: {
     fontFamily: fonts.display,
@@ -538,9 +550,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 18,
   },
+  // 39 (9 + 18 + 9 + border) — picking the group is the first thing this
+  // screen asks for. No row padding to reclaim, so the pill grows (PLA-40).
   groupChip: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
     gap: 7,
     paddingVertical: 9,
     paddingHorizontal: 13,
@@ -569,9 +585,13 @@ const styles = StyleSheet.create({
     maxWidth: 250,
     textAlign: 'right',
   },
+  // 34 (8 + 18 + 8) and it carries a "✕" — the only way to drop a date you
+  // picked by mistake, and the smallest thing being asked to do it (PLA-40).
   dateChip: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
     gap: spacing.sm,
     paddingVertical: 8,
     paddingHorizontal: 12,
@@ -640,9 +660,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
+  // Both steppers were 38×38. They come in pairs a few points apart, so real
+  // boxes matter here: two hitSlop regions would have overlapped and the one
+  // that won a tap in the middle would not have been visible (PLA-40).
   stepDown: {
-    width: 38,
-    height: 38,
+    width: MIN_TOUCH_TARGET,
+    height: MIN_TOUCH_TARGET,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
@@ -651,8 +674,8 @@ const styles = StyleSheet.create({
     borderColor: colors.borderStrong,
   },
   stepUp: {
-    width: 38,
-    height: 38,
+    width: MIN_TOUCH_TARGET,
+    height: MIN_TOUCH_TARGET,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
@@ -671,10 +694,16 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     color: colors.textPrimary,
   },
+  // Full width but only 20pt tall. The surplus goes back as margin, split
+  // unevenly so it stays inside the 22pt gap above and the 10pt one below
+  // rather than landing on the stepper card or the first input (PLA-40).
   detailsToggle: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+    minHeight: MIN_TOUCH_TARGET,
+    marginTop: -14,
+    marginBottom: -10,
   },
   detailsFields: {
     gap: 10,

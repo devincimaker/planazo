@@ -23,6 +23,7 @@ import {
 import { supabase } from '../../../lib/supabase';
 import { deleteOwnRsvp } from '../../../lib/rsvp';
 import { actionErrorCopy, errorCopy } from '../../../lib/queryErrors';
+import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
 import { useAuthStore } from '../../../stores/authStore';
 import {
   ThemedText,
@@ -393,6 +394,7 @@ export default function FeedScreen() {
           accessibilityRole="button"
           accessibilityLabel="Profile"
           testID="feed-avatar"
+          style={styles.avatarAction}
         >
           <Avatar name={profile?.display_name ?? '?'} dark size={36} imageUrl={profile?.avatar_url} />
         </Pressable>
@@ -551,11 +553,23 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
   },
+  // The avatar is drawn at 36; the box around it is 44 and the negative margin
+  // hands those 8 points back, so the header keeps its height and the avatar
+  // does not shift off the right edge (PLA-40).
+  avatarAction: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: MIN_TOUCH_TARGET,
+    minHeight: MIN_TOUCH_TARGET,
+    margin: -(MIN_TOUCH_TARGET - 36) / 2,
+  },
   filters: {
     flexDirection: 'row',
     gap: spacing.sm,
     paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.md,
+    // Chip went from 37 to 44 to be tappable; give 4 of those 7 points back
+    // here so the feed below only moves by 3 (PLA-40).
+    paddingBottom: spacing.sm,
   },
   loading: {
     flex: 1,
@@ -600,11 +614,15 @@ const styles = StyleSheet.create({
     gap: 9,
     marginTop: spacing.sm + 1,
   },
+  // 43 and 40 respectively — the two ways to answer a "this plan was called
+  // off" notice. The row they sit in grows by 1pt (PLA-40).
   gotIt: {
     flex: 1,
     paddingVertical: 11,
     borderRadius: 14,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
     backgroundColor: colors.surface,
     borderWidth: 1.5,
     borderColor: colors.endedBorder,
@@ -613,6 +631,8 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 11,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
   },
   noticeDivider: {
     height: 1,

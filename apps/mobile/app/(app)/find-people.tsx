@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
 import { useFriends } from '../../lib/useFriends';
+import { MIN_TOUCH_TARGET } from '../../lib/a11y';
 import { ThemedText, Card, Avatar } from '../../components/ui';
 import { colors, fonts, radii, spacing } from '../../theme/tokens';
 
@@ -201,7 +202,12 @@ export default function FindPeopleScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <View style={styles.navRow}>
-        <Pressable onPress={() => router.back()} accessibilityRole="button" testID="back">
+        <Pressable
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          testID="back"
+          style={styles.backAction}
+        >
           <ThemedText style={styles.backChevron}>‹</ThemedText>
         </Pressable>
         <ThemedText style={styles.navTitle}>Find people</ThemedText>
@@ -292,6 +298,18 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     paddingBottom: 10,
   },
+  // The chevron glyph is about 10×26 — the smallest thing anyone is asked to
+  // hit. The box around it is a real 44×44; the negative margins give back
+  // every point it added, so the chevron stays put, the title beside it does
+  // not shift, and the row keeps its height (PLA-40).
+  backAction: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: MIN_TOUCH_TARGET,
+    minHeight: MIN_TOUCH_TARGET,
+    marginVertical: -(MIN_TOUCH_TARGET - 26) / 2,
+    marginHorizontal: -(MIN_TOUCH_TARGET - 10) / 2,
+  },
   backChevron: {
     fontSize: 22,
     lineHeight: 26,
@@ -374,10 +392,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 20,
   },
+  // 38 (9 + 20 + 9) — "Add" is the whole point of this screen. The person row
+  // around it is 60+, so this grows into space it already had (PLA-40).
   pill: {
     borderRadius: radii.pill,
     paddingVertical: 9,
     paddingHorizontal: 16,
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
   },
   pillAdd: {
     backgroundColor: colors.accent,

@@ -27,6 +27,7 @@ import {
 import { supabase } from '../../../../lib/supabase';
 import { deleteOwnRsvp } from '../../../../lib/rsvp';
 import { actionErrorCopy, errorCopy, isNotFoundError } from '../../../../lib/queryErrors';
+import { MIN_TOUCH_TARGET } from '../../../../lib/a11y';
 import { useAuthStore } from '../../../../stores/authStore';
 import {
   ThemedText,
@@ -675,12 +676,19 @@ export default function PlanDetailScreen() {
           }
           accessibilityRole="button"
           testID="back"
+          style={styles.navAction}
         >
           <ThemedText variant="bodyStrong" color={colors.accent}>
             ‹ {groupName}
           </ThemedText>
         </Pressable>
-        <Pressable onPress={showMenu} accessibilityRole="button" accessibilityLabel="Plan options" testID="plan-menu">
+        <Pressable
+          onPress={showMenu}
+          accessibilityRole="button"
+          accessibilityLabel="Plan options"
+          testID="plan-menu"
+          style={[styles.navAction, styles.navActionEnd]}
+        >
           <ThemedText variant="bodyStrong" color={colors.textMuted} style={styles.dots}>
             ···
           </ThemedText>
@@ -1030,7 +1038,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
+  },
+  // This bar was already exactly 44 tall (12 + 20 + 12) while the two things
+  // in it were 20 — the clearest case in the app of a target that should have
+  // filled its bar and didn't. Moving the padding onto the buttons changes
+  // nothing visually and makes the whole bar tappable (PLA-40).
+  navAction: {
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
+  },
+  // "···" is about 30 wide, so the end action needs the width floor too; it
+  // grows leftwards and the glyph stays flush.
+  navActionEnd: {
+    alignItems: 'flex-end',
+    minWidth: MIN_TOUCH_TARGET,
   },
   dots: {
     letterSpacing: 2,

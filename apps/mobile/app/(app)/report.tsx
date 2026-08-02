@@ -21,6 +21,7 @@ import {
   ReportSubject,
   submitReport,
 } from '../../lib/moderation';
+import { MIN_TOUCH_TARGET } from '../../lib/a11y';
 import { useAuthStore } from '../../stores/authStore';
 import { Card, ThemedText, showToast } from '../../components/ui';
 import { colors, fonts, spacing } from '../../theme/tokens';
@@ -104,9 +105,9 @@ export default function ReportScreen() {
       <View style={styles.header}>
         <Pressable
           accessibilityRole="button"
-          hitSlop={8}
           onPress={() => router.back()}
           testID="cancel"
+          style={styles.headerAction}
         >
           <ThemedText variant="bodyStrong" color={colors.textSecondary}>
             Cancel
@@ -115,10 +116,10 @@ export default function ReportScreen() {
         <ThemedText style={styles.headerTitle}>Report {SUBJECT_NOUN[subjectType]}</ThemedText>
         <Pressable
           accessibilityRole="button"
-          hitSlop={8}
           disabled={!valid || send.isPending}
           onPress={() => send.mutate()}
           testID="send-report"
+          style={[styles.headerAction, styles.headerActionEnd]}
         >
           <ThemedText variant="bodyStrong" color={valid ? colors.accentText : colors.textFaint}>
             {send.isPending ? 'Sending…' : 'Send'}
@@ -230,8 +231,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
-    paddingBottom: 10,
+  },
+  // These two carried hitSlop={8}, which only reached 36 — the row's own 16/10
+  // padding was the thing that should have been on the buttons all along
+  // (PLA-40).
+  headerAction: {
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
+    minWidth: MIN_TOUCH_TARGET,
+  },
+  headerActionEnd: {
+    alignItems: 'flex-end',
   },
   headerTitle: {
     fontFamily: fonts.displayHeavy,

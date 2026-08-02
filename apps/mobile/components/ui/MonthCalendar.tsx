@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { ThemedText } from './ThemedText';
+import { MIN_TOUCH_TARGET } from '../../lib/a11y';
 import { colors, fonts } from '../../theme/tokens';
 
 const DOW = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -61,7 +62,7 @@ export function MonthCalendar({ selected, onToggleDay }: MonthCalendarProps) {
           accessibilityRole="button"
           accessibilityLabel="Next month"
           testID="cal-next"
-          style={[styles.arrow, styles.arrowRight]}
+          style={styles.arrow}
         >
           <ThemedText color={colors.accent} style={styles.arrowLabel}>
             ›
@@ -135,11 +136,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 6,
   },
+  // A chevron is about 12×24 — the smallest target in the app before this. The
+  // box is a real 44×44 with the glyph centred in it; the negative margins give
+  // back the surplus so the header row keeps its height and each chevron stays
+  // exactly where it was drawn (the 16 is 6 of header padding + the 10 the
+  // wider box would otherwise push it in by).
   arrow: {
-    width: 28,
-  },
-  arrowRight: {
-    alignItems: 'flex-end',
+    width: MIN_TOUCH_TARGET,
+    height: MIN_TOUCH_TARGET,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: -10,
+    marginHorizontal: -16,
   },
   arrowLabel: {
     fontSize: 20,
@@ -151,8 +159,12 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     color: colors.textPrimary,
   },
+  // No row gap: the 2pt that used to separate the weeks now belongs to the day
+  // cells themselves, which takes each one from 42 to 44 without the grid
+  // growing by a single point (the row pitch was, and stays, 44). Real boxes
+  // sitting flush cannot overlap the way two hitSlop regions would.
   grid: {
-    gap: 2,
+    gap: 0,
   },
   week: {
     flexDirection: 'row',
@@ -169,7 +181,7 @@ const styles = StyleSheet.create({
   },
   day: {
     flex: 1,
-    height: 42,
+    height: MIN_TOUCH_TARGET,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 14,

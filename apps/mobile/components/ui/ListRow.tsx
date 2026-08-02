@@ -1,5 +1,6 @@
 import { Pressable, View, StyleSheet } from 'react-native';
 import { ThemedText } from './ThemedText';
+import { MIN_TOUCH_TARGET } from '../../lib/a11y';
 import { colors, spacing } from '../../theme/tokens';
 
 interface ListRowProps {
@@ -76,6 +77,10 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingVertical: spacing.lg,
     paddingHorizontal: spacing.lg,
+    // Already 54 — the whole row has always been the target, which is the
+    // pattern the rest of PLA-40 moves everything else towards. Pinned so it
+    // stays that way.
+    minHeight: MIN_TOUCH_TARGET,
   },
   divider: {
     borderTopWidth: 1,

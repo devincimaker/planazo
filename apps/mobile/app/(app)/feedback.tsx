@@ -20,6 +20,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
 import { pickFromLibrary, uploadJpeg } from '../../lib/images';
 import { feedbackSheetOpen } from '../../lib/feedbackState';
+import { MIN_TOUCH_TARGET, hitSlopTo } from '../../lib/a11y';
 import { ThemedText, showToast } from '../../components/ui';
 import { colors, fonts, groupColors, spacing } from '../../theme/tokens';
 
@@ -95,7 +96,12 @@ export default function FeedbackScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <View style={styles.header}>
-        <Pressable accessibilityRole="button" onPress={() => router.back()} testID="cancel">
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.back()}
+          testID="cancel"
+          style={styles.headerAction}
+        >
           <ThemedText variant="bodyStrong" color={colors.textSecondary}>
             Cancel
           </ThemedText>
@@ -106,6 +112,7 @@ export default function FeedbackScreen() {
           disabled={!valid || send.isPending}
           onPress={() => send.mutate()}
           testID="send"
+          style={[styles.headerAction, styles.headerActionEnd]}
         >
           <ThemedText variant="bodyStrong" color={valid ? colors.accent : colors.textFaint}>
             Send
@@ -183,7 +190,11 @@ export default function FeedbackScreen() {
                     accessibilityRole="button"
                     onPress={() => setAttachment(null)}
                     style={styles.thumbRemove}
-                    hitSlop={8}
+                    // The one control in the app that keeps hitSlop: a 20pt
+                    // badge sitting on the thumbnail it removes, where a real
+                    // 44pt box would cover the image underneath it. 8 only got
+                    // it to 36 (PLA-40).
+                    hitSlop={hitSlopTo(20)}
                     testID="remove-attachment"
                   >
                     <ThemedText variant="caption" color={colors.background}>
@@ -228,8 +239,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
-    paddingBottom: 10,
+  },
+  // Row padding moved onto the buttons (PLA-40): "Send" is ~36 wide, so the
+  // width floor matters as much as the height one here.
+  headerAction: {
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
+    minWidth: MIN_TOUCH_TARGET,
+  },
+  headerActionEnd: {
+    alignItems: 'flex-end',
   },
   headerTitle: {
     fontFamily: fonts.displayHeavy,
