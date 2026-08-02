@@ -1,5 +1,5 @@
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Constants from 'expo-constants';
@@ -177,10 +177,19 @@ export default function ProfileSheet() {
 
   const version = Constants.expoConfig?.version;
 
+  const insets = useSafeAreaInsets();
+
   return (
     <SafeAreaView style={styles.screen} edges={[]}>
       <View style={styles.grabber} />
-      <ScrollView style={styles.flex} contentContainerStyle={styles.content} bounces={false}>
+      <ScrollView
+        style={styles.flex}
+        // The home indicator sits over the last of the content: the sheet
+        // reaches the bottom of the window, and edges={[]} means nothing else
+        // is paying for that strip.
+        contentContainerStyle={[styles.content, { paddingBottom: 30 + insets.bottom }]}
+        bounces={false}
+      >
         <View style={styles.identity}>
           <Avatar
             name={profile?.display_name ?? '?'}

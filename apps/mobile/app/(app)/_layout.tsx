@@ -1,5 +1,5 @@
 import { Stack } from 'expo-router';
-import { colors } from '../../theme/tokens';
+import { colors, sheetDetents } from '../../theme/tokens';
 import { ToastHost } from '../../components/ui';
 import { ScreenshotFeedback } from '../../components/ScreenshotFeedback';
 
@@ -16,10 +16,8 @@ export default function AppLayout() {
         <Stack.Screen
           name="profile/index"
           options={{
-            presentation: 'formSheet',
+            presentation: 'modal',
             headerShown: false,
-            sheetAllowedDetents: [0.62],
-            sheetCornerRadius: 30,
           }}
         />
         <Stack.Screen name="profile/edit" options={{ presentation: 'modal', headerShown: false }} />
@@ -34,7 +32,7 @@ export default function AppLayout() {
           options={{
             presentation: 'formSheet',
             headerShown: false,
-            sheetAllowedDetents: [0.78],
+            sheetAllowedDetents: [sheetDetents.invites],
             sheetCornerRadius: 30,
           }}
         />
