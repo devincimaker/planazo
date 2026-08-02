@@ -17,6 +17,23 @@ You are the **orchestrator**. You never write feature code yourself. One **dev a
 `[PLA-20 · R2/4] sol (medium): approve → waiting on CI → merging`
 Also post each round's summary as a PR comment (see Phase 3) — that's the persistent log when several pipelines run at once.
 
+**Watching the dev agent.** Your narration lines are checkpoints, not a live feed — between them the dev agent can spin for many minutes with the user unable to see why. So **the first time you spawn the dev agent, tell the user how to watch it**:
+
+```
+! bash .claude/skills/pipeline/scripts/watch-dev.sh          # follow the newest dev agent
+! bash .claude/skills/pipeline/scripts/watch-dev.sh -n 200   # replay recent history first
+```
+
+It prints `SAY` / `TOOL` / `RES` lines as the agent works; Ctrl-C stops watching without touching the agent. Never `Read` the agent's raw `.output` transcript into your own context — it is the full JSONL conversation (megabytes) and will blow your context window. To inspect it yourself, always go through `watch-dev.sh` or a bounded `tail -N … | jq` one-liner.
+
+**Unstick it — the orchestrator's job.** When the user says the agent is doing something stupid, or a phase runs far past what the work should cost, look at the tail yourself and check for these before assuming progress:
+
+- **Repeating the same tool call** with no state change — especially `simctl shutdown && boot` to escape a modal, or re-running a failing command with cosmetic edits.
+- **Lost in the UI** — the accessibility dump shows a screen unrelated to what it's verifying.
+- **Simulator left in a test state** — e.g. `content_size` still at an accessibility size. The Dynamic Type sweep is legitimate and *does* make the app look absurd; the bug is only failing to restore `large` afterwards.
+
+Then SendMessage a correction that names the loop, points at the skill that already solves it, and sets a floor: *take the checks you completed, state honestly which you skipped, and move on to the gates.* A dev agent will grind indefinitely on a blocked verification step unless you give it permission to stop — and grinding is worse than a PR that says which checks were done manually.
+
 **Concurrency.** One /pipeline per Claude session. For parallel issues, open more sessions in the main checkout — worktree tooling isolates ports, simulators, and databases.
 
 ## Phase 0 — Setup & routing
@@ -27,7 +44,17 @@ Also post each round's summary as a PR comment (see Phase 3) — that's the pers
    - **DB mode** — per AGENTS.md: `--db` iff the issue implies schema change; shared otherwise; shared when ambiguous.
    - **Dev model** — `fable` if the issue touches migrations/RLS/RPCs/triggers, auth or security-sensitive paths, concurrency/races, or cross-cutting refactors; `opus` for UI, copy, styling, navigation, state, tests, config. Rationale: the right model from the first draft beats escalating mid-loop; a saved review round pays the difference.
 4. From the main checkout: `pnpm wt:new <branch> [--db]`, branch named `fix|feat/pla-XX-<slug>` per repo convention.
-5. Spawn the **dev agent**: Agent tool, `subagent_type: general-purpose`, `model:` as routed, `run_in_background: false`. Its prompt must include: the absolute `WT` path (work only there), "follow AGENTS.md — read `.env.worktree` and `apps/mobile/.env` first", the contents of `.pipeline/issue.md`, and this phase instruction: *"Research the codebase and return an implementation plan only — files to touch, approach, migration/RLS details if any, and a test plan. Do not write code yet."* Continue this same agent later with SendMessage (load its schema via ToolSearch when first needed) — it must keep its context across all fix rounds.
+5. Spawn the **dev agent**: Agent tool, `subagent_type: general-purpose`, `model:` as routed, `run_in_background: false`. Its prompt must include: the absolute `WT` path (work only there), "follow AGENTS.md — read `.env.worktree` and `apps/mobile/.env` first", the contents of `.pipeline/issue.md`, the **skill pointers** below, and this phase instruction: *"Research the codebase and return an implementation plan only — files to touch, approach, migration/RLS details if any, and a test plan. Do not write code yet."* Continue this same agent later with SendMessage (load its schema via ToolSearch when first needed) — it must keep its context across all fix rounds.
+
+   **Skill pointers — always include these verbatim.** A subagent does not inherit your skill list, so it will re-derive (badly) what the repo already documents:
+   > Before driving the iOS simulator, invoke the **`simulator-driving`** skill — it covers tapping by label, deep links, screenshots, and specifically how to get past the two things that trap agents: the Expo dev-menu sheet and the SpringBoard **"Open in 'Planazo'?"** alert. If a deep link seems not to work, dump the accessibility tree and tap the alert's `Open` button. **Never** shut down and reboot the simulator to escape a modal — that is a 40-second no-op that leaves the modal exactly where it was.
+   > For anything involving worktrees, branch databases, or an integration-suite refusal, invoke the **`wt`** skill rather than guessing.
+
+   **Solution levers — also include verbatim.** Agents default to structural fixes and silently treat product copy as immutable, which turns three-line changes into new abstractions:
+   > List the levers available before designing a fix, and pick the cheapest one that actually solves the *class* of problem. **Copy and content are levers, not fixed constraints** — if a label doesn't fit, "shorten the label" is a legitimate candidate ranked alongside "change the layout", and if the issue text itself offers it, you must evaluate it explicitly rather than skip to structure. Your plan must state which levers you considered and why you rejected the cheaper ones. Two rules on copy: propose exact wording rather than a vague "shorten it", and flag any user-facing copy change prominently in the plan and PR body as needing sign-off — never slip one in unannounced.
+   > Match the size of the fix to the size of the issue. A new shared component, a new prop on a shared primitive, or a refactor of adjacent code is rarely warranted by an `S`/Low bug; if you believe it is, justify it in the plan and expect to be challenged.
+
+   Also tell the user how to watch the agent (see **Watching the dev agent** above) in the same message you announce the spawn.
 
 ## Phase 1 — Plan review (one round, cheap)
 

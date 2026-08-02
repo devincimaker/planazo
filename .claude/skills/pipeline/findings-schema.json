@@ -28,7 +28,7 @@
           "severity": { "type": "string", "enum": ["high", "low"] },
           "scenario": {
             "type": "string",
-            "description": "concrete failure scenario: with state/input X, Y happens instead of Z. Mandatory for high."
+            "description": "Mandatory for high, in one of two forms. Defect findings: a concrete failure scenario — with state/input X, Y happens instead of Z. Disproportionate-change findings: the smaller change that would work instead, and roughly its size."
           },
           "files": { "type": "array", "items": { "type": "string" } },
           "fix_hint": { "type": "string", "description": "one-line suggestion of the fix direction; empty string if none" }
