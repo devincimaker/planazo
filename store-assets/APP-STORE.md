@@ -23,7 +23,7 @@ system, so never hand-edit the PNGs.
 | Production Supabase in release builds | done | `eas.json` → `preview` / `production` env |
 | iPhone-only (`supportsTablet: false`) | done | `app.json` |
 | `ITSAppUsesNonExemptEncryption: false` | done | `app.json` |
-| Deploy planazo.me with the new pages | **you** | the two URLs must be live before submitting |
+| Deploy planazo.me with the new pages | **you** | `/privacy`, `/terms` and `/support` must all be live before submitting — the app links to each of them |
 | `planazo://reset-password` on the prod allow-list | **you** | Supabase → Auth → URL Configuration |
 | APNs key attached to the Expo project | **you** | `eas credentials` |
 | Demo account for App Review | **you** | see §5 |

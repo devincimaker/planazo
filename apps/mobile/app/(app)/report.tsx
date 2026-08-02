@@ -89,6 +89,7 @@ export default function ReportScreen() {
         queryClient.invalidateQueries({ queryKey: BLOCKED_QUERY_KEY });
         queryClient.invalidateQueries({ queryKey: ['home-plans'] });
         queryClient.invalidateQueries({ queryKey: ['group'] });
+        queryClient.invalidateQueries({ queryKey: ['group-manage'] });
       }
       router.back();
       showToast(
