@@ -53,6 +53,12 @@ const rejectedToken = goTrue(
   'Invalid Refresh Token: Refresh Token Not Found',
   400
 );
+/**
+ * The other one. GoTrue peels `session_not_found` out of the response and
+ * raises this instead of an AuthApiError — a session revoked, signed out
+ * elsewhere, or whose user was deleted.
+ */
+const revokedSession = goTrue('AuthSessionMissingError', 'Auth session missing!', 400);
 
 /**
  * And what postgrest-js does with the same two failures: flatten them into a
@@ -152,6 +158,14 @@ describe('isInvalidSessionError', () => {
     expect(isInvalidSessionError(rejectedToken)).toBe(true);
     expect(isInvalidSessionError(expiredJwt)).toBe(true);
     expect(isInvalidSessionError(signInRequired)).toBe(true);
+  });
+
+  // A revoked session comes back under a different class than a bad refresh
+  // token. Matching only AuthApiError left it on a retry screen that could
+  // never succeed, since supabase-js had already dropped the session.
+  it('recognises a session the server no longer has', () => {
+    expect(isInvalidSessionError(revokedSession)).toBe(true);
+    expect(isOfflineError(revokedSession)).toBe(false);
   });
 
   // The whole point of PLA-36: a blip must never be grounds for throwing the

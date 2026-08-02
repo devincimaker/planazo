@@ -42,7 +42,15 @@ const PLAN_FULL_CODE = 'PT409';
  * the token and refused it, and supabase-js has already dropped the session.
  */
 const RETRYABLE_FETCH_ERROR = 'AuthRetryableFetchError';
-const REJECTED_TOKEN_ERROR = 'AuthApiError';
+/**
+ * Two names, not one: GoTrue peels `session_not_found` out of the response and
+ * raises AuthSessionMissingError instead of AuthApiError. That is exactly the
+ * revoked-or-deleted session — the case most worth signing out for — so
+ * matching only AuthApiError would strand it on a retry screen that can never
+ * succeed. It also covers the SDK's own "there is no session" throw, where
+ * signing out is a no-op and login is where the user belongs anyway.
+ */
+const REJECTED_TOKEN_ERRORS = ['AuthApiError', 'AuthSessionMissingError'];
 
 const codeOf = (error: unknown): string | undefined => {
   if (error && typeof error === 'object' && 'code' in error) {
@@ -157,7 +165,8 @@ export function isOfflineError(error: unknown): boolean {
  */
 export function isInvalidSessionError(error: unknown): boolean {
   if (isOfflineError(error)) return false;
-  return isAuthError(error) || (isGoTrueError(error) && nameOf(error) === REJECTED_TOKEN_ERROR);
+  const name = nameOf(error);
+  return isAuthError(error) || (isGoTrueError(error) && !!name && REJECTED_TOKEN_ERRORS.includes(name));
 }
 
 /**

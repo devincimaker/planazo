@@ -16,7 +16,7 @@ import {
   InstrumentSans_600SemiBold,
   InstrumentSans_700Bold,
 } from '@expo-google-fonts/instrument-sans';
-import { supabase } from '../lib/supabase';
+import { forgetStoredSession, supabase } from '../lib/supabase';
 import { initNotificationPresentation, registerPushToken } from '../lib/push';
 import { errorCopy, isInvalidSessionError, isOfflineError, retryQuery } from '../lib/queryErrors';
 import { ErrorState } from '../components/ui/ErrorState';
@@ -84,15 +84,25 @@ function InitialLayout() {
   );
 
   /**
-   * Local-only, so it never waits on a server that may not answer — and we only
-   * ever reach it when the network has already proved it works.
+   * Ends the session on this device for good.
+   *
+   * `scope: 'local'` is a misnomer — supabase-js still calls /logout, and if
+   * that call fails it returns early without touching storage. Clearing only
+   * our own state there would show the login screen while the credentials sat
+   * on disk, ready to sign the user back in on the next launch. So we ask the
+   * SDK first, for the server-side revocation, then drop our copy regardless.
    */
   const signOutLocally = useCallback(async () => {
     try {
-      await supabase.auth.signOut({ scope: 'local' });
+      const { error } = await supabase.auth.signOut({ scope: 'local' });
+      if (error) {
+        console.warn('Supabase could not complete the sign-out; clearing the session anyway.', error);
+      }
     } catch (error) {
-      console.error('Failed to clear the local Supabase session.', error);
+      console.warn('Supabase could not complete the sign-out; clearing the session anyway.', error);
     }
+
+    await forgetStoredSession();
     if (!isMounted.current) return;
     setSession(null);
     setProfile(null);
@@ -232,9 +242,9 @@ function InitialLayout() {
         <ErrorState
           {...errorCopy(initError)}
           onRetry={() => void initialize()}
-          // Offline there is nothing behind this screen to get back to, and the
-          // sign-out couldn't reach the server to stick anyway — retrying is the
-          // only move that helps. Anything else (a profile row that won't load)
+          // Offline there is nothing behind this screen to get back to: a
+          // sign-out would stall on /logout only to land them on a login screen
+          // they can't use either. Anything else (a profile row that won't load)
           // needs a way out that isn't relaunching the app.
           onBack={isOfflineError(initError) ? undefined : () => void signOutLocally()}
           backLabel="Sign out"

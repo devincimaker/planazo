@@ -3,7 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Constants from 'expo-constants';
-import { supabase } from '../../../lib/supabase';
+import { forgetStoredSession, supabase } from '../../../lib/supabase';
 import { clearPushToken } from '../../../lib/push';
 import { useAuthStore } from '../../../stores/authStore';
 import { Avatar, Card, ListRow, ThemedText } from '../../../components/ui';
@@ -74,7 +74,15 @@ export default function ProfileSheet() {
           } catch {
             // best-effort — never block sign-out
           }
-          await supabase.auth.signOut();
+          try {
+            await supabase.auth.signOut();
+          } catch {
+            // best-effort too: the local session still has to go
+          }
+          // supabase-js only clears storage if its /logout call came back OK,
+          // so without this a sign-out on a bad connection looks done and then
+          // signs you straight back in on the next launch (PLA-36).
+          await forgetStoredSession();
           queryClient.clear();
           logout();
           router.replace('/(auth)/login');

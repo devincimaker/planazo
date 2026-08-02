@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react-nativ
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ProfileSheet from '../index';
 import { useAuthStore } from '../../../../stores/authStore';
-import { supabase } from '../../../../lib/supabase';
+import { forgetStoredSession, supabase } from '../../../../lib/supabase';
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
@@ -14,6 +14,7 @@ jest.mock('../../../../lib/supabase', () => ({
     from: jest.fn(),
     auth: { signOut: jest.fn(() => Promise.resolve({ error: null })) },
   },
+  forgetStoredSession: jest.fn(() => Promise.resolve()),
 }));
 
 const mockClearPushToken: jest.Mock = jest.fn(() => Promise.resolve());
@@ -158,6 +159,24 @@ describe('ProfileSheet', () => {
     await waitFor(() => {
       expect(mockClearPushToken).toHaveBeenCalledWith('me');
       expect(supabase.auth.signOut).toHaveBeenCalled();
+      expect(forgetStoredSession).toHaveBeenCalled();
+      expect(mockReplace).toHaveBeenCalledWith('/(auth)/login');
+    });
+  });
+
+  // supabase-js leaves storage alone when its /logout call fails, so trusting
+  // it would sign the user straight back in on the next launch (PLA-36).
+  it('still drops the stored session when supabase cannot reach /logout', async () => {
+    (supabase.auth.signOut as jest.Mock).mockRejectedValueOnce(new Error('offline'));
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    await renderSheet();
+
+    await fireEvent.press(screen.getByTestId('sign-out'));
+    const buttons = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    await buttons.find((b) => b.text === 'Sign out')?.onPress?.();
+
+    await waitFor(() => {
+      expect(forgetStoredSession).toHaveBeenCalled();
       expect(mockReplace).toHaveBeenCalledWith('/(auth)/login');
     });
   });

@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react-native';
 import RootLayout from '../_layout';
 import { useAuthStore } from '../../stores/authStore';
-import { supabase } from '../../lib/supabase';
+import { forgetStoredSession, supabase } from '../../lib/supabase';
 
 jest.mock('../../lib/supabase', () => ({
   supabase: {
@@ -12,6 +12,7 @@ jest.mock('../../lib/supabase', () => ({
     },
     from: jest.fn(),
   },
+  forgetStoredSession: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('expo-router', () => {
@@ -43,6 +44,7 @@ const mockGetSession = supabase.auth.getSession as unknown as jest.Mock;
 const mockSignOut = supabase.auth.signOut as unknown as jest.Mock;
 const mockOnAuthStateChange = supabase.auth.onAuthStateChange as unknown as jest.Mock;
 const mockFrom = supabase.from as jest.Mock;
+const mockForget = forgetStoredSession as jest.Mock;
 
 const SESSION = { access_token: 'token', user: { id: 'user-1' } } as any;
 const PROFILE = { id: 'user-1', display_name: 'Marta' };
@@ -63,9 +65,15 @@ const wrappedUnreachable = Object.assign(
   new Error('Failed to reach Supabase at https://x.supabase.co/auth/v1/token.'),
   { name: 'AuthRetryableFetchError', status: 0, __isAuthError: true }
 );
-/** The only shape that means the stored session is genuinely dead. */
+/** A refresh token the server read and refused. */
 const rejectedToken = Object.assign(new Error('Invalid Refresh Token'), {
   name: 'AuthApiError',
+  status: 400,
+  __isAuthError: true,
+});
+/** A revoked session — `session_not_found`, which arrives under its own class. */
+const revokedSession = Object.assign(new Error('Auth session missing!'), {
+  name: 'AuthSessionMissingError',
   status: 400,
   __isAuthError: true,
 });
@@ -166,6 +174,41 @@ describe('launching with a session the server refuses', () => {
     expect(screen.queryByTestId('init-error')).toBeNull();
   });
 
+  // A revoked session arrives as AuthSessionMissingError, and supabase-js has
+  // already dropped it — so a retry screen here could never come good.
+  it('treats a revoked session as dead rather than retryable', async () => {
+    mockGetSession.mockResolvedValue({ data: { session: null }, error: revokedSession });
+
+    await render(<RootLayout />);
+
+    await waitFor(() => expect(mockSignOut).toHaveBeenCalledWith({ scope: 'local' }));
+    expect(await screen.findByTestId('slot')).toBeTruthy();
+    expect(screen.queryByTestId('init-error')).toBeNull();
+  });
+
+  // supabase-js returns early without clearing storage when its /logout call
+  // fails, so trusting it would show the login screen while the credentials
+  // sat on disk, ready to sign the user back in on the next launch.
+  it('drops the stored session even when supabase says the sign-out failed', async () => {
+    mockGetSession.mockResolvedValue({ data: { session: null }, error: rejectedToken });
+    mockSignOut.mockResolvedValue({ error: wrappedUnreachable });
+
+    await render(<RootLayout />);
+
+    await waitFor(() => expect(mockForget).toHaveBeenCalled());
+    expect(useAuthStore.getState().session).toBeNull();
+  });
+
+  it('drops the stored session even when the sign-out throws outright', async () => {
+    mockGetSession.mockResolvedValue({ data: { session: null }, error: rejectedToken });
+    mockSignOut.mockRejectedValue(new Error('boom'));
+
+    await render(<RootLayout />);
+
+    await waitFor(() => expect(mockForget).toHaveBeenCalled());
+    expect(useAuthStore.getState().session).toBeNull();
+  });
+
   // A missing profile row is a data problem, not a credentials one. Retrying is
   // the first offer, but signing out has to stay reachable or the user is stuck
   // on a screen only a reinstall gets them off (the PLA-19 trap).
@@ -186,6 +229,7 @@ describe('launching with a session the server refuses', () => {
     fireEvent.press(screen.getByTestId('init-error-back'));
 
     await waitFor(() => expect(mockSignOut).toHaveBeenCalledWith({ scope: 'local' }));
+    expect(mockForget).toHaveBeenCalled();
     expect(useAuthStore.getState().session).toBeNull();
   });
 });
