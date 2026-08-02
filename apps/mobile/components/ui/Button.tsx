@@ -4,9 +4,9 @@ import { ThemedText } from './ThemedText';
 import { colors, fonts, radii } from '../../theme/tokens';
 
 type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ink' | 'accentOutline' | 'danger';
-type ButtonSize = 'md' | 'lg';
+export type ButtonSize = 'md' | 'lg';
 
-interface ButtonProps {
+export interface ButtonProps {
   label: string;
   onPress?: () => void;
   variant?: ButtonVariant;
@@ -14,6 +14,19 @@ interface ButtonProps {
   disabled?: boolean;
   haptic?: boolean;
   style?: ViewStyle;
+  /**
+   * One line by default — a button is a target, not a paragraph. Layouts that
+   * can give a label the whole width (see ButtonRow) pass `0`, RN's "as many
+   * lines as it takes", so a long label wraps at spaces instead of losing its
+   * end to an ellipsis. Any cap is a guess at how many lines a label needs, and
+   * the text size is the caller's to change: "Tap the dates you can do" wants
+   * three lines at the largest accessibility size (PLA-22 review).
+   *
+   * Allowing more doesn't widen the button — text measures at its single-line
+   * width whatever this says, so extra lines are only used once the box is
+   * already too narrow, and the surrounding layout is unaffected.
+   */
+  numberOfLines?: number;
   testID?: string;
 }
 
@@ -34,6 +47,7 @@ export function Button({
   disabled = false,
   haptic = true,
   style,
+  numberOfLines = 1,
   testID,
 }: ButtonProps) {
   const handlePress = () => {
@@ -63,7 +77,7 @@ export function Button({
       <ThemedText
         variant={size === 'md' ? 'bodyStrong' : 'body'}
         color={textColor[variant]}
-        numberOfLines={1}
+        numberOfLines={numberOfLines}
         style={[styles.label, size === 'md' ? styles.labelMd : styles.labelLg]}
       >
         {label}
@@ -124,6 +138,9 @@ const styles = StyleSheet.create({
   },
   label: {
     fontFamily: fonts.bodyBold,
+    // A no-op on one line (the text box hugs its own width) — it's the wrapped
+    // label that would otherwise sit ragged-right inside a centred button.
+    textAlign: 'center',
   },
   labelMd: {
     fontSize: 14,

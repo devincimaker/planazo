@@ -1,5 +1,5 @@
-import { View, Pressable, StyleSheet } from 'react-native';
-import { Button } from './Button';
+import { Pressable, StyleSheet } from 'react-native';
+import { ButtonRow } from './ButtonRow';
 import { ThemedText } from './ThemedText';
 import { colors, radii } from '../../theme/tokens';
 
@@ -74,43 +74,21 @@ export function AnswerFooter({
   // "Can't make it" stays live on a full plan: declining still takes you off
   // the list of people it's waiting on, and it's the honest answer to give.
   return (
-    <View style={styles.row} testID={testID}>
-      <Button
-        label={noLabel}
-        variant="secondary"
-        size={size}
-        onPress={onNo}
-        style={size === 'md' ? styles.noButtonMd : styles.noButton}
-        testID="answer-no"
-      />
-      <Button
-        label={full ? 'Full' : yesLabel}
-        size={size}
-        disabled={full}
-        onPress={onYes}
-        style={styles.yesButton}
-        testID="answer-yes"
-      />
-    </View>
+    <ButtonRow
+      size={size}
+      testID={testID}
+      secondary={{ label: noLabel, variant: 'secondary', onPress: onNo, testID: 'answer-no' }}
+      primary={{
+        label: full ? 'Full' : yesLabel,
+        disabled: full,
+        onPress: onYes,
+        testID: 'answer-yes',
+      }}
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  noButton: {
-    flexBasis: 150,
-    flexGrow: 0,
-  },
-  noButtonMd: {
-    flexBasis: 118,
-    flexGrow: 0,
-  },
-  yesButton: {
-    flex: 1,
-  },
   answeredRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

@@ -1,4 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/react-native';
+import { StyleSheet, type ViewStyle } from 'react-native';
 import { AnswerFooter } from '../AnswerFooter';
 
 describe('AnswerFooter', () => {
@@ -29,6 +30,20 @@ describe('AnswerFooter', () => {
     await render(<AnswerFooter answered="yes" answerLabel="You sent 2 dates" />);
 
     expect(screen.getByText('You sent 2 dates')).toBeTruthy();
+  });
+
+  // PLA-22: both sizes used to pin "Can't make it" to a hand-measured width
+  // (150 / 118), which is a guess about how wide the label renders — wrong for
+  // a longer label, and wrong for every label at accessibility text sizes.
+  it.each(['md', 'lg'] as const)('gives the %s decline button no fixed width', async (size) => {
+    await render(<AnswerFooter size={size} />);
+
+    const style = StyleSheet.flatten(
+      screen.getByTestId('answer-no').props.style
+    ) as ViewStyle;
+    expect(style.width).toBeUndefined();
+    expect(style.flexBasis).toBeUndefined();
+    expect(style.flexShrink).toBe(1);
   });
 
   it('renders the declined state', async () => {
