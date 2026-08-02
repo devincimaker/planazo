@@ -7,7 +7,12 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # PR runs: newest push wins, cancel the stale one. Main runs: NEVER cancel —
+  # the deploy job rides this workflow, and cancelling merge A's run because
+  # merge B landed leaves A's migrations undeployed if B then fails. Main runs
+  # queue instead; a superseded queued run loses nothing because db push is
+  # cumulative — whichever run deploys carries every pending migration.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   checks:
@@ -50,18 +55,28 @@ jobs:
       # timestamp, so editing a file that production has already applied is
       # SILENTLY skipped at deploy — CI's fresh stack would test the edit,
       # production would never receive it, and the two diverge without a single
-      # red signal. Migrations that exist on the base branch are therefore
-      # immutable: fix forward with a new migration. The branch's own new
-      # migrations stay freely editable.
-      - name: Migrations on the base branch are immutable
-        if: github.event_name == 'pull_request'
+      # red signal. Migrations that predate the change are therefore immutable:
+      # fix forward with a new migration. On PRs the baseline is the base
+      # branch; on direct pushes to main it is the previous tip, which turns a
+      # silent divergence into a loud red run at the exact commit that caused
+      # it (and blocks that run's own deploy). A branch's own new migrations
+      # stay freely editable.
+      - name: Existing migrations are immutable
         run: |
-          git fetch --quiet --depth=1 origin "${{ github.event.pull_request.base.sha }}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          else
+            base="${{ github.event.before }}"
+          fi
+          case "$base" in
+            "" | 0000000000000000000000000000000000000000) exit 0 ;;
+          esac
+          git fetch --quiet --depth=1 origin "$base"
           changed=$(git diff --name-status --diff-filter=MDR \
-            "${{ github.event.pull_request.base.sha }}" HEAD -- supabase/migrations/)
+            "$base" HEAD -- supabase/migrations/)
           if [ -n "$changed" ]; then
             echo "$changed"
-            echo "::error::This PR modifies, deletes or renames migrations that already exist on the base branch. 'supabase db push' identifies migrations by version and silently skips edited content, so production would never receive these changes. Write a new migration instead."
+            echo "::error::This change modifies, deletes or renames migrations that already existed. 'supabase db push' identifies migrations by version and silently skips edited content, so production would never receive these changes. Write a new migration instead."
             exit 1
           fi
 

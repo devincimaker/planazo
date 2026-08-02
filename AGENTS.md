@@ -100,10 +100,15 @@ itself.
   a schema PR lands). Nothing ever rolls back on a shared database; a botched
   branch-DB experiment is discarded with `wt:rm` and rebuilt.
 - **Merged migrations are immutable.** `db push` matches migrations by version
-  timestamp and silently skips edited content, so CI rejects any PR that
-  modifies, deletes or renames a migration already on the base branch. Fix
-  forward with a new migration; only your branch's own new migrations are
-  editable.
+  timestamp and silently skips edited content, so CI rejects any change — PR or
+  direct push — that modifies, deletes or renames a migration that already
+  existed. Fix forward with a new migration; only your branch's own new
+  migrations are editable.
+- **Editing your own applied migration needs a re-apply.** The same version
+  matching means `db push` skips an already-applied migration whose file you
+  edited. After editing, run `pnpm wt:db:reset` (wipes and rebuilds this
+  worktree's branch DB from the current files + reseeds). The suite refuses to
+  run while an applied migration has uncommitted edits.
 - **CI is the merge gate.** It runs on GitHub's machines with a fresh stack
   carrying *your branch's* migrations, so a schema branch always gets an
   honest verdict there even when no local database can give one. Local suite

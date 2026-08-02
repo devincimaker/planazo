@@ -41,15 +41,42 @@ export default async function globalSetup(): Promise<void> {
     await client.end().catch(() => {});
   }
 
+  const isLocal = stack.dbUrl.includes('127.0.0.1') || stack.dbUrl.includes('localhost');
+
   const missing = fileVersions.filter((v) => !applied.has(v));
   if (missing.length) {
-    const isLocal = stack.dbUrl.includes('127.0.0.1') || stack.dbUrl.includes('localhost');
     throw new Error(
       `The target database is missing ${missing.length} migration(s) from this checkout: ` +
         `${missing.join(', ')}.\nApply them first: ` +
         (isLocal
           ? 'supabase migration up'
           : 'supabase db push --db-url "$SUPABASE_DB_URL"  (from this worktree, or re-run pnpm wt:setup --db)'),
+    );
+  }
+
+  // Version equality is not content equality: `db push` skips a recorded
+  // version even when its file changed, so an applied migration edited on disk
+  // silently never reaches the database. The full case is unverifiable (the
+  // history table does not store file bytes), but the common moment — edit an
+  // applied migration, immediately re-run the tests — is git-observable.
+  // Edits that were committed and never re-applied stay a local blind spot;
+  // CI's fresh stack always tests the true content and remains the merge gate.
+  const dirtyApplied = execSync('git status --porcelain -- supabase/migrations', {
+    cwd: repoRoot(),
+    encoding: 'utf8',
+  })
+    .split('\n')
+    .filter((l) => l.length > 3 && !l.startsWith('??'))
+    .map((l) => l.slice(3).split(' -> ').pop() ?? '')
+    .filter((p) => applied.has((p.split('/').pop() ?? '').split('_')[0]));
+  if (dirtyApplied.length) {
+    throw new Error(
+      `Applied migration(s) have uncommitted edits: ${dirtyApplied.join(', ')}.\n` +
+        `The database is still running the OLD content — 'db push' matches by version ` +
+        `and skips them.\nRe-apply everything: ` +
+        (isLocal
+          ? 'supabase db reset  (from main — wipes shared QA data)'
+          : 'pnpm wt:db:reset  (wipes and rebuilds this worktree\'s branch database)'),
     );
   }
 }
