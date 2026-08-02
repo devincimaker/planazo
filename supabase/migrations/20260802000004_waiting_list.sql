@@ -230,10 +230,6 @@ ALTER TABLE public.notifications ADD CONSTRAINT notifications_type_check
 -- Waiters get no plan_locked push. Theirs is plan_promoted, if and when it
 -- comes; telling somebody who did not get in that "this is happening" would be
 -- a lie.
---
--- Copy note: the em dashes in the bodies below predate the rule in AGENTS.md
--- and are rewritten here rather than carried forward, since this file reissues
--- them anyway.
 CREATE OR REPLACE FUNCTION public.lock_plan(
   p_plan_id UUID,
   p_date_option_id UUID DEFAULT NULL
@@ -422,10 +418,11 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- 7. Somebody waiting is waiting for news, and this is the news
 --
--- cancel_plan and restore_plan, forked from 20260802000001. The recipient set
--- widens from "said yes" to "said yes or is waiting". Staying silent would
--- leave a waiter checking a plan that is never coming back, which is the one
--- thing a waiting list must not do.
+-- cancel_plan and restore_plan, forked from 20260802000003 (not 000001, or the
+-- push copy fixed there would regress). The recipient set widens from "said
+-- yes" to "said yes or is waiting". Staying silent would leave a waiter
+-- checking a plan that is never coming back, which is the one thing a waiting
+-- list must not do.
 --
 -- On a flexible plan most waiters were already reached, since they are in
 -- date_availability and the union picks them up; on a fixed plan nothing
@@ -602,39 +599,3 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
-
--- 8. The last of the em dashes in push copy
---
--- AGENTS.md forbids them in every string a user can see and names push text
--- explicitly. The pass that removed the other nineteen only reached the app and
--- the web copy, because these live in SQL. This function has no other reason to
--- change; it is reissued verbatim apart from the two bodies.
-CREATE OR REPLACE FUNCTION public.notify_plan_created()
-RETURNS TRIGGER AS $$
-DECLARE
-  v_name TEXT;
-BEGIN
-  SELECT display_name INTO v_name FROM public.profiles WHERE id = NEW.created_by;
-
-  INSERT INTO public.notifications (user_id, type, title, body, data)
-  SELECT gm.user_id, 'plan_created', 'New plan',
-         CASE
-           WHEN NEW.plan_type = 'fixed' THEN
-             format('%s put up "%s". Are you in?', v_name, NEW.title)
-           ELSE
-             format('%s put up "%s". Pick the dates that work.', v_name, NEW.title)
-         END,
-         jsonb_build_object('plan_id', NEW.id, 'group_id', NEW.group_id)
-  FROM public.group_members gm
-  WHERE gm.group_id = NEW.group_id
-    AND gm.user_id <> NEW.created_by
-    AND gm.notify_new_plans
-    AND NOT EXISTS (
-      SELECT 1 FROM public.blocked_users b
-      WHERE b.blocker_id = gm.user_id
-        AND b.blocked_id = NEW.created_by
-    );
-
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;

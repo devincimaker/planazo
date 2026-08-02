@@ -1,7 +1,14 @@
-import { View, ScrollView, StyleSheet, Pressable, Alert } from 'react-native';
+import {
+  View,
+  ScrollView,
+  StyleSheet,
+  Pressable,
+  Alert,
+  useWindowDimensions,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeOutUp, LinearTransition } from 'react-native-reanimated';
 import { supabase } from '../../lib/supabase';
 import {
@@ -11,7 +18,7 @@ import {
 } from '../../lib/usePendingInvites';
 import { MIN_TOUCH_TARGET } from '../../lib/a11y';
 import { ThemedText, Badge, Button, Avatar, GroupTile } from '../../components/ui';
-import { colors, fonts, spacing } from '../../theme/tokens';
+import { colors, fonts, sheetDetents, spacing } from '../../theme/tokens';
 
 export function timeAgo(iso: string): string {
   const mins = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
@@ -174,8 +181,18 @@ export default function InvitesSheet() {
     ...friendRequests.map((r) => ({ at: r.createdAt, node: renderFriendRequest(r) })),
   ].sort((a, b) => b.at.localeCompare(a.at));
 
+  // Same reason as the profile sheet: the root view has to carry the detent as
+  // a real height, or the ScrollView is laid out as tall as its own content and
+  // the list simply gets clipped. This one grows with the number of invites, so
+  // it reaches that point on its own.
+  const { height: windowHeight } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+
   return (
-    <SafeAreaView style={styles.screen} edges={[]}>
+    <SafeAreaView
+      style={[styles.screen, { height: windowHeight * sheetDetents.invites }]}
+      edges={[]}
+    >
       <View style={styles.grabber} />
       <View style={styles.header}>
         <ThemedText style={styles.headerTitle}>Invites</ThemedText>
@@ -191,7 +208,10 @@ export default function InvitesSheet() {
         </Pressable>
       </View>
 
-      <ScrollView style={styles.flex} contentContainerStyle={styles.content}>
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={[styles.content, { paddingBottom: spacing.xxl + insets.bottom }]}
+      >
         {count === 0 ? (
           <ThemedText variant="body" color={colors.textSecondary} style={styles.allClear}>
             All clear. Nothing waiting on you.

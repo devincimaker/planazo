@@ -202,6 +202,25 @@ export const radii = {
   pill: 999,
 } as const;
 
+/**
+ * Form-sheet heights, as a fraction of the window.
+ *
+ * Shared rather than inlined because a formSheet has to be told its height
+ * twice: once as `sheetAllowedDetents` so iOS presents it at that size, and
+ * once as a real `height` on the screen's root view. Without the second one
+ * the content view is laid out at its natural height, `flex: 1` resolves
+ * against that instead of the detent, and any ScrollView inside ends up as
+ * tall as its own content — so it has nothing to scroll and the sheet
+ * silently clips whatever does not fit.
+ *
+ * A screen whose content wants the whole window is better off as
+ * `presentation: 'modal'`, which is bounded by the window and needs none of
+ * this. That is what the profile screen does.
+ */
+export const sheetDetents = {
+  invites: 0.78,
+} as const;
+
 export const shadows = {
   card: Platform.select({
     ios: {

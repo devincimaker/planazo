@@ -85,9 +85,7 @@ describe('trg_notify_plan_created', () => {
     expect(forFixed[0].title).toBe('New plan');
     expect(forFixed[0].body).toBe('Trigger Creator put up "Fixed fanout probe". Are you in?');
     expect(forFlex).toHaveLength(1);
-    expect(forFlex[0].body).toBe(
-      'Trigger Creator put up "Flexible fanout probe". Pick the dates that work.',
-    );
+    expect(forFlex[0].body).toBe('Trigger Creator put up "Flexible fanout probe". Pick the dates that work.');
 
     expect(
       ok(await offMember.client.from('notifications').select('id').eq('type', 'plan_created')),
