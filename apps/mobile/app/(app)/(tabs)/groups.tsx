@@ -115,22 +115,17 @@ export default function GroupsScreen() {
 
   const joinByCode = useMutation({
     mutationFn: async (code: string) => {
-      const { data: found, error: findError } = await supabase.rpc('get_group_by_invite_code', {
-        code,
-      });
-      if (findError || !found || found.length === 0) throw new Error('That link doesn’t work');
+      // PLA-35: the code goes to the server, which resolves it and writes the
+      // membership as 'member'. Resolving here and inserting separately meant
+      // the database never saw proof the caller held the code — nor any say
+      // in the role they arrived with.
+      const { data, error } = await supabase.rpc('join_group_by_invite_code', { p_code: code });
+      if (error) throw new Error(error.message);
 
-      const { error: joinError } = await supabase.from('group_members').insert({
-        group_id: found[0].id,
-        user_id: user?.id,
-        role: 'member',
-      });
-      if (joinError) {
-        throw new Error(
-          joinError.code === '23505' ? 'You’re already in this group' : joinError.message
-        );
-      }
-      return found[0];
+      const result = data as { status: string; group_id?: string; name?: string };
+      if (result.status === 'not_found') throw new Error('That link doesn’t work');
+      if (result.status === 'already_member') throw new Error('You’re already in this group');
+      return { id: result.group_id as string, name: result.name as string };
     },
     onSuccess: (group) => {
       setJoinText('');

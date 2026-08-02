@@ -13,24 +13,13 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../../lib/supabase';
-import { useAuthStore } from '../../../stores/authStore';
 import { useFriends } from '../../../lib/useFriends';
 import { ThemedText, Card, Button, Avatar, GroupTile } from '../../../components/ui';
 import { colors, fonts, groupColors, radii, spacing, type } from '../../../theme/tokens';
 
-function generateInviteCode(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let result = '';
-  for (let i = 0; i < 8; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
-}
-
 export default function NewGroupScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { user } = useAuthStore();
 
   // Params preseed the sheet for deep-link QA (same pattern as plan/create):
   // planazo://group/new?name=Padel&desc=Monday%20nights&color=2&y=0
@@ -56,25 +45,15 @@ export default function NewGroupScreen() {
 
   const createGroup = useMutation({
     mutationFn: async () => {
-      const { data: group, error: groupError } = await supabase
-        .from('groups')
-        .insert({
-          name: name.trim(),
-          description: desc.trim() || null,
-          color: groupColors[colorIdx],
-          invite_code: generateInviteCode(),
-          created_by: user?.id,
-        })
-        .select()
-        .single();
-      if (groupError) throw groupError;
-
-      const { error: memberError } = await supabase.from('group_members').insert({
-        group_id: group.id,
-        user_id: user?.id,
-        role: 'admin',
+      // PLA-35: the group row and the creator's admin membership are one
+      // server-side write. The client can no longer insert either, and a
+      // half-created group was an orphan nobody could see or delete.
+      const { data: group, error: groupError } = await supabase.rpc('create_group', {
+        p_name: name.trim(),
+        p_description: desc.trim() || null,
+        p_color: groupColors[colorIdx],
       });
-      if (memberError) throw memberError;
+      if (groupError) throw groupError;
 
       await Promise.all(
         picks.map((invitee) =>

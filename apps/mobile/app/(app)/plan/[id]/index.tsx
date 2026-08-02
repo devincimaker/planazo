@@ -209,11 +209,19 @@ export default function PlanDetailScreen() {
         const { error } = await supabase.from('date_availability').delete().in('id', removed);
         if (error) throw error;
       }
-      // Sending dates supersedes a previous "no" — only worth a round-trip
-      // (and only safe to assert on) when there is actually a row to clear.
-      if ((rsvps ?? []).some((r) => r.user_id === user?.id)) {
-        await deleteOwnRsvp(id, user!.id);
-      }
+      // Sending dates supersedes a previous "no". Scoped and unconditional:
+      // the server decides from its own state, not the cached rsvps — the
+      // cache can lose the race with this screen turning interactive, and a
+      // reopened plan's seeded "yes" is a held seat that voting again must
+      // never surrender (only withdrawing may). Zero rows gone is the normal
+      // first-vote case, so no deleteOwnRsvp-style assertion here.
+      const { error: rsvpError } = await supabase
+        .from('rsvps')
+        .delete()
+        .eq('plan_id', id)
+        .eq('user_id', user?.id)
+        .eq('response', 'no');
+      if (rsvpError) throw rsvpError;
     },
     onSuccess: () => {
       setEditingPicks(null);
@@ -444,7 +452,13 @@ export default function PlanDetailScreen() {
   const d = derived;
   const groupName = plan.groups?.name ?? 'Group';
   const groupColor = plan.groups?.color ?? colorForName(groupName);
-  const editing = d.isOpenFlexible && (editingPicks !== null || d.myAvail.length === 0) && !d.userRsvp;
+  // The date rows are always tappable, so the footer must follow them: you're
+  // editing the moment you start picking, even over a standing "no". Gating
+  // this on !userRsvp let a declined plan's rows toggle while the footer stayed
+  // on "You can't make it" — picks that could never be sent (PLA-17). Send
+  // commits the picks and clears the "no" (sendDates); leaving keeps it.
+  const editing =
+    d.isOpenFlexible && (editingPicks !== null || (d.myAvail.length === 0 && !d.userRsvp));
   const picked = editingPicks ?? d.myAvail.map((a) => a.date_option_id);
 
   const togglePick = (optionId: string) => {
