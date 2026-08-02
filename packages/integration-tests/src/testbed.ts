@@ -1,7 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@planazo/shared';
 import { randomUUID } from 'node:crypto';
-import { localStack } from './env';
+import { resolveStack } from './env';
 
 export type Client = SupabaseClient<Database>;
 
@@ -15,7 +15,7 @@ export interface TestUser {
 const PASSWORD = 'Planazo123!';
 
 function newClient(key: string): Client {
-  const { url } = localStack();
+  const { url } = resolveStack();
   return createClient<Database>(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
@@ -33,13 +33,13 @@ export function ok<T>(res: { data: T; error: { message: string } | null }): NonN
  * authenticated client — the service role is for setup/teardown only.
  */
 export class TestBed {
-  readonly service: Client = newClient(localStack().serviceRoleKey);
+  readonly service: Client = newClient(resolveStack().serviceRoleKey);
   private users: TestUser[] = [];
   private groupIds: string[] = [];
 
   async createUser(name?: string): Promise<TestUser> {
     const email = `it-${randomUUID()}@example.com`;
-    const client = newClient(localStack().anonKey);
+    const client = newClient(resolveStack().anonKey);
     const { data, error } = await client.auth.signUp({
       email,
       password: PASSWORD,
