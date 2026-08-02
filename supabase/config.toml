@@ -152,7 +152,17 @@ enabled = true
 # in emails.
 site_url = "http://127.0.0.1:3000"
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+# The planazo:// entry is where the password-recovery email lands the native
+# app ((auth)/reset-password). Without it Supabase drops the redirect and the
+# link dead-ends in a browser. The same entry must exist in the hosted project
+# under Authentication → URL Configuration.
+# No wildcard: RESET_REDIRECT_PATH carries no leading slash precisely so the
+# URL the app asks for is this exact string. A "planazo://**" entry would
+# accept any deep link in the app as a post-auth redirect target.
+additional_redirect_urls = [
+  "https://127.0.0.1:3000",
+  "planazo://reset-password",
+]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to the local API URL (http://127.0.0.1:<port>/auth/v1).

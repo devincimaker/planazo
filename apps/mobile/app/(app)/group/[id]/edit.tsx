@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../../../lib/supabase';
+import { contentViolation } from '../../../../lib/moderation';
 import { ThemedText, GroupTile } from '../../../../components/ui';
 import { colors, fonts, groupColors, spacing } from '../../../../theme/tokens';
 
@@ -37,6 +38,9 @@ export default function EditGroupScreen() {
 
   const save = useMutation({
     mutationFn: async () => {
+      // Guideline 1.2: objectionable language stops here, not in review.
+      const violation = contentViolation({ 'group name': draftName });
+      if (violation) throw new Error(violation);
       const { error } = await supabase
         .from('groups')
         .update({ name: draftName.trim(), color: draftColor })

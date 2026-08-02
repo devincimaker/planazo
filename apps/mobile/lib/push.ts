@@ -22,6 +22,12 @@ export function initNotificationPresentation(): void {
  * Ask for permission (first run only) and store this device's Expo push
  * token on the profile. Simulators can't receive remote pushes, so this is
  * a silent no-op there.
+ *
+ * Deliberately does **not** consult `profiles.push_enabled` — the profile
+ * screen calls this while the flag is still false, part-way through turning
+ * the toggle on. Every other caller must check the flag itself; `_layout.tsx`
+ * does it in `registerIfWanted`. Skip that check and a launch or a token
+ * refresh silently undoes a user who asked for no notifications.
  */
 export async function registerPushToken(userId: string): Promise<void> {
   if (!Device.isDevice) return;

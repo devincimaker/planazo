@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Animated, { FadeInDown, FadeOutUp, LinearTransition } from 'react-native-reanimated';
 import { supabase } from '../../../lib/supabase';
+import { contentViolation } from '../../../lib/moderation';
 import { useAuthStore } from '../../../stores/authStore';
 import { ThemedText, Button, MonthCalendar, colorForName } from '../../../components/ui';
 import { colors, fonts, radii, spacing } from '../../../theme/tokens';
@@ -146,6 +147,13 @@ export default function CreatePlanScreen() {
   const createPlan = useMutation({
     mutationFn: async () => {
       if (!groupId || !user) throw new Error('Pick a group first');
+      // Guideline 1.2: objectionable language stops here, not in review.
+      const violation = contentViolation({
+        'plan title': title,
+        'plan description': notes,
+        location,
+      });
+      if (violation) throw new Error(violation);
       const fixed = dates.length === 1;
 
       const { data: plan, error } = await supabase

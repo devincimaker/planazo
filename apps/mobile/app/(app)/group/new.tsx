@@ -13,6 +13,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../../lib/supabase';
+import { contentViolation } from '../../../lib/moderation';
 import { useFriends } from '../../../lib/useFriends';
 import { ThemedText, Card, Button, Avatar, GroupTile } from '../../../components/ui';
 import { colors, fonts, groupColors, radii, spacing, type } from '../../../theme/tokens';
@@ -45,6 +46,12 @@ export default function NewGroupScreen() {
 
   const createGroup = useMutation({
     mutationFn: async () => {
+      // Guideline 1.2: objectionable language stops here, not in review.
+      const violation = contentViolation({
+        'group name': name,
+        'group description': desc,
+      });
+      if (violation) throw new Error(violation);
       // PLA-35: the group row and the creator's admin membership are one
       // server-side write. The client can no longer insert either, and a
       // half-created group was an orphan nobody could see or delete.

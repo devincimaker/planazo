@@ -50,6 +50,13 @@ export const colors = {
   accentPressed: palette.emberPressed,
   accentSoft: palette.emberSoft,
 
+  // Ember carries only 3.3:1 against paper and 3.5:1 against white — plenty
+  // for fills, borders, icons and big display type, short of the 4.5:1 WCAG
+  // asks of body-sized text. This darker ember reads the same but measures
+  // 5.0:1 on paper and 5.3:1 on white. Use it whenever the brand colour is
+  // carrying words under ~18px: links, captions, inline errors.
+  accentText: palette.emberPressed,
+
   confirmed: palette.green,
   confirmedSoft: palette.greenSoft,
 

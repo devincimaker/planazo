@@ -46,7 +46,8 @@ export interface Group {
   name: string;
   description: string | null;
   invite_code: string;
-  created_by: string;
+  /** Null once the creator deletes their account — the group outlives them. */
+  created_by: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -74,7 +75,8 @@ export type PlanStatus = 'open' | 'locked' | 'cancelled';
 export interface Plan {
   id: string;
   group_id: string;
-  created_by: string;
+  /** Null once the poster deletes their account — the plan keeps its answers. */
+  created_by: string | null;
   title: string;
   description: string | null;
   location: string | null;

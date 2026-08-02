@@ -1,10 +1,12 @@
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Constants from 'expo-constants';
 import { supabase } from '../../../lib/supabase';
-import { clearPushToken } from '../../../lib/push';
+import { PRIVACY_URL, SUPPORT_URL, TERMS_URL } from '../../../lib/links';
+import { clearPushToken, registerPushToken } from '../../../lib/push';
+import { purgeOwnedFiles } from '../../../lib/storage';
 import { useAuthStore } from '../../../stores/authStore';
 import { Avatar, Card, ListRow, ThemedText } from '../../../components/ui';
 import { colors, fonts, spacing } from '../../../theme/tokens';
@@ -49,6 +51,16 @@ export default function ProfileSheet() {
 
   const setPush = useMutation({
     mutationFn: async (on: boolean) => {
+      // The privacy policy says turning notifications off clears the device
+      // token, so do that rather than only flipping a flag — otherwise the
+      // token sits on the profile and the policy is a lie. Token first, so
+      // the row we read back already reflects it.
+      if (on) {
+        await registerPushToken(profile!.id);
+      } else {
+        await clearPushToken(profile!.id);
+      }
+
       const { data, error } = await supabase
         .from('profiles')
         .update({ push_enabled: on })
@@ -81,6 +93,69 @@ export default function ProfileSheet() {
         },
       },
     ]);
+  };
+
+  const deleteAccount = useMutation({
+    mutationFn: async () => {
+      // Files first, while this session is still the owner RLS recognises.
+      // The database cannot reach Storage, so if this does not happen here it
+      // does not happen at all — and the avatars bucket is public.
+      if (user) {
+        const { failed } = await purgeOwnedFiles(user.id);
+        // Stop rather than delete around it. Once the account is gone nobody
+        // can sign in as this user again, so a file left behind is left for
+        // good — a public avatar URL that outlives the account it belonged to.
+        // Better to fail loudly and let them try again in a moment.
+        if (failed.length) {
+          throw new Error(
+            "Your photos couldn't be removed just now, and deleting the account would leave them online for good. Check your connection and try again.",
+          );
+        }
+      }
+
+      const { error } = await supabase.rpc('delete_my_account');
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      // The account is already gone, so the token this session holds is dead —
+      // sign out locally rather than asking a server that will refuse.
+      await supabase.auth.signOut({ scope: 'local' });
+      queryClient.clear();
+      logout();
+      router.replace('/(auth)/login');
+    },
+    onError: (error: Error) => Alert.alert("Couldn't delete your account", error.message),
+  });
+
+  // Two taps, because there is no undo and no support inbox that can put it
+  // back. App Store Review 5.1.1(v) wants this reachable, not hidden.
+  const confirmDelete = () => {
+    Alert.alert(
+      'Delete your account?',
+      'Your profile, your photo and every answer you gave go for good. Groups you started pass to someone already in them — an admin if there is one.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () =>
+            Alert.alert('Last check', "There's no way back from this one.", [
+              { text: 'Keep my account', style: 'cancel' },
+              {
+                text: 'Delete for good',
+                style: 'destructive',
+                onPress: () => deleteAccount.mutate(),
+              },
+            ]),
+        },
+      ],
+    );
+  };
+
+  const openLink = (url: string) => {
+    Linking.openURL(url).catch(() =>
+      Alert.alert("Couldn't open that", 'Check your connection and try again.'),
+    );
   };
 
   const subtitle = [
@@ -180,6 +255,46 @@ export default function ProfileSheet() {
           </ThemedText>
         </Pressable>
 
+        {/* Guideline 5.1.1(i) wants the privacy policy reachable from inside
+            the app, not only from the store listing. The terms row is where
+            the objectionable-content rules live, which 1.2 asks for. */}
+        <Card padded={false}>
+          <ListRow
+            title="Privacy policy"
+            onPress={() => openLink(PRIVACY_URL)}
+            testID="privacy-link"
+          />
+          <ListRow
+            title="Terms of use"
+            divider
+            onPress={() => openLink(TERMS_URL)}
+            testID="terms-link"
+          />
+          <ListRow
+            title="Help & support"
+            divider
+            onPress={() => openLink(SUPPORT_URL)}
+            testID="support-link"
+          />
+        </Card>
+
+        {/* Deliberately down here rather than beside "Sign out": the two read
+            alike in a hurry, and only one of them is recoverable. */}
+        <Pressable
+          accessibilityRole="button"
+          disabled={deleteAccount.isPending}
+          onPress={confirmDelete}
+          style={({ pressed }) => [styles.deleteAccount, pressed && styles.pressed]}
+          testID="delete-account"
+        >
+          <ThemedText
+            variant="caption"
+            color={deleteAccount.isPending ? colors.textFaint : colors.accentPressed}
+          >
+            {deleteAccount.isPending ? 'Deleting…' : 'Delete my account'}
+          </ThemedText>
+        </Pressable>
+
         {version ? (
           <ThemedText variant="caption" color={colors.textFaint} style={styles.version}>
             Planazo {version}
@@ -257,6 +372,11 @@ const styles = StyleSheet.create({
   feedbackText: {
     flex: 1,
     gap: 2,
+  },
+  deleteAccount: {
+    alignSelf: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
   version: {
     textAlign: 'center',

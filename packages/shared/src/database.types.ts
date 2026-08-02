@@ -34,6 +34,54 @@ export type Database = {
   }
   public: {
     Tables: {
+      blocked_users: {
+        Row: {
+          blocked_id: string
+          blocker_id: string
+          created_at: string
+        }
+        Insert: {
+          blocked_id: string
+          blocker_id: string
+          created_at?: string
+        }
+        Update: {
+          blocked_id?: string
+          blocker_id?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      content_reports: {
+        Row: {
+          created_at: string
+          id: string
+          note: string
+          reason: string
+          reporter_id: string | null
+          subject_id: string
+          subject_type: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          note?: string
+          reason: string
+          reporter_id?: string | null
+          subject_id: string
+          subject_type: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          note?: string
+          reason?: string
+          reporter_id?: string | null
+          subject_id?: string
+          subject_type?: string
+        }
+        Relationships: []
+      }
       date_availability: {
         Row: {
           available: boolean
@@ -257,7 +305,7 @@ export type Database = {
           anyone_can_post: boolean
           color: string | null
           created_at: string | null
-          created_by: string
+          created_by: string | null
           description: string | null
           id: string
           invite_code: string
@@ -268,7 +316,7 @@ export type Database = {
           anyone_can_post?: boolean
           color?: string | null
           created_at?: string | null
-          created_by: string
+          created_by?: string | null
           description?: string | null
           id?: string
           invite_code: string
@@ -279,7 +327,7 @@ export type Database = {
           anyone_can_post?: boolean
           color?: string | null
           created_at?: string | null
-          created_by?: string
+          created_by?: string | null
           description?: string | null
           id?: string
           invite_code?: string
@@ -375,7 +423,7 @@ export type Database = {
           cancelled_at: string | null
           cancelled_by: string | null
           created_at: string | null
-          created_by: string
+          created_by: string | null
           deadline: string | null
           description: string | null
           event_date: string | null
@@ -396,7 +444,7 @@ export type Database = {
           cancelled_at?: string | null
           cancelled_by?: string | null
           created_at?: string | null
-          created_by: string
+          created_by?: string | null
           deadline?: string | null
           description?: string | null
           event_date?: string | null
@@ -417,7 +465,7 @@ export type Database = {
           cancelled_at?: string | null
           cancelled_by?: string | null
           created_at?: string | null
-          created_by?: string
+          created_by?: string | null
           deadline?: string | null
           description?: string | null
           event_date?: string | null
@@ -550,7 +598,34 @@ export type Database = {
       color_for_name: { Args: { p_name: string }; Returns: string }
       create_group: {
         Args: { p_color?: string; p_description?: string; p_name: string }
-        Returns: Database["public"]["Tables"]["groups"]["Row"]
+        Returns: {
+          anyone_can_post: boolean
+          color: string | null
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          id: string
+          invite_code: string
+          name: string
+          updated_at: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "groups"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      delete_my_account: { Args: never; Returns: undefined }
+      file_report: {
+        Args: {
+          p_block_user_id?: string
+          p_note?: string
+          p_reason: string
+          p_subject_id: string
+          p_subject_type: string
+        }
+        Returns: undefined
       }
       generate_handle: { Args: { p_base: string }; Returns: string }
       generate_invite_code: { Args: never; Returns: string }
@@ -561,16 +636,14 @@ export type Database = {
           name: string
         }[]
       }
+      has_blocked: { Args: { p_target: string }; Returns: boolean }
       invite_to_group: {
         Args: { p_group_id: string; p_invitee: string }
         Returns: Json
       }
       is_group_admin: { Args: { check_group_id: string }; Returns: boolean }
       is_group_member: { Args: { check_group_id: string }; Returns: boolean }
-      join_group_by_invite_code: {
-        Args: { p_code: string }
-        Returns: Json
-      }
+      join_group_by_invite_code: { Args: { p_code: string }; Returns: Json }
       leave_group: { Args: { p_group_id: string }; Returns: Json }
       lock_plan: {
         Args: { p_date_option_id?: string; p_plan_id: string }

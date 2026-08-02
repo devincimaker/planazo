@@ -1,5 +1,5 @@
 import { Stack } from 'expo-router';
-import { COLORS } from '../../constants/colors';
+import { colors } from '../../theme/tokens';
 import { ToastHost } from '../../components/ui';
 import { ScreenshotFeedback } from '../../components/ScreenshotFeedback';
 
@@ -8,7 +8,7 @@ export default function AppLayout() {
     <>
       <Stack
         screenOptions={{
-          headerTintColor: COLORS.primary,
+          headerTintColor: colors.accent,
           headerBackTitle: 'Back',
         }}
       >
@@ -49,6 +49,13 @@ export default function AppLayout() {
         {/* getId: each screenshot carries a distinct shot param */}
         <Stack.Screen
           name="feedback"
+          getId={({ params }) => JSON.stringify(params ?? {})}
+          options={{ presentation: 'modal', headerShown: false }}
+        />
+        {/* getId: reporting a second thing must not reuse the first sheet's
+            params, the same trap plan/create and feedback hit. */}
+        <Stack.Screen
+          name="report"
           getId={({ params }) => JSON.stringify(params ?? {})}
           options={{ presentation: 'modal', headerShown: false }}
         />
