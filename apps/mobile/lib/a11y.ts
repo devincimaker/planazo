@@ -13,6 +13,34 @@ import { AccessibilityInfo } from 'react-native';
 export const LINK_HIT_SLOP = { top: 14, bottom: 14, left: 12, right: 12 } as const;
 
 /**
+ * Apple's minimum touch target, in points (HIG: Buttons).
+ *
+ * Use it as `minHeight`/`minWidth` in a StyleSheet. Prefer making a control
+ * genuinely this big over slopping around a small one: the padding that gets a
+ * button to 44 usually already exists on its container, and moving it onto the
+ * button means the area you can see is the area you can hit. That is how UIKit
+ * does it — a navigation bar is 44pt tall precisely so a `UIBarButtonItem`
+ * filling it clears the minimum without the words having to grow.
+ *
+ * `hitSlopTo` is the fallback for the cases where there is nothing to reclaim
+ * and growing the box would cover something else.
+ */
+export const MIN_TOUCH_TARGET = 44;
+
+/**
+ * Slop that lifts a control of `size` points up to {@link MIN_TOUCH_TARGET} on
+ * one axis — half the shortfall on each side, so the target stays centred on
+ * the thing you can see. Already-big controls get 0 rather than a negative.
+ *
+ * Beware of neighbours: slop is invisible and unlike a real box it happily
+ * overlaps the control next to it, and the one that wins a tap in the overlap
+ * is not something you can see or reason about from the layout.
+ */
+export function hitSlopTo(size: number): number {
+  return Math.max(0, Math.ceil((MIN_TOUCH_TARGET - size) / 2));
+}
+
+/**
  * Speak a message the moment it appears.
  *
  * The auth screens replaced native `Alert`s with inline error boxes, which

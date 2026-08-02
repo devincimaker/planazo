@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../../../lib/supabase';
 import { useAuthStore } from '../../../../stores/authStore';
 import { errorCopy, isNotFoundError } from '../../../../lib/queryErrors';
-import { LINK_HIT_SLOP } from '../../../../lib/a11y';
+import { MIN_TOUCH_TARGET } from '../../../../lib/a11y';
 import {
   BLOCKED_QUERY_KEY,
   blockUser,
@@ -236,6 +236,7 @@ export default function ManageGroupScreen() {
         accessibilityRole="button"
         onPress={() => setRole.mutate({ userId: m.user_id, role: admin ? 'member' : 'admin' })}
         testID={`role-${m.user_id}`}
+        style={styles.roleAction}
       >
         {chip}
       </Pressable>
@@ -245,7 +246,12 @@ export default function ManageGroupScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <View style={styles.navRow}>
-        <Pressable onPress={() => router.back()} accessibilityRole="button" testID="back">
+        <Pressable
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          testID="back"
+          style={styles.navAction}
+        >
           <ThemedText variant="bodyStrong" color={colors.accent} numberOfLines={1}>
             ‹ {group.name}
           </ThemedText>
@@ -262,6 +268,7 @@ export default function ManageGroupScreen() {
               onPress={() => router.push(`/(app)/group/${id}/invite`)}
               accessibilityRole="button"
               testID="invite"
+              style={styles.sectionAction}
             >
               <ThemedText variant="bodyStrong" color={colors.accent}>
                 Invite
@@ -299,7 +306,7 @@ export default function ManageGroupScreen() {
                       <Pressable
                         onPress={() => confirmRemove(m)}
                         accessibilityRole="button"
-                        hitSlop={LINK_HIT_SLOP}
+                        style={styles.personAction}
                         testID={`remove-${m.user_id}`}
                       >
                         <ThemedText variant="caption">Remove</ThemedText>
@@ -311,7 +318,7 @@ export default function ManageGroupScreen() {
                     <Pressable
                       onPress={() => confirmBlock(m)}
                       accessibilityRole="button"
-                      hitSlop={LINK_HIT_SLOP}
+                      style={styles.personAction}
                       disabled={setBlocked.isPending}
                       testID={`block-${m.user_id}`}
                     >
@@ -434,8 +441,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
-    paddingTop: 14,
-    paddingBottom: 10,
+  },
+  // Row padding moved onto the button (PLA-40); the row lands at 44 where it
+  // was 45. The label is "‹ <group name>", always wider than 44.
+  navAction: {
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
   },
   navTitle: {
     fontFamily: fonts.display,
@@ -458,13 +469,30 @@ const styles = StyleSheet.create({
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'baseline',
+    // Was `baseline`: a 44pt box aligns by the baseline of the text inside it,
+    // which would have dragged the whole row around. Centring the two makes
+    // the box's height its own business (PLA-40).
+    alignItems: 'center',
+  },
+  // "Invite" is a ~40×20 word; the box grows leftwards so `space-between`
+  // keeps it flush right, and the negative margin keeps the row at 20.
+  sectionAction: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    minWidth: MIN_TOUCH_TARGET,
+    minHeight: MIN_TOUCH_TARGET,
+    marginVertical: -(MIN_TOUCH_TARGET - 20) / 2,
   },
   personRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    paddingVertical: 14,
+    // 12 rather than 14 to claw back a little of what this row grew by: the
+    // actions sit *under* the name inside personBody, not beside the avatar,
+    // so taking them from a 17pt word to a real 44pt box takes the row from
+    // 68 to 91. That is the price of the two of them not overlapping — see
+    // personAction below.
+    paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
   },
   personDivider: {
@@ -477,6 +505,13 @@ const styles = StyleSheet.create({
   },
   rowPressed: {
     backgroundColor: colors.surfaceSunken,
+  },
+  // The chip itself stays 28 — it is a status pill and looks like one. The
+  // Pressable around it is what has to be 44, and the person row is already
+  // taller than that, so nothing moves (PLA-40).
+  roleAction: {
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
   },
   roleChip: {
     paddingVertical: 5,
@@ -508,8 +543,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
   },
+  /**
+   * "Remove" and "Block" were 17pt words carrying LINK_HIT_SLOP. That reached
+   * 44 invisibly, and 12pt of slop a side across a 12pt gap meant the two
+   * regions *overlapped* the whole way — so the strip just right of "Remove"
+   * actually blocked the person, the later sibling winning a tap nobody could
+   * see was contested. Between two irreversible and quite different acts, that
+   * is the worst place in the app for an invisible boundary.
+   *
+   * Real boxes cannot overlap, so they sit 12pt apart instead. The cost is
+   * honest and visible: the member row goes 68 → 91 (PLA-40).
+   */
+  personAction: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
+    minWidth: MIN_TOUCH_TARGET,
+  },
+  // 33 (8 + 17 + 8), with the "Leave group" card 8pt below it — hence the
+  // surplus going back as margin rather than the box simply growing into its
+  // neighbour's target (PLA-40).
   reportRow: {
     alignSelf: 'center',
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
+    marginVertical: -(MIN_TOUCH_TARGET - 33) / 2,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
   },

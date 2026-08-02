@@ -1,4 +1,6 @@
+import { StyleSheet } from 'react-native';
 import { render, screen, fireEvent } from '@testing-library/react-native';
+import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
 import { TabBar } from '../TabBar';
 
 const mockPush = jest.fn();
@@ -76,5 +78,17 @@ describe('TabBar', () => {
 
     await fireEvent.press(screen.getByTestId('tab-create'));
     expect(mockPush).toHaveBeenCalledWith('/(app)/plan/create');
+  });
+
+  // PLA-40: the tabs cleared 44 on their icon and label alone, which made the
+  // floor a coincidence of the type scale rather than a promise. Now it is
+  // declared, so shrinking either one cannot quietly take the tab under it.
+  it('keeps every tab at the 44pt minimum', async () => {
+    await render(<TabBar {...makeProps()} />);
+
+    for (const id of ['tab-index', 'tab-groups']) {
+      const style = StyleSheet.flatten(screen.getByTestId(id).props.style);
+      expect(style.minHeight).toBeGreaterThanOrEqual(MIN_TOUCH_TARGET);
+    }
   });
 });

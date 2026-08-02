@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet } from 'react-native';
 import { ButtonRow } from './ButtonRow';
 import { ThemedText } from './ThemedText';
+import { MIN_TOUCH_TARGET } from '../../lib/a11y';
 import { colors, radii } from '../../theme/tokens';
 
 interface AnswerFooterProps {
@@ -96,6 +97,8 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 18,
     borderRadius: radii.footerButton,
+    // The only way back out of an answer — `md` sat at 42 (11 + 20 + 11).
+    minHeight: MIN_TOUCH_TARGET,
   },
   answeredRowMd: {
     paddingVertical: 11,

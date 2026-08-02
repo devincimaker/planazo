@@ -1,5 +1,7 @@
+import { StyleSheet } from 'react-native';
 import { render, screen, fireEvent } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MIN_TOUCH_TARGET } from '../../../../../lib/a11y';
 import GroupDetailScreen from '../index';
 import { useAuthStore } from '../../../../../stores/authStore';
 import { supabase } from '../../../../../lib/supabase';
@@ -74,6 +76,22 @@ beforeEach(() => {
 });
 
 describe('GroupDetailScreen', () => {
+  /**
+   * PLA-40. Back, "Manage" and "Invite" were all bare words: the nav row was
+   * 40pt tall around 20pt targets, and "Invite" sat in a row sized by the
+   * 30pt avatar stack beside it. Each is a real 44 now, reached by moving the
+   * container's padding onto the button rather than by invisible hitSlop.
+   */
+  it('gives its nav actions the 44pt minimum', async () => {
+    await renderDetail();
+    await screen.findByTestId('manage');
+
+    for (const id of ['back', 'manage', 'invite']) {
+      const style = StyleSheet.flatten(screen.getByTestId(id).props.style);
+      expect(style.minHeight).toBeGreaterThanOrEqual(MIN_TOUCH_TARGET);
+    }
+  });
+
   it('shows identity, role note and members, splits plans by status', async () => {
     group.plans = [
       {

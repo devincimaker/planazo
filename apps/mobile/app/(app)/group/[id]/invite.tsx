@@ -7,6 +7,7 @@ import * as Clipboard from 'expo-clipboard';
 import { supabase } from '../../../../lib/supabase';
 import { useAuthStore } from '../../../../stores/authStore';
 import { useFriends } from '../../../../lib/useFriends';
+import { MIN_TOUCH_TARGET } from '../../../../lib/a11y';
 import { ThemedText, Avatar, Button } from '../../../../components/ui';
 import { colors, fonts, radii, spacing } from '../../../../theme/tokens';
 import { shareInviteLink } from './index';
@@ -233,9 +234,12 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
+  // 36 (7 + 19 + 7 + border) — one tap per person you are inviting (PLA-40).
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
     gap: spacing.sm,
     backgroundColor: colors.surface,
     borderWidth: 1.5,

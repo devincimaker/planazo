@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, ViewStyle } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { ThemedText } from './ThemedText';
+import { MIN_TOUCH_TARGET } from '../../lib/a11y';
 import { colors, fonts, radii } from '../../theme/tokens';
 
 type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ink' | 'accentOutline' | 'danger';
@@ -90,6 +91,10 @@ const styles = StyleSheet.create({
   base: {
     alignItems: 'center',
     justifyContent: 'center',
+    // `lg` clears 44 on its padding alone; `md` came to 42 (12 + 18 + 12) and
+    // a wrapped label is the caller's to ask for, so the floor lives here
+    // rather than in either size.
+    minHeight: MIN_TOUCH_TARGET,
   },
   md: {
     paddingVertical: 12,

@@ -1,5 +1,7 @@
+import { StyleSheet } from 'react-native';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MIN_TOUCH_TARGET } from '../../../../lib/a11y';
 import CreatePlanScreen from '../create';
 import { useAuthStore } from '../../../../stores/authStore';
 import { supabase } from '../../../../lib/supabase';
@@ -129,6 +131,25 @@ beforeEach(() => {
 });
 
 describe('CreatePlanScreen', () => {
+  /**
+   * PLA-40. "Cancel" was a bare text Pressable with no padding, so its target
+   * was exactly the word — about 48×20 in a header that was already 45pt tall.
+   * The row's padding now sits on the button, which is the same reason a UIKit
+   * navigation bar is 44: the bar height *is* the bar button's target.
+   *
+   * The group and date chips are here too because they are the controls this
+   * screen is made of, and both were under (39 and 34).
+   */
+  it('gives its header and chips the 44pt minimum', async () => {
+    await renderCreate();
+    await screen.findByTestId('group-g1');
+
+    for (const id of ['cancel', 'group-g1']) {
+      const style = StyleSheet.flatten(screen.getByTestId(id).props.style);
+      expect(style.minHeight).toBeGreaterThanOrEqual(MIN_TOUCH_TARGET);
+    }
+  });
+
   it('shows all group chips with the first preselected and named in the CTA', async () => {
     await renderCreate();
 

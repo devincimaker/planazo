@@ -18,6 +18,7 @@ import { useAuthStore } from '../../../stores/authStore';
 import { usePendingInvites } from '../../../lib/usePendingInvites';
 import { useFriends } from '../../../lib/useFriends';
 import { errorCopy } from '../../../lib/queryErrors';
+import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
 import {
   ThemedText,
   Card,
@@ -279,6 +280,7 @@ export default function GroupsScreen() {
               accessibilityRole="button"
               onPress={() => router.push('/(app)/group/new')}
               testID="new-group"
+              style={styles.sectionAction}
             >
               <ThemedText variant="bodyStrong" color={colors.accent}>
                 New
@@ -361,12 +363,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.md,
+    // 4 of the 7 the pill grew by (PLA-40) come back out of the row, so the
+    // header goes 61 → 60 rather than 61 → 68.
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
   },
   findPill: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
     gap: spacing.sm,
     backgroundColor: colors.surface,
     borderWidth: 1.5,
@@ -433,6 +439,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing.md,
+  },
+  // "New" is a ~30×20 word with nothing around it. The box is a real 44×44 —
+  // it grows leftwards (so `space-between` keeps the word flush right) and the
+  // negative margin keeps the section header its original 20pt (PLA-40).
+  sectionAction: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    minWidth: MIN_TOUCH_TARGET,
+    minHeight: MIN_TOUCH_TARGET,
+    marginVertical: -(MIN_TOUCH_TARGET - 20) / 2,
   },
   peopleSection: {
     marginTop: 22,
@@ -528,7 +544,9 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.borderStrong,
     borderRadius: 20,
-    paddingVertical: spacing.sm,
+    // Half of what the Join button grew by comes back here, so the field
+    // stays about the height it was (PLA-40).
+    paddingVertical: spacing.xs,
     paddingLeft: spacing.lg,
     paddingRight: spacing.sm,
     marginTop: spacing.lg,
@@ -545,6 +563,9 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     paddingVertical: spacing.sm,
     paddingHorizontal: 14,
+    // Was 34 (8 + 18 + 8) — the only way to act on a code you just typed.
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
   },
   joinButtonReady: {
     backgroundColor: colors.accent,

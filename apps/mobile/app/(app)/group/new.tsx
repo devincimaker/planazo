@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../../lib/supabase';
 import { contentViolation } from '../../../lib/moderation';
 import { useFriends } from '../../../lib/useFriends';
+import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
 import { ThemedText, Card, Button, Avatar, GroupTile } from '../../../components/ui';
 import { colors, fonts, groupColors, radii, spacing, type } from '../../../theme/tokens';
 
@@ -90,7 +91,12 @@ export default function NewGroupScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} accessibilityRole="button" testID="cancel">
+        <Pressable
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          testID="cancel"
+          style={styles.headerAction}
+        >
           <ThemedText variant="bodyStrong" color={colors.textMuted}>
             Cancel
           </ThemedText>
@@ -263,8 +269,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
-    paddingTop: 14,
-    paddingBottom: 10,
+  },
+  // Row padding moved onto the button so the whole bar height takes the tap
+  // (PLA-40). Row goes 45 → 44; nothing else moves.
+  headerAction: {
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
   },
   headerTitle: {
     fontFamily: fonts.display,
@@ -338,9 +348,13 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 7,
   },
+  // 34 (6 + 22 avatar + 6) with a "×" on it — removing someone you added by
+  // mistake should not need aim (PLA-40).
   selectedChip: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
     gap: 7,
     backgroundColor: colors.ink,
     borderRadius: radii.pill,

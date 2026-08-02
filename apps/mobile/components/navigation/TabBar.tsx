@@ -3,6 +3,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { ThemedText } from '../ui/ThemedText';
+import { MIN_TOUCH_TARGET } from '../../lib/a11y';
 import { colors, fonts, radii } from '../../theme/tokens';
 import { usePendingInvites } from '../../lib/usePendingInvites';
 
@@ -129,8 +130,13 @@ const styles = StyleSheet.create({
   tab: {
     flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
     paddingVertical: 4,
+    // 51 already (4 + 24 icon + 6 + 13 label + 4), and flex:1 makes it far
+    // wider than 44. Pinned so shrinking the icon or label can't take the
+    // whole tab under the minimum.
+    minHeight: MIN_TOUCH_TARGET,
   },
   iconBox: {
     height: 24,
