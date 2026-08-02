@@ -168,6 +168,26 @@ describe('isInvalidSessionError', () => {
     expect(isOfflineError(revokedSession)).toBe(false);
   });
 
+  /**
+   * The rule is GoTrue's, not a list of names: it deletes the stored session
+   * for every error of its own except the retryable-fetch one. Anything we
+   * classify as recoverable that it has already deleted becomes a retry screen
+   * over a session that no longer exists.
+   */
+  it.each([
+    ['AuthUnknownError', 'Unexpected token < in JSON'],
+    ['AuthInvalidTokenResponseError', 'Invalid token response'],
+    ['AuthImplicitGrantRedirectError', 'Invalid Refresh Token'],
+    ['AuthPKCEGrantCodeExchangeError', 'Code verifier missing'],
+  ])('treats %s as final, because GoTrue has already dropped the session', (name, message) => {
+    expect(isInvalidSessionError(goTrue(name, message, 500))).toBe(true);
+  });
+
+  it('still spares the one class GoTrue leaves the session alone for', () => {
+    expect(isInvalidSessionError(serverDown)).toBe(false);
+    expect(isInvalidSessionError(wrappedUnreachable)).toBe(false);
+  });
+
   // The whole point of PLA-36: a blip must never be grounds for throwing the
   // user's session away and asking for their password again.
   it('never blames the session for a request that never landed', () => {

@@ -1,7 +1,8 @@
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react-native';
 import RootLayout from '../_layout';
 import { useAuthStore } from '../../stores/authStore';
-import { forgetStoredSession, supabase } from '../../lib/supabase';
+import { supabase } from '../../lib/supabase';
+import { signOutOfAccount } from '../../lib/signOut';
 
 jest.mock('../../lib/supabase', () => ({
   supabase: {
@@ -12,15 +13,20 @@ jest.mock('../../lib/supabase', () => ({
     },
     from: jest.fn(),
   },
-  forgetStoredSession: jest.fn().mockResolvedValue(undefined),
 }));
+
+jest.mock('../../lib/signOut', () => ({
+  signOutOfAccount: jest.fn().mockResolvedValue(true),
+}));
+
+const mockReplace = jest.fn();
 
 jest.mock('expo-router', () => {
   const React = require('react');
   const { Text } = require('react-native');
   return {
     Slot: () => React.createElement(Text, { testID: 'slot' }, 'app'),
-    useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn() }),
+    useRouter: () => ({ push: jest.fn(), replace: mockReplace, back: jest.fn() }),
     useRootNavigationState: () => ({ key: 'root' }),
   };
 });
@@ -44,7 +50,7 @@ const mockGetSession = supabase.auth.getSession as unknown as jest.Mock;
 const mockSignOut = supabase.auth.signOut as unknown as jest.Mock;
 const mockOnAuthStateChange = supabase.auth.onAuthStateChange as unknown as jest.Mock;
 const mockFrom = supabase.from as jest.Mock;
-const mockForget = forgetStoredSession as jest.Mock;
+const mockSignOutOfAccount = signOutOfAccount as jest.Mock;
 
 const SESSION = { access_token: 'token', user: { id: 'user-1' } } as any;
 const PROFILE = { id: 'user-1', display_name: 'Marta' };
@@ -100,6 +106,7 @@ beforeEach(() => {
   });
 
   mockSignOut.mockResolvedValue({ error: null });
+  mockSignOutOfAccount.mockResolvedValue(true);
   mockOnAuthStateChange.mockImplementation((callback: typeof emitAuthEvent) => {
     emitAuthEvent = callback;
     return { data: { subscription: { unsubscribe: jest.fn() } } };
@@ -163,14 +170,15 @@ describe('launching with no connectivity (PLA-36)', () => {
 });
 
 describe('launching with a session the server refuses', () => {
-  it('signs out locally and lets the app route to login', async () => {
+  it('finishes the sign-out and sends the user to login', async () => {
     mockGetSession.mockResolvedValue({ data: { session: null }, error: rejectedToken });
 
     await render(<RootLayout />);
 
-    await waitFor(() => expect(mockSignOut).toHaveBeenCalledWith({ scope: 'local' }));
-    expect(await screen.findByTestId('slot')).toBeTruthy();
-    expect(useAuthStore.getState().session).toBeNull();
+    await waitFor(() => expect(mockSignOutOfAccount).toHaveBeenCalled());
+    // (app)/_layout has no session guard, so leaving the route alone could keep
+    // a cold-deep-linked plan on screen behind us.
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/(auth)/login'));
     expect(screen.queryByTestId('init-error')).toBeNull();
   });
 
@@ -181,32 +189,48 @@ describe('launching with a session the server refuses', () => {
 
     await render(<RootLayout />);
 
-    await waitFor(() => expect(mockSignOut).toHaveBeenCalledWith({ scope: 'local' }));
-    expect(await screen.findByTestId('slot')).toBeTruthy();
+    await waitFor(() => expect(mockSignOutOfAccount).toHaveBeenCalled());
     expect(screen.queryByTestId('init-error')).toBeNull();
   });
 
-  // supabase-js returns early without clearing storage when its /logout call
-  // fails, so trusting it would show the login screen while the credentials
-  // sat on disk, ready to sign the user back in on the next launch.
-  it('drops the stored session even when supabase says the sign-out failed', async () => {
-    mockGetSession.mockResolvedValue({ data: { session: null }, error: rejectedToken });
-    mockSignOut.mockResolvedValue({ error: wrappedUnreachable });
+  // Same reasoning, a class further out: GoTrue drops the session for any of
+  // its own errors bar the retryable one, so a mangled response is just as
+  // final even though it arrives as AuthUnknownError.
+  it('treats a response GoTrue could not parse as dead too', async () => {
+    const unparseable = Object.assign(new Error('Unexpected token < in JSON'), {
+      name: 'AuthUnknownError',
+      status: 500,
+      __isAuthError: true,
+    });
+    mockGetSession.mockResolvedValue({ data: { session: null }, error: unparseable });
 
     await render(<RootLayout />);
 
-    await waitFor(() => expect(mockForget).toHaveBeenCalled());
-    expect(useAuthStore.getState().session).toBeNull();
+    await waitFor(() => expect(mockSignOutOfAccount).toHaveBeenCalled());
+    expect(screen.queryByTestId('init-error')).toBeNull();
   });
 
-  it('drops the stored session even when the sign-out throws outright', async () => {
+  // Credentials still on disk mean the user is not signed out. Showing login
+  // would be a lie the next launch exposes.
+  it('says so, and does not route to login, when the credentials survive', async () => {
     mockGetSession.mockResolvedValue({ data: { session: null }, error: rejectedToken });
-    mockSignOut.mockRejectedValue(new Error('boom'));
+    mockSignOutOfAccount.mockResolvedValue(false);
 
     await render(<RootLayout />);
 
-    await waitFor(() => expect(mockForget).toHaveBeenCalled());
-    expect(useAuthStore.getState().session).toBeNull();
+    expect(await screen.findByTestId('sign-out-error')).toBeTruthy();
+    expect(screen.getByText("Couldn't sign out")).toBeTruthy();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('lets the user try the sign-out again once it has failed', async () => {
+    mockGetSession.mockResolvedValue({ data: { session: null }, error: rejectedToken });
+    mockSignOutOfAccount.mockResolvedValueOnce(false).mockResolvedValue(true);
+
+    await render(<RootLayout />);
+    fireEvent.press(await screen.findByTestId('sign-out-error-retry'));
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/(auth)/login'));
   });
 
   // A missing profile row is a data problem, not a credentials one. Retrying is
@@ -224,13 +248,12 @@ describe('launching with a session the server refuses', () => {
     await render(<RootLayout />);
 
     await screen.findByTestId('init-error');
-    expect(mockSignOut).not.toHaveBeenCalled();
+    expect(mockSignOutOfAccount).not.toHaveBeenCalled();
 
     fireEvent.press(screen.getByTestId('init-error-back'));
 
-    await waitFor(() => expect(mockSignOut).toHaveBeenCalledWith({ scope: 'local' }));
-    expect(mockForget).toHaveBeenCalled();
-    expect(useAuthStore.getState().session).toBeNull();
+    await waitFor(() => expect(mockSignOutOfAccount).toHaveBeenCalled());
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/(auth)/login'));
   });
 });
 

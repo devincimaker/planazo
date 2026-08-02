@@ -16,7 +16,8 @@ import {
   InstrumentSans_600SemiBold,
   InstrumentSans_700Bold,
 } from '@expo-google-fonts/instrument-sans';
-import { forgetStoredSession, supabase } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
+import { signOutOfAccount } from '../lib/signOut';
 import { initNotificationPresentation, registerPushToken } from '../lib/push';
 import { errorCopy, isInvalidSessionError, isOfflineError, retryQuery } from '../lib/queryErrors';
 import { ErrorState } from '../components/ui/ErrorState';
@@ -51,6 +52,10 @@ function InitialLayout() {
   const [isReady, setIsReady] = useState(false);
   /** A launch failure the user can retry out of, instead of being signed out. */
   const [initError, setInitError] = useState<unknown>(null);
+  /** A sign-out whose credentials would not delete — never report that as done. */
+  const [signOutFailed, setSignOutFailed] = useState(false);
+  /** Held until the navigator exists to take us to the login screen. */
+  const [leavingForLogin, setLeavingForLogin] = useState(false);
   // Plan id from a tapped push, held until the navigator can take us there.
   const [pushedPlanId, setPushedPlanId] = useState<string | null>(null);
   const router = useRouter();
@@ -84,33 +89,29 @@ function InitialLayout() {
   );
 
   /**
-   * Ends the session on this device for good.
-   *
-   * `scope: 'local'` is a misnomer — supabase-js still calls /logout, and if
-   * that call fails it returns early without touching storage. Clearing only
-   * our own state there would show the login screen while the credentials sat
-   * on disk, ready to sign the user back in on the next launch. So we ask the
-   * SDK first, for the server-side revocation, then drop our copy regardless.
+   * The same sign-out the profile sheet performs — push token, server, storage,
+   * memory — so a session ended from the recovery screen is ended just as
+   * thoroughly as one ended from inside the app.
    */
-  const signOutLocally = useCallback(async () => {
-    try {
-      const { error } = await supabase.auth.signOut({ scope: 'local' });
-      if (error) {
-        console.warn('Supabase could not complete the sign-out; clearing the session anyway.', error);
-      }
-    } catch (error) {
-      console.warn('Supabase could not complete the sign-out; clearing the session anyway.', error);
+  const endSession = useCallback(async () => {
+    const signedOut = await signOutOfAccount(useAuthStore.getState().user?.id, queryClient);
+    if (!isMounted.current) return;
+
+    if (!signedOut) {
+      // The credentials are still on disk. Showing the login screen here would
+      // be a lie that the next launch exposes.
+      setSignOutFailed(true);
+      return;
     }
 
-    await forgetStoredSession();
-    if (!isMounted.current) return;
-    setSession(null);
-    setProfile(null);
+    setSignOutFailed(false);
     setInitError(null);
-  }, [setProfile, setSession]);
+    setLeavingForLogin(true);
+  }, []);
 
   const initialize = useCallback(async () => {
     setInitError(null);
+    setSignOutFailed(false);
     setIsLoading(true);
 
     try {
@@ -144,15 +145,15 @@ function InitialLayout() {
         return;
       }
 
-      console.error('Supabase refused the stored session; signing out locally.', error);
-      await signOutLocally();
+      console.error('Supabase has already dropped the stored session; finishing the sign-out.', error);
+      await endSession();
     } finally {
       if (isMounted.current) {
         setIsLoading(false);
         setIsReady(true);
       }
     }
-  }, [setIsLoading, setProfile, setSession, signOutLocally, syncProfile]);
+  }, [endSession, setIsLoading, setProfile, setSession, syncProfile]);
 
   const handleAuthStateChange = useCallback(
     async (session: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session']) => {
@@ -228,10 +229,35 @@ function InitialLayout() {
     router.push(`/(app)/plan/${pushedPlanId}`);
   }, [pushedPlanId, isLoading, session, navReady, router]);
 
+  // Signing out has to say where to go. (app)/_layout has no session guard, so
+  // a cold deep link into a plan would otherwise still be sitting there behind
+  // the recovery screen we just dismissed. Waits for the navigator, which only
+  // mounts once we stop rendering the error state in its place.
+  useEffect(() => {
+    if (!leavingForLogin || !navReady) return;
+    setLeavingForLogin(false);
+    router.replace('/(auth)/login');
+  }, [leavingForLogin, navReady, router]);
+
   if (!isReady || isLoading) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator size="large" color={COLORS.primary} />
+      </View>
+    );
+  }
+
+  // Takes precedence over initError: the sign-out was the user's last
+  // instruction, and it is the one that didn't happen.
+  if (signOutFailed) {
+    return (
+      <View style={styles.error}>
+        <ErrorState
+          title="Couldn't sign out"
+          body="Your account is still signed in on this device. Check your connection and try again."
+          onRetry={() => void endSession()}
+          testID="sign-out-error"
+        />
       </View>
     );
   }
@@ -246,7 +272,7 @@ function InitialLayout() {
           // sign-out would stall on /logout only to land them on a login screen
           // they can't use either. Anything else (a profile row that won't load)
           // needs a way out that isn't relaunching the app.
-          onBack={isOfflineError(initError) ? undefined : () => void signOutLocally()}
+          onBack={isOfflineError(initError) ? undefined : () => void endSession()}
           backLabel="Sign out"
           testID="init-error"
         />

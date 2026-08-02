@@ -3,7 +3,8 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react-nativ
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ProfileSheet from '../index';
 import { useAuthStore } from '../../../../stores/authStore';
-import { forgetStoredSession, supabase } from '../../../../lib/supabase';
+import { supabase } from '../../../../lib/supabase';
+import { signOutOfAccount } from '../../../../lib/signOut';
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
@@ -14,7 +15,10 @@ jest.mock('../../../../lib/supabase', () => ({
     from: jest.fn(),
     auth: { signOut: jest.fn(() => Promise.resolve({ error: null })) },
   },
-  forgetStoredSession: jest.fn(() => Promise.resolve()),
+}));
+
+jest.mock('../../../../lib/signOut', () => ({
+  signOutOfAccount: jest.fn(() => Promise.resolve(true)),
 }));
 
 const mockClearPushToken: jest.Mock = jest.fn(() => Promise.resolve());
@@ -157,17 +161,15 @@ describe('ProfileSheet', () => {
     await confirm?.onPress?.();
 
     await waitFor(() => {
-      expect(mockClearPushToken).toHaveBeenCalledWith('me');
-      expect(supabase.auth.signOut).toHaveBeenCalled();
-      expect(forgetStoredSession).toHaveBeenCalled();
+      expect(signOutOfAccount).toHaveBeenCalledWith('me', expect.anything());
       expect(mockReplace).toHaveBeenCalledWith('/(auth)/login');
     });
   });
 
-  // supabase-js leaves storage alone when its /logout call fails, so trusting
-  // it would sign the user straight back in on the next launch (PLA-36).
-  it('still drops the stored session when supabase cannot reach /logout', async () => {
-    (supabase.auth.signOut as jest.Mock).mockRejectedValueOnce(new Error('offline'));
+  // Credentials still on disk mean the user is not signed out, so a login
+  // screen here would be undone by the very next launch (PLA-36).
+  it('says so, and stays put, when the credentials would not delete', async () => {
+    (signOutOfAccount as jest.Mock).mockResolvedValueOnce(false);
     const alertSpy = jest.spyOn(Alert, 'alert');
     await renderSheet();
 
@@ -176,8 +178,8 @@ describe('ProfileSheet', () => {
     await buttons.find((b) => b.text === 'Sign out')?.onPress?.();
 
     await waitFor(() => {
-      expect(forgetStoredSession).toHaveBeenCalled();
-      expect(mockReplace).toHaveBeenCalledWith('/(auth)/login');
+      expect(alertSpy).toHaveBeenCalledWith("Couldn't sign out", expect.stringMatching(/still signed in/i));
     });
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 });

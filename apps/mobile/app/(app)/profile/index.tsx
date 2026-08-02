@@ -3,8 +3,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Constants from 'expo-constants';
-import { forgetStoredSession, supabase } from '../../../lib/supabase';
-import { clearPushToken } from '../../../lib/push';
+import { supabase } from '../../../lib/supabase';
+import { signOutOfAccount } from '../../../lib/signOut';
 import { useAuthStore } from '../../../stores/authStore';
 import { Avatar, Card, ListRow, ThemedText } from '../../../components/ui';
 import { colors, fonts, spacing } from '../../../theme/tokens';
@@ -17,7 +17,7 @@ import { colors, fonts, spacing } from '../../../theme/tokens';
 export default function ProfileSheet() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { user, profile, setProfile, logout } = useAuthStore();
+  const { user, profile, setProfile } = useAuthStore();
 
   const { data: groupCount } = useQuery({
     queryKey: ['profile-group-count', user?.id],
@@ -69,23 +69,16 @@ export default function ProfileSheet() {
         text: 'Sign out',
         style: 'destructive',
         onPress: async () => {
-          try {
-            if (user) await clearPushToken(user.id);
-          } catch {
-            // best-effort — never block sign-out
+          if (await signOutOfAccount(user?.id, queryClient)) {
+            router.replace('/(auth)/login');
+            return;
           }
-          try {
-            await supabase.auth.signOut();
-          } catch {
-            // best-effort too: the local session still has to go
-          }
-          // supabase-js only clears storage if its /logout call came back OK,
-          // so without this a sign-out on a bad connection looks done and then
-          // signs you straight back in on the next launch (PLA-36).
-          await forgetStoredSession();
-          queryClient.clear();
-          logout();
-          router.replace('/(auth)/login');
+          // The credentials would not delete. Sending them to the login screen
+          // now would just sign them back in on the next launch (PLA-36).
+          Alert.alert(
+            "Couldn't sign out",
+            'Your account is still signed in on this device. Check your connection and try again.'
+          );
         },
       },
     ]);

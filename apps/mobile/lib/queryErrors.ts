@@ -41,16 +41,13 @@ const PLAN_FULL_CODE = 'PT409';
  * the stored session for those. `AuthApiError` is the opposite: the server read
  * the token and refused it, and supabase-js has already dropped the session.
  */
-const RETRYABLE_FETCH_ERROR = 'AuthRetryableFetchError';
 /**
- * Two names, not one: GoTrue peels `session_not_found` out of the response and
- * raises AuthSessionMissingError instead of AuthApiError. That is exactly the
- * revoked-or-deleted session — the case most worth signing out for — so
- * matching only AuthApiError would strand it on a retry screen that can never
- * succeed. It also covers the SDK's own "there is no session" throw, where
- * signing out is a no-op and login is where the user belongs anyway.
+ * The single name GoTrue treats as "try again" — anything fetch threw, plus
+ * 502/503/504. It is the one error class for which the SDK leaves the stored
+ * session alone; for every other error of its own it calls _removeSession().
+ * That asymmetry is the whole of the classification below.
  */
-const REJECTED_TOKEN_ERRORS = ['AuthApiError', 'AuthSessionMissingError'];
+const RETRYABLE_FETCH_ERROR = 'AuthRetryableFetchError';
 
 const codeOf = (error: unknown): string | undefined => {
   if (error && typeof error === 'object' && 'code' in error) {
@@ -156,17 +153,22 @@ export function isOfflineError(error: unknown): boolean {
 }
 
 /**
- * The server looked at the token and refused it — the one failure worth
- * dropping the stored session for. GoTrue has usually done it already by the
- * time we get here; PGRST301/302 is the same verdict from PostgREST.
+ * The stored session is gone or worthless — the one case where finishing the
+ * job and signing out beats offering a retry.
  *
- * Deliberately narrow: everything else, including a profile row that won't
- * load, is recoverable and must not cost the user their credentials.
+ * This mirrors GoTrue's own rule rather than naming error classes, because
+ * GoTrue has already acted by the time we see the error: it deletes the stored
+ * session for every error of its own except the retryable-fetch one. Listing
+ * names instead means the two disagree, and the app offers to retry into a
+ * session the SDK has already thrown away — `session_not_found` arrives as
+ * AuthSessionMissingError and a mangled response as AuthUnknownError, neither
+ * of which is an AuthApiError.
+ *
+ * PGRST301/302 is the same verdict reached from PostgREST's side.
  */
 export function isInvalidSessionError(error: unknown): boolean {
   if (isOfflineError(error)) return false;
-  const name = nameOf(error);
-  return isAuthError(error) || (isGoTrueError(error) && !!name && REJECTED_TOKEN_ERRORS.includes(name));
+  return isAuthError(error) || isGoTrueError(error);
 }
 
 /**

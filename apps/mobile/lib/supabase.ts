@@ -27,6 +27,10 @@ const supabaseFetch = createTimeoutFetch();
  */
 const storedKeys = new Set<string>();
 
+/**
+ * Every method returns its promise: auth-js awaits all three, so a write it was
+ * not made to wait for is a session it believes it saved and hasn't.
+ */
 const ExpoSecureStoreAdapter = {
   getItem: (key: string) => {
     // Reads matter as much as writes: on a cold launch the SDK only ever reads
@@ -36,30 +40,40 @@ const ExpoSecureStoreAdapter = {
   },
   setItem: (key: string, value: string) => {
     storedKeys.add(key);
-    SecureStore.setItemAsync(key, value);
+    return SecureStore.setItemAsync(key, value);
   },
-  removeItem: (key: string) => {
+  removeItem: async (key: string) => {
+    await SecureStore.deleteItemAsync(key);
+    // Forgotten only once it is really gone. Dropping it first would retire the
+    // one record that lets forgetStoredSession try again.
     storedKeys.delete(key);
-    SecureStore.deleteItemAsync(key);
   },
 };
 
 /**
- * Drop every credential supabase-js has stored on this device. Safe to call
- * after its own signOut whether that succeeded or not — deleting a key that
- * isn't there is a no-op, and a delete that fails must not stop the others.
+ * Drop every credential supabase-js has stored on this device.
+ *
+ * Returns false if any of them survived, and keeps those keys for the next
+ * attempt. A caller must not show the login screen on the back of a false:
+ * the session is still on disk, and the next launch would sign the user
+ * straight back in.
  */
-export async function forgetStoredSession(): Promise<void> {
-  const keys = [...storedKeys];
-  storedKeys.clear();
-
-  await Promise.all(
-    keys.map((key) =>
-      SecureStore.deleteItemAsync(key).catch((error) => {
+export async function forgetStoredSession(): Promise<boolean> {
+  const cleared = await Promise.all(
+    [...storedKeys].map(async (key) => {
+      try {
+        await SecureStore.deleteItemAsync(key);
+        storedKeys.delete(key);
+        return true;
+      } catch (error) {
+        // Deliberately left in storedKeys so the next attempt retries it.
         console.warn(`Could not delete the stored auth key ${key}.`, error);
-      })
-    )
+        return false;
+      }
+    })
   );
+
+  return cleared.every(Boolean);
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {

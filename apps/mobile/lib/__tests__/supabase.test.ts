@@ -65,10 +65,10 @@ describe('forgetStoredSession', () => {
 
   it('does not ask twice for a key the SDK already removed', async () => {
     await storage().getItem(AUTH_KEY);
-    storage().removeItem(AUTH_KEY);
+    await storage().removeItem(AUTH_KEY);
     mockSecureStore.deleteItemAsync.mockClear();
 
-    await forgetStoredSession();
+    expect(await forgetStoredSession()).toBe(true);
 
     expect(mockSecureStore.deleteItemAsync).not.toHaveBeenCalled();
   });
@@ -80,8 +80,50 @@ describe('forgetStoredSession', () => {
     storage().setItem(`${AUTH_KEY}-code-verifier`, 'verifier');
     mockSecureStore.deleteItemAsync.mockRejectedValueOnce(new Error('keychain locked'));
 
-    await expect(forgetStoredSession()).resolves.toBeUndefined();
+    await forgetStoredSession();
 
     expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledTimes(2);
+  });
+
+  // The caller decides whether to show a login screen, so it has to be told the
+  // truth: credentials still on disk mean the user is not signed out.
+  it('reports failure rather than a clean sign-out', async () => {
+    await storage().getItem(AUTH_KEY);
+    mockSecureStore.deleteItemAsync.mockRejectedValueOnce(new Error('keychain locked'));
+
+    expect(await forgetStoredSession()).toBe(false);
+  });
+
+  it('keeps a key it could not delete, so the next attempt retries it', async () => {
+    await storage().getItem(AUTH_KEY);
+    mockSecureStore.deleteItemAsync.mockRejectedValueOnce(new Error('keychain locked'));
+    await forgetStoredSession();
+    mockSecureStore.deleteItemAsync.mockClear();
+
+    expect(await forgetStoredSession()).toBe(true);
+
+    expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith(AUTH_KEY);
+  });
+});
+
+describe('the storage adapter', () => {
+  // auth-js awaits all three. A write it was not made to wait for is a session
+  // it believes it saved and hasn't.
+  it('returns its promises so the SDK actually waits', async () => {
+    expect(storage().getItem(AUTH_KEY)).toBeInstanceOf(Promise);
+    expect(storage().setItem(AUTH_KEY, 'a-session')).toBeInstanceOf(Promise);
+    expect(storage().removeItem(AUTH_KEY)).toBeInstanceOf(Promise);
+  });
+
+  it('waits for the delete before it stops tracking a key', async () => {
+    await storage().getItem(AUTH_KEY);
+    mockSecureStore.deleteItemAsync.mockRejectedValueOnce(new Error('keychain locked'));
+
+    // The SDK's own removal failed, so the key must still be ours to retry.
+    await expect(storage().removeItem(AUTH_KEY)).rejects.toThrow('keychain locked');
+    mockSecureStore.deleteItemAsync.mockClear();
+
+    expect(await forgetStoredSession()).toBe(true);
+    expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith(AUTH_KEY);
   });
 });
