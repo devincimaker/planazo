@@ -4,6 +4,7 @@ export default function PlanLayout() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
+      <Stack.Screen name="edit" />
       <Stack.Screen
         name="cancel"
         options={{

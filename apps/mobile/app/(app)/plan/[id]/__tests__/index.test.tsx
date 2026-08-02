@@ -565,7 +565,7 @@ describe('PlanDetailScreen — flexible plans', () => {
 });
 
 describe('PlanDetailScreen — the 20a menu', () => {
-  it("host menu carries Call it off and routes to the confirm sheet; nudge counts the silent", async () => {
+  it("host menu carries Edit and Call it off, and routes to each; nudge counts the silent", async () => {
     prime({
       plan: {
         ...basePlan,
@@ -584,11 +584,15 @@ describe('PlanDetailScreen — the 20a menu', () => {
     expect(options).toEqual([
       'Copy invite link',
       "Nudge the 3 who haven't answered",
+      'Edit the details',
       'Call it off',
       'Cancel',
     ]);
 
     pick(2);
+    expect(mockPush).toHaveBeenCalledWith('/plan/plan-1/edit');
+
+    pick(3);
     expect(mockPush).toHaveBeenCalledWith('/plan/plan-1/cancel');
   });
 
@@ -614,7 +618,37 @@ describe('PlanDetailScreen — the 20a menu', () => {
 
     const { options } = await openMenu();
     expect(options).not.toContain('Call it off');
+    expect(options).not.toContain('Edit the details');
     expect(options).toContain('Copy invite link');
+  });
+
+  // Both host rows share one guard, and on these two plans both are
+  // meaningless: there is nothing left to call off, and the stone card is a
+  // record of what was — editing the title would rewrite it after the fact.
+  it('a called-off plan offers its host neither host row', async () => {
+    prime({
+      plan: { ...basePlan, plan_type: 'fixed', status: 'cancelled', event_date: iso(8), created_by: 'me' },
+      members: ['me', 'u-marta'],
+    });
+    await renderDetail();
+    await waitFor(() => expect(screen.getByTestId('plan-menu')).toBeTruthy());
+
+    const { options } = await openMenu();
+    expect(options).not.toContain('Edit the details');
+    expect(options).not.toContain('Call it off');
+  });
+
+  it('a plan whose date has passed offers its host neither host row', async () => {
+    prime({
+      plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(-3), created_by: 'me' },
+      members: ['me', 'u-marta'],
+    });
+    await renderDetail();
+    await waitFor(() => expect(screen.getByTestId('plan-menu')).toBeTruthy());
+
+    const { options } = await openMenu();
+    expect(options).not.toContain('Edit the details');
+    expect(options).not.toContain('Call it off');
   });
 });
 
