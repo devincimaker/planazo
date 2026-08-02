@@ -52,7 +52,7 @@ export const PRIVACY: Record<Lang, LegalDoc> = {
           {
             term: 'Groups and plans',
             detail:
-              'The groups you create or join, who else is in them, the plans posted to them, and your answers — whether you are in, whether you cannot make it, and which dates you marked as possible.',
+              'The groups you create or join, who else is in them, the plans posted to them, and your answers: whether you are in, whether you cannot make it, and which dates you marked as possible.',
           },
           {
             term: 'Notifications',
@@ -109,7 +109,7 @@ export const PRIVACY: Record<Lang, LegalDoc> = {
           {
             term: 'Expo and Apple push notification services',
             detail:
-              'They deliver notifications to your device. They receive a device token and the text of the notification — for example that a plan you are in has reached its minimum.',
+              'They deliver notifications to your device. They receive a device token and the text of the notification, for example that a plan you are in has reached its minimum.',
           },
         ],
       },
@@ -119,7 +119,7 @@ export const PRIVACY: Record<Lang, LegalDoc> = {
           'You can delete your account from inside the app, under your profile. It is immediate and it is not reversible.',
           'Deleting removes your email address, display name, handle, profile photo, push tokens, preferences, every answer you gave, any feedback you sent, and every block you set. The photo and any screenshots are deleted from storage too, not just unlinked.',
           'Reports you filed about somebody else are the one exception: the report stays so it can still be acted on, but it stops being linked to you. It is a record about their behaviour, not about you, and it should not disappear because you closed your account.',
-          'Groups and plans other people are still using are not destroyed with you: a group you created passes to someone already in it — an existing admin where there is one, otherwise whoever has been there longest — and is deleted outright only if nobody else is left. Plans you posted stay in their group so the people who answered them keep their evening, but they stop carrying your name.',
+          'Groups and plans other people are still using are not destroyed with you: a group you created passes to someone already in it (an existing admin where there is one, otherwise whoever has been there longest) and is deleted outright only if nobody else is left. Plans you posted stay in their group so the people who answered them keep their evening, but they stop carrying your name.',
         ],
       },
       {
@@ -230,7 +230,7 @@ export const PRIVACY: Record<Lang, LegalDoc> = {
           {
             term: 'Servicios de notificaciones de Expo y Apple',
             detail:
-              'Entregan los avisos a tu teléfono. Reciben un token del dispositivo y el texto del aviso — por ejemplo, que un plan tuyo llegó al mínimo.',
+              'Entregan los avisos a tu teléfono. Reciben un token del dispositivo y el texto del aviso: por ejemplo, que un plan tuyo llegó al mínimo.',
           },
         ],
       },
@@ -240,7 +240,7 @@ export const PRIVACY: Record<Lang, LegalDoc> = {
           'Podés borrar tu cuenta desde la app, en tu perfil. Es inmediato y no se puede deshacer.',
           'Al borrarla se van tu email, tu nombre, tu usuario, tu foto de perfil, los tokens de notificación, tus preferencias, todas tus respuestas, el feedback que hayas mandado y todos los bloqueos que pusiste. La foto y las capturas se borran del almacenamiento, no quedan sueltas.',
           'Los reportes que hiciste sobre otra persona son la única excepción: el reporte queda para poder actuar sobre él, pero deja de estar vinculado a vos. Es un registro sobre la conducta de esa persona, no sobre vos, y no debería desaparecer porque cerraste tu cuenta.',
-          'Los grupos y planes que otros siguen usando no se destruyen con vos: un grupo que creaste pasa a alguien que ya estaba adentro — un admin si hay alguno, si no el que lleva más tiempo — y se borra solo si no queda nadie. Los planes que publicaste siguen en su grupo, para que quienes contestaron no pierdan la noche, pero dejan de llevar tu nombre.',
+          'Los grupos y planes que otros siguen usando no se destruyen con vos: un grupo que creaste pasa a alguien que ya estaba adentro (un admin si hay alguno, si no el que lleva más tiempo) y se borra solo si no queda nadie. Los planes que publicaste siguen en su grupo, para que quienes contestaron no pierdan la noche, pero dejan de llevar tu nombre.',
         ],
       },
       {
@@ -301,7 +301,7 @@ export const TERMS: Record<Lang, LegalDoc> = {
       {
         heading: 'What you agree not to post',
         paras: [
-          'Everything you type into Planazo — group names, plan titles, descriptions, locations, your display name, your photo — is seen by other people. There is zero tolerance for objectionable content or abusive behaviour. Specifically, do not post:',
+          'Everything you type into Planazo (group names, plan titles, descriptions, locations, your display name, your photo) is seen by other people. There is zero tolerance for objectionable content or abusive behaviour. Specifically, do not post:',
         ],
         bullets: [
           {
@@ -339,7 +339,7 @@ export const TERMS: Record<Lang, LegalDoc> = {
         paras: [
           'Every plan and every group can be reported from inside the app, and you can block any member of a group you are in. Blocking hides that person’s plans from you immediately; they are never told they have been blocked.',
           'We review reports within 24 hours. Where a report is founded we remove the content and, depending on how bad it is, suspend or permanently terminate the account behind it. Serious cases are referred to the police.',
-          `You can also write to ${CONTACT_EMAIL} — put “urgent” in the subject and we look the same day.`,
+          `You can also write to ${CONTACT_EMAIL}. Put “urgent” in the subject and we look the same day.`,
         ],
       },
       {
@@ -385,7 +385,7 @@ export const TERMS: Record<Lang, LegalDoc> = {
       {
         heading: 'Lo que te comprometés a no publicar',
         paras: [
-          'Todo lo que escribís en Planazo — nombres de grupos, títulos de planes, descripciones, lugares, tu nombre, tu foto — lo ve otra gente. No hay ninguna tolerancia con el contenido ofensivo ni con el maltrato. En concreto, no publiques:',
+          'Todo lo que escribís en Planazo (nombres de grupos, títulos de planes, descripciones, lugares, tu nombre, tu foto) lo ve otra gente. No hay ninguna tolerancia con el contenido ofensivo ni con el maltrato. En concreto, no publiques:',
         ],
         bullets: [
           {
@@ -423,7 +423,7 @@ export const TERMS: Record<Lang, LegalDoc> = {
         paras: [
           'Cualquier plan y cualquier grupo se puede reportar desde la app, y podés bloquear a cualquier integrante de un grupo en el que estés. Bloquear esconde los planes de esa persona al instante; a ella nunca se le avisa.',
           'Revisamos los reportes dentro de las 24 horas. Si el reporte tiene fundamento, damos de baja el contenido y, según la gravedad, suspendemos o cerramos definitivamente la cuenta. Los casos graves se derivan a la policía.',
-          `También podés escribir a ${CONTACT_EMAIL} — poné «urgente» en el asunto y lo miramos el mismo día.`,
+          `También podés escribir a ${CONTACT_EMAIL}. Poné «urgente» en el asunto y lo miramos el mismo día.`,
         ],
       },
       {
@@ -459,14 +459,14 @@ export const SUPPORT: Record<Lang, LegalDoc> = {
   en: {
     title: 'Support',
     updatedLabel: 'Last updated',
-    lede: 'Something broken, something confusing, or an idea for what Planazo should do next — all of it goes to the same place, and a person reads it.',
+    lede: 'Something broken, something confusing, or an idea for what Planazo should do next. All of it goes to the same place, and a person reads it.',
     backHome: 'Back to planazo.me',
     sections: [
       {
         heading: 'Write to us',
         paras: [
           `The fastest route is ${CONTACT_EMAIL}. Tell us what you were trying to do and what happened instead. We answer within two working days.`,
-          'From inside the app you can also shake your phone or take a screenshot to send feedback with the version and device already attached — that saves a round of questions.',
+          'From inside the app you can also shake your phone or take a screenshot to send feedback with the version and device already attached. That saves a round of questions.',
         ],
       },
       {
@@ -517,7 +517,7 @@ export const SUPPORT: Record<Lang, LegalDoc> = {
         heading: 'Escribinos',
         paras: [
           `Lo más rápido es ${CONTACT_EMAIL}. Contanos qué estabas intentando hacer y qué pasó en su lugar. Respondemos dentro de dos días hábiles.`,
-          'Desde la app también podés agitar el teléfono o sacar una captura para mandar feedback con la versión y el dispositivo ya adjuntos — eso ahorra una ronda de preguntas.',
+          'Desde la app también podés agitar el teléfono o sacar una captura para mandar feedback con la versión y el dispositivo ya adjuntos. Eso ahorra una ronda de preguntas.',
         ],
       },
       {

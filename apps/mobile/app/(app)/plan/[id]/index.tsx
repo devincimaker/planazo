@@ -490,7 +490,7 @@ export default function PlanDetailScreen() {
   };
 
   const nudge = () =>
-    Share.share({ message: `"${plan.title}" needs answers on Planazo — planazo://plan/${plan.id}` });
+    Share.share({ message: `"${plan.title}" needs answers on Planazo: planazo://plan/${plan.id}` });
 
   const copyLink = async () => {
     await Clipboard.setStringAsync(`planazo://plan/${plan.id}`);
@@ -578,7 +578,7 @@ export default function PlanDetailScreen() {
               testID="restore"
             />
             <ThemedText variant="caption" color={colors.textMuted} style={styles.footerNote}>
-              Everyone who was in stays in — they just get told it's back on. Only you see this
+              Everyone who was in stays in. They just get told it's back on. Only you see this
               {d.lastDate ? `, and only until ${fmtDay(d.lastDate)}` : ''}.
             </ThemedText>
           </View>

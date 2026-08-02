@@ -186,7 +186,7 @@ describe('CreatePlanScreen', () => {
     await renderCreate();
     await screen.findByTestId('group-g1');
 
-    expect(screen.getByText('Pick a date — or a few, and let them vote.')).toBeTruthy();
+    expect(screen.getByText('Pick a date, or a few, and let them vote.')).toBeTruthy();
     expect(screen.queryByText('Starts at')).toBeNull();
 
     await fireEvent.press(screen.getByTestId('cal-day-2026-08-07'));

@@ -184,7 +184,7 @@ export default function ProfileEdit() {
             </View>
             <ThemedText variant="caption" style={styles.hint}>
               This is what your groups see next to your yes.
-              {profile?.handle ? ` Your handle @${profile.handle} can't change — invite links point at it.` : ''}
+              {profile?.handle ? ` Your handle @${profile.handle} can't change. Invite links point at it.` : ''}
             </ThemedText>
           </View>
         </View>

@@ -64,7 +64,7 @@ plans,friends,group,rsvp,meetup,poll,dates,availability,hangout,invite,organise,
 
 > Some plans die in the group chat. Planazo is where they don't.
 >
-> Put up a plan — a barbecue, five-a-side, a weekend away — and say how many
+> Put up a plan (a barbecue, five-a-side, a weekend away) and say how many
 > people it needs to happen. Everyone answers in one place: in, or can't make
 > it. When the minimum is met, the plan is on and everybody knows.
 >
@@ -74,7 +74,7 @@ plans,friends,group,rsvp,meetup,poll,dates,availability,hangout,invite,organise,
 >
 > EVERY PLAN HAS A NUMBER
 > Five-a-side needs ten. Dinner needs four. Set the minimum, and optionally a
-> cap, and Planazo tracks it for you — so nobody has to count the yeses.
+> cap, and Planazo tracks it for you, so nobody has to count the yeses.
 >
 > YOUR GROUPS, NOT A FEED
 > Planazo is only the people you invited. There is no discovery, no follower
@@ -84,7 +84,7 @@ plans,friends,group,rsvp,meetup,poll,dates,availability,hangout,invite,organise,
 > One notification when a plan needs you, and one when it's confirmed. That's
 > it.
 >
-> No ads. No tracking. No selling your data — read the policy at
+> No ads. No tracking. No selling your data. Read the policy at
 > planazo.me/privacy.
 
 **Support URL** — `https://planazo.me/support`

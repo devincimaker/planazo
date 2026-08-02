@@ -127,7 +127,7 @@ describe('ProfileEdit', () => {
     await renderEdit();
 
     expect(
-      screen.getByText(/Your handle @rovidal can't change — invite links point at it/)
+      screen.getByText(/Your handle @rovidal can't change\. Invite links point at it/)
     ).toBeTruthy();
   });
 

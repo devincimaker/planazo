@@ -166,7 +166,7 @@ export function contentViolation(
 ): string | null {
   for (const [label, value] of Object.entries(fields)) {
     if (value && BLOCKED_PATTERN.test(normalise(value))) {
-      return `That ${label} contains language that isn’t allowed on Planazo — see planazo.me/terms for the rules.`;
+      return `That ${label} contains language that isn’t allowed on Planazo. See planazo.me/terms for the rules.`;
     }
   }
   return null;

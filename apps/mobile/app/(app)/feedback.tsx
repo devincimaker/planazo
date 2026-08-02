@@ -83,7 +83,7 @@ export default function FeedbackScreen() {
       } else {
         router.dismiss(2);
       }
-      showToast('Got it — thanks. We read every one.');
+      showToast('Got it, thanks. We read every one.');
     },
     onError: (error: Error) => Alert.alert('Error', error.message),
   });
@@ -167,7 +167,7 @@ export default function FeedbackScreen() {
             <TextInput
               value={message}
               onChangeText={setMessage}
-              placeholder="What happened — or what should exist?"
+              placeholder="What happened, or what should exist?"
               placeholderTextColor={colors.textFaint}
               style={styles.note}
               multiline

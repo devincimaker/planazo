@@ -125,7 +125,7 @@ export default function CancelPlanScreen() {
           <ThemedText variant="sectionLabel">
             Say why{' '}
             <ThemedText variant="caption" color={colors.textFaint} style={styles.optional}>
-              — optional
+              (optional)
             </ThemedText>
           </ThemedText>
           <TextInput

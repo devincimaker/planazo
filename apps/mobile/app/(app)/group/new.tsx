@@ -197,7 +197,7 @@ export default function NewGroupScreen() {
 
             {(friends ?? []).length === 0 ? (
               <ThemedText variant="sub">
-                Friends you add on Planazo show up here — you can also invite people once the
+                Friends you add on Planazo show up here. You can also invite people once the
                 group exists.
               </ThemedText>
             ) : (

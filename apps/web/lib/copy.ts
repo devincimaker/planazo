@@ -153,12 +153,12 @@ export type Copy = (typeof COPY)[Lang];
 /** Page <title> / meta description, kept out of the UI copy above. */
 export const META = {
   en: {
-    title: 'Planazo — Plans with friends that actually happen',
+    title: 'Planazo: Plans with friends that actually happen',
     description:
       "Throw out the idea even without a date. Everyone marks the days they can do, and Planazo finds the one that works. Free on iOS and Android.",
   },
   es: {
-    title: 'Planazo — Planes con amigos que sí pasan',
+    title: 'Planazo: Planes con amigos que sí pasan',
     description:
       'Tirá la idea aunque no tengas fecha. Cada uno marca los días que puede y Planazo encuentra el que sirve. Gratis en iOS y Android.',
   },

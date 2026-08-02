@@ -138,7 +138,7 @@ export default function CreatePlanScreen() {
 
   const summary =
     dates.length === 0
-      ? 'Pick a date — or a few, and let them vote.'
+      ? 'Pick a date, or a few, and let them vote.'
       : dates.length === 1
         ? `Fixed date · ${fmtLong(dates[0])}`
         : `${dates.length} options · everyone ticks what works`;

@@ -194,7 +194,7 @@ export default function InvitesSheet() {
       <ScrollView style={styles.flex} contentContainerStyle={styles.content}>
         {count === 0 ? (
           <ThemedText variant="body" color={colors.textSecondary} style={styles.allClear}>
-            All clear — nothing waiting on you.
+            All clear. Nothing waiting on you.
           </ThemedText>
         ) : (
           cards.map((c) => c.node)

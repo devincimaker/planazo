@@ -436,7 +436,7 @@ export default function FeedScreen() {
                 const name = plan.canceller?.display_name ?? 'The host';
                 const date = plan.locked_date ?? plan.event_date;
                 const line = plan.cancel_reason
-                  ? `${date ? `${fmtDay(date)} is off — ` : ''}${name} says “${plan.cancel_reason}”`
+                  ? `${date ? `${fmtDay(date)} is off. ` : ''}${name} says “${plan.cancel_reason}”`
                   : `${name} called this off.`;
                 return (
                   <View key={noticeId} style={styles.notice} testID={`cancel-notice-${plan.id}`}>
@@ -480,7 +480,7 @@ export default function FeedScreen() {
               body={
                 filter === 'needs'
                   ? 'When someone in a group proposes a plan, it lands here.'
-                  : 'Start something — pick a group, throw out a date or a few, and see who bites.'
+                  : 'Start something. Pick a group, throw out a date or a few, and see who bites.'
               }
               ctaLabel="Start a plan"
               onPress={() => router.push('/(app)/plan/create')}

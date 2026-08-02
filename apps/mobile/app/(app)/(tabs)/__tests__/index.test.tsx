@@ -303,7 +303,7 @@ describe('FeedScreen', () => {
 
     await waitFor(() => expect(screen.getByText('Called off')).toBeTruthy());
     expect(screen.getByText('Five-a-side at Powerleague')).toBeTruthy();
-    expect(screen.getByText(new RegExp('is off — Marcus says “Pitch flooded”'))).toBeTruthy();
+    expect(screen.getByText(new RegExp('is off\\. Marcus says “Pitch flooded”'))).toBeTruthy();
 
     await fireEvent.press(screen.getByTestId('see-plan-pc'));
     expect(mockPush).toHaveBeenCalledWith('/(app)/plan/pc');

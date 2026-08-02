@@ -191,7 +191,7 @@ export default function EditPlanScreen() {
           {/* Said out loud rather than left to be discovered: an edit is
               silent. Whoever is already in finds out by opening the plan. */}
           <ThemedText variant="caption" color={colors.textMuted} style={styles.hint}>
-            Nobody gets a notification — they'll see the change next time they open the plan. The
+            Nobody gets a notification. They'll see the change next time they open the plan. The
             date, the group and the numbers stay as they are.
           </ThemedText>
         </ScrollView>

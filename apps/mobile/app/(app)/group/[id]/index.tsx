@@ -315,7 +315,7 @@ export default function GroupDetailScreen() {
         {live.length === 0 ? (
           <View style={styles.emptyCard}>
             <ThemedText variant="body" color={colors.textSecondary} style={styles.emptyText}>
-              Nothing on yet — start something and it posts straight to {group.name}.
+              Nothing on yet. Start something and it posts straight to {group.name}.
             </ThemedText>
             <Button
               label="Start a plan"

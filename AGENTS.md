@@ -2,6 +2,37 @@
 
 Canonical for every agent (Claude Code, Codex, …). `CLAUDE.md` just points here.
 
+## Product copy
+
+**Never use an em dash (`—`) in product copy or interfaces.** It reads as
+machine-written, and Planazo's voice is a person talking. This covers every
+string a user can see: app screens, toasts, alerts, placeholders, push
+notification text, share sheets, the landing page and legal pages
+(`apps/web/lib/copy.ts`, `apps/web/lib/legal.ts`, both languages), and the App
+Store listing in `store-assets/APP-STORE.md`.
+
+Rewrite rather than substitute a different dash. The replacement depends on the
+job the dash was doing:
+
+| The dash was… | Use instead |
+| --- | --- |
+| joining two full sentences | a full stop, and capitalise the second |
+| introducing a list or a definition | a colon |
+| tacking on an aside | a comma |
+| bracketing a parenthetical (a pair of dashes) | parentheses |
+| labelling something optional | `(optional)` |
+
+Splitting into two shorter sentences is almost always the best answer. If the
+result reads worse than the original, the sentence wanted restructuring anyway.
+
+Two things this rule does **not** cover:
+
+- **Code comments and test names.** Prose for developers, not users. Leave them.
+- **The `—` empty-value glyph** (`{cap ?? '—'}`), which is typography standing
+  in for "no value", not a sentence. Leave it.
+
+Hyphens in compound words (`five-a-side`, `invite-only`) are unaffected.
+
 ## Linear Integration
 
 - **Workspace**: fioris

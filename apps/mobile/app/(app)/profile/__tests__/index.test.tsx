@@ -114,7 +114,7 @@ describe('ProfileSheet', () => {
     expect(await screen.findByText('@rovidal · in 3 groups')).toBeTruthy();
     expect(screen.getByText('rovidal@gmail.com')).toBeTruthy();
     expect(screen.getByText('Send feedback')).toBeTruthy();
-    expect(screen.getByText('Broken thing, or an idea — takes 10 seconds')).toBeTruthy();
+    expect(screen.getByText('Broken thing, or an idea. Takes 10 seconds')).toBeTruthy();
     expect(screen.getByText('Planazo 1.0.0')).toBeTruthy();
   });
 

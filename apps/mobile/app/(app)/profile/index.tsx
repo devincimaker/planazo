@@ -142,7 +142,7 @@ export default function ProfileSheet() {
   const confirmDelete = () => {
     Alert.alert(
       'Delete your account?',
-      'Your profile, your photo and every answer you gave go for good. Groups you started pass to someone already in them — an admin if there is one.',
+      'Your profile, your photo and every answer you gave go for good. Groups you started pass to someone already in them, an admin if there is one.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -258,7 +258,7 @@ export default function ProfileSheet() {
         >
           <View style={styles.feedbackText}>
             <ThemedText variant="bodyStrong">Send feedback</ThemedText>
-            <ThemedText variant="caption">Broken thing, or an idea — takes 10 seconds</ThemedText>
+            <ThemedText variant="caption">Broken thing, or an idea. Takes 10 seconds</ThemedText>
           </View>
           <ThemedText variant="body" color={colors.accent}>
             ›

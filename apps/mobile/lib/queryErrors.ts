@@ -214,7 +214,7 @@ export function errorCopy(error: unknown): { title: string; body: string } {
   if (codeOf(error) === EXPIRED_TOKEN_CODE) {
     return {
       title: 'Your sign-in expired',
-      body: "Try again — we'll refresh it. If it keeps happening, sign out and back in.",
+      body: "Try again and we'll refresh it. If it keeps happening, sign out and back in.",
     };
   }
   // Covers a dead host and a 5xx alike — "or we are" is true of both, and the
