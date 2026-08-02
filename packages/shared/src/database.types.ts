@@ -617,6 +617,16 @@ export type Database = {
         }
       }
       delete_my_account: { Args: never; Returns: undefined }
+      file_report: {
+        Args: {
+          p_block_user_id?: string
+          p_note?: string
+          p_reason: string
+          p_subject_id: string
+          p_subject_type: string
+        }
+        Returns: undefined
+      }
       generate_handle: { Args: { p_base: string }; Returns: string }
       generate_invite_code: { Args: never; Returns: string }
       get_group_by_invite_code: {

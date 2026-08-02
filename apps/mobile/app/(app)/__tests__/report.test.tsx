@@ -15,13 +15,11 @@ jest.mock('expo-router', () => ({
 jest.mock('../../../lib/supabase', () => ({ supabase: { from: jest.fn() } }));
 
 const mockSubmitReport: jest.Mock = jest.fn(() => Promise.resolve());
-const mockBlockUser: jest.Mock = jest.fn(() => Promise.resolve());
 jest.mock('../../../lib/moderation', () => {
   const actual = jest.requireActual('../../../lib/moderation');
   return {
     ...actual,
     submitReport: (...args: unknown[]) => mockSubmitReport(...args),
-    blockUser: (...args: unknown[]) => mockBlockUser(...args),
   };
 });
 
@@ -76,7 +74,6 @@ describe('ReportScreen', () => {
     await waitFor(() =>
       expect(mockSubmitReport).toHaveBeenCalledWith(
         expect.objectContaining({
-          reporterId: 'me',
           subjectType: 'plan',
           subjectId: 'plan-1',
           reason: 'spam',
@@ -92,10 +89,14 @@ describe('ReportScreen', () => {
     await fireEvent.press(view.getByTestId('send-report'));
 
     await waitFor(() => expect(mockSubmitReport).toHaveBeenCalled());
-    expect(mockBlockUser).not.toHaveBeenCalled();
+    expect(mockSubmitReport).toHaveBeenCalledWith(
+      expect.objectContaining({ blockUserId: null })
+    );
     expect(mockBack).toHaveBeenCalled();
   });
 
+  // The block travels inside the same call as the report — file_report is one
+  // transaction, so a retry after a failure can never file the report twice.
   it('blocks the author too when the toggle is on', async () => {
     const view = await renderScreen();
 
@@ -103,7 +104,11 @@ describe('ReportScreen', () => {
     await fireEvent(view.getByTestId('also-block'), 'valueChange', true);
     await fireEvent.press(view.getByTestId('send-report'));
 
-    await waitFor(() => expect(mockBlockUser).toHaveBeenCalledWith('me', 'bob'));
+    await waitFor(() =>
+      expect(mockSubmitReport).toHaveBeenCalledWith(
+        expect.objectContaining({ blockUserId: 'bob' })
+      )
+    );
     expect(mockShowToast).toHaveBeenCalledWith(expect.stringContaining('Bob'));
   });
 

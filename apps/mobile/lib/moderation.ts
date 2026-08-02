@@ -1,12 +1,13 @@
 import { supabase } from './supabase';
 
 /**
- * Reporting and blocking — the App Store Guideline 1.2 pair.
+ * Filtering, reporting and blocking — the App Store Guideline 1.2 trio.
  *
- * Kept in one module because they are one idea: somebody has posted something
- * they should not have, and the person looking at it needs a way to tell us
- * and a way to stop seeing them. The report goes to a queue only we can read;
- * the block takes effect in the database, not in a filter here — see
+ * Kept in one module because they are one idea: somebody is posting something
+ * they should not, and the app needs a way to stop the worst of it at the
+ * door, a way for the person looking at it to tell us, and a way for them to
+ * stop seeing the poster. The report goes to a queue only we can read; the
+ * block takes effect in the database, not in a filter here — see
  * `has_blocked()` and the plans SELECT policy in the moderation migration.
  */
 
@@ -24,20 +25,27 @@ export const REPORT_REASONS: { key: ReportReason; label: string; blurb: string }
 ];
 
 export interface ReportInput {
-  reporterId: string;
   subjectType: ReportSubject;
   subjectId: string;
   reason: ReportReason;
   note?: string;
+  /** Block this person in the same transaction as the report. */
+  blockUserId?: string | null;
 }
 
+/**
+ * One RPC rather than an insert followed by a block, because the report
+ * screen offers "block them too" as a single gesture. As two calls, a report
+ * that landed followed by a block that failed read as total failure — and
+ * retrying filed the report again. `file_report` does both or neither.
+ */
 export async function submitReport(input: ReportInput): Promise<void> {
-  const { error } = await supabase.from('content_reports').insert({
-    reporter_id: input.reporterId,
-    subject_type: input.subjectType,
-    subject_id: input.subjectId,
-    reason: input.reason,
-    note: input.note?.trim() ?? '',
+  const { error } = await supabase.rpc('file_report', {
+    p_subject_type: input.subjectType,
+    p_subject_id: input.subjectId,
+    p_reason: input.reason,
+    p_note: input.note?.trim() ?? '',
+    p_block_user_id: input.blockUserId ?? null,
   });
   if (error) throw error;
 }
@@ -76,3 +84,90 @@ export async function fetchBlockedIds(): Promise<string[]> {
 
 /** Query key for the block list, so every screen invalidates the same cache. */
 export const BLOCKED_QUERY_KEY = ['blocked-users'] as const;
+
+// ---------------------------------------------------------------------------
+// Content filter — Guideline 1.2's "method for filtering objectionable
+// material from being posted". Every free-text field another member will see
+// (plan titles, descriptions, locations, group names, display names) runs
+// through this before it is written.
+//
+// The list is deliberately short and unambiguous: slurs and explicit terms
+// only, matched on word boundaries so Scunthorpe can keep its name and a
+// plan can still involve spices, grapes, or rapeseed fields. Milder swearing
+// between friends in a private group is their business; the report screen
+// and the block button are the answer to everything a word list cannot be.
+// A determined poster can spell around any filter — that is what the
+// report-driven side of §6 in store-assets/APP-STORE.md is for.
+
+// The usual disguises, folded back before matching: an accent, a digit or a
+// symbol standing in for the letter it resembles.
+const LOOKALIKES: Record<string, string> = {
+  '0': 'o',
+  '1': 'i',
+  '3': 'e',
+  '4': 'a',
+  '5': 's',
+  '7': 't',
+  '8': 'b',
+  '@': 'a',
+  $: 's',
+  '!': 'i',
+};
+
+const normalise = (text: string): string =>
+  text
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[0134578@$!]/g, (c) => LOOKALIKES[c] ?? c);
+
+const BLOCKED_TERMS = [
+  'nigger',
+  'nigga',
+  'kike',
+  'spic',
+  'wetback',
+  'beaner',
+  'chink',
+  'gook',
+  'raghead',
+  'towelhead',
+  'faggot',
+  'tranny',
+  'shemale',
+  'cunt',
+  'whore',
+  'slut',
+  'blowjob',
+  'handjob',
+  'rimjob',
+  'cocksucker',
+  'dildo',
+  'retard',
+  'rape',
+  'rapist',
+  'child porn',
+];
+
+// `s?` and not broader suffixing: "(s|es)?" would turn "spic" into a match
+// for "spices". A bare optional plural cannot leak into another word because
+// the boundary after it still has to hold.
+const BLOCKED_PATTERN = new RegExp(
+  `\\b(?:${BLOCKED_TERMS.map((t) => t.replace(/ /g, '\\s+')).join('|')})s?\\b`,
+);
+
+/**
+ * The first field whose text contains a blocked term, phrased for an alert —
+ * or null when everything is clean. Keys are field names as a person would
+ * say them ("plan title", "group name"); values are the raw drafts.
+ */
+export function contentViolation(
+  fields: Record<string, string | null | undefined>,
+): string | null {
+  for (const [label, value] of Object.entries(fields)) {
+    if (value && BLOCKED_PATTERN.test(normalise(value))) {
+      return `That ${label} contains language that isn’t allowed on Planazo — see planazo.me/terms for the rules.`;
+    }
+  }
+  return null;
+}

@@ -110,3 +110,45 @@ CREATE POLICY "Group members can view plans"
     public.is_group_member(group_id)
     AND NOT public.has_blocked(created_by)
   );
+
+-- --------------------------------------------------------- report + block
+
+-- The report screen offers "block them too" as one gesture, so it has to be
+-- one transaction. As two client calls, a report that lands followed by a
+-- block that fails reads as total failure, and the natural retry files the
+-- report twice. Here either both happen or neither does, and a retry after a
+-- failure is a retry, not a duplicate.
+--
+-- SECURITY INVOKER on purpose: both inserts go through the tables' own RLS
+-- policies above, so this function grants nothing new — it only supplies the
+-- transaction boundary the two-call version never had.
+CREATE OR REPLACE FUNCTION public.file_report(
+  p_subject_type TEXT,
+  p_subject_id UUID,
+  p_reason TEXT,
+  p_note TEXT DEFAULT '',
+  p_block_user_id UUID DEFAULT NULL
+)
+RETURNS void
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO public.content_reports (reporter_id, subject_type, subject_id, reason, note)
+  VALUES (auth.uid(), p_subject_type, p_subject_id, p_reason, TRIM(COALESCE(p_note, '')));
+
+  -- The self-block guard mirrors the client's: reporting your own content is
+  -- a real thing people do by accident, and it must not blow up the report on
+  -- the blocked_users_not_self CHECK. DO NOTHING for the same reason as the
+  -- client's ignoreDuplicates — blocking twice is the same wish twice, and
+  -- there is no UPDATE policy for a DO UPDATE to satisfy.
+  IF p_block_user_id IS NOT NULL AND p_block_user_id <> auth.uid() THEN
+    INSERT INTO public.blocked_users (blocker_id, blocked_id)
+    VALUES (auth.uid(), p_block_user_id)
+    ON CONFLICT (blocker_id, blocked_id) DO NOTHING;
+  END IF;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.file_report(TEXT, UUID, TEXT, TEXT, UUID) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.file_report(TEXT, UUID, TEXT, TEXT, UUID) TO authenticated;

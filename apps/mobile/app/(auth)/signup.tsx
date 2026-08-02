@@ -14,6 +14,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '../../lib/supabase';
+import { contentViolation } from '../../lib/moderation';
 import { LINK_HIT_SLOP, useAnnounce } from '../../lib/a11y';
 import { useAuthStore } from '../../stores/authStore';
 import {
@@ -107,6 +108,13 @@ export default function SignupScreen() {
   async function handleSignup() {
     if (!step.ready) {
       setError(step.label);
+      return;
+    }
+
+    // Guideline 1.2: a display name is content every group member sees.
+    const violation = contentViolation({ name: displayName });
+    if (violation) {
+      setError(violation);
       return;
     }
 

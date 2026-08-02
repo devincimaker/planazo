@@ -82,12 +82,13 @@ BEGIN
      LIMIT 1;
 
     IF v_heir IS NULL THEN
-      -- Nobody else is in it, so there is no evening to protect — unless it
-      -- still has a living creator who isn't us. They can see it under the
-      -- groups SELECT policy, which makes it theirs and not ours to delete.
-      IF v_group.created_by IS NULL OR v_group.created_by = v_uid THEN
-        DELETE FROM public.groups WHERE id = v_group.id;
-      END IF;
+      -- Nobody else is in it, so the group dies with the account — the same
+      -- rule leave_group applies when the last member walks out. Sparing it
+      -- for a living creator who left earlier would strand them with a husk:
+      -- managing or deleting a group takes admin *membership*, the
+      -- memberships are about to cascade away with this account, and with
+      -- zero members left nobody can ever be invited back in to fix it.
+      DELETE FROM public.groups WHERE id = v_group.id;
     ELSE
       IF v_group.created_by = v_uid THEN
         UPDATE public.groups

@@ -19,6 +19,7 @@ system, so never hand-edit the PNGs.
 | In-app account deletion | done | Profile → Delete my account |
 | In-app privacy policy link | done | Profile → Privacy policy (5.1.1(i)) |
 | Report content, block users | done | plan sheet, group → Manage (1.2) |
+| Objectionable-content filter at posting | done | `lib/moderation.ts`, every shared free-text field (1.2) |
 | Terms with an objectionable-content clause | done | `https://planazo.me/terms` |
 | Production Supabase in release builds | done | `eas.json` → `preview` / `production` env |
 | iPhone-only (`supportsTablet: false`) | done | `app.json` |
@@ -171,6 +172,9 @@ What to try
      Please use a throwaway account for this — it is immediate and final.
 
 Moderation (Guideline 1.2)
+  - Posting is filtered: slurs and explicit terms are refused in any field
+    other members see — plan titles and descriptions, locations, group
+    names, display names.
   - Report a plan: open any plan, scroll to the bottom, "Report this plan".
   - Report a group: open a group, Manage, "Report this group".
   - Block someone: open a group, Manage, "Block" beside any member. Their
@@ -192,20 +196,26 @@ a few plans before you submit.** Reviewers reject on an empty app.
 ## 6. Known risks
 
 **Guideline 1.2 — user-generated content.** Covered, and worth walking the
-reviewer through it, because all four parts are required and all four exist:
+reviewer through it. Apple asks a UGC app for four specific things — a
+filtering method, a reporting mechanism, a way to block, and published
+contact details — and all four exist, plus the terms that back them:
 
 | Apple asks for | Where it is |
 | --- | --- |
-| Published terms with no tolerance for objectionable content | `planazo.me/terms`, "What you agree not to post" |
-| A way to report content | "Report this plan" on the plan sheet; "Report this group" in group → Manage |
-| A way to block abusive users | group → Manage → **Block** beside any member, and a "Block them too" toggle on the report screen |
+| A method for filtering objectionable material from being posted | `lib/moderation.ts` (`contentViolation`): every free-text field other members see — plan titles, descriptions, locations, group names, display names — is checked at posting time and refused with a message pointing at the terms. The word list is normalised against lookalike characters (F4GG0T is still caught) and matched on word boundaries, so Scunthorpe keeps its name |
+| A mechanism to report offensive content | "Report this plan" on the plan sheet; "Report this group" in group → Manage |
+| The ability to block abusive users | group → Manage → **Block** beside any member, and a "Block them too" toggle on the report screen |
 | Published contact details | `planazo.me/support` and `hola@planazo.me` |
+| Published terms with no tolerance for objectionable content | `planazo.me/terms`, "What you agree not to post" |
 
 Blocking is enforced in the database, not in the client: `has_blocked()` is
 part of the plans SELECT policy, so a blocked person's plans stop existing for
-you in the feed, in the group and by direct link alike, and the new-plan
-notification trigger skips anyone who has blocked the poster — otherwise you
-would get a push about a plan the database then refuses to show you. It is
+you in the feed, in the group and by direct link alike. Every plan
+notification honours the block too — new plan, plan confirmed, called off,
+back on — because each fan-out skips recipients who have blocked the plan's
+creator; otherwise you would get a push about a plan the database then
+refuses to show you. Locking a flexible plan also never converts a blocker's
+old availability into an RSVP on a plan they can no longer see. It is
 one-way and silent — the blocked party is never told, and cannot read the
 block row.
 Reports are insert-only for the reporter, so nobody can discover who reported
@@ -215,10 +225,11 @@ Two deliberate limits, in case Review asks:
 - Blocking does not eject anybody from a group. Removing a member is an
   admin's decision; blocking is a personal one, and a personal choice should
   not silently reshape the group for everyone else.
-- There is no automated profanity filter. Content here is only ever visible to
-  the invited members of a private group — there is no discovery, no public
-  feed, no strangers — so the moderation is report-driven, with a committed
-  24-hour response written into the terms.
+- The filter is a word list — slurs and explicit terms — not machine-learning
+  moderation. Content here is only ever visible to the invited members of a
+  private group — no discovery, no public feed, no strangers — so beyond the
+  filter, moderation is report-driven, with a committed 24-hour response
+  written into the terms.
 
 **Guideline 5.1.1(i) — privacy policy in the app.** Covered: Profile → Privacy
 policy, next to Terms of use and Help & support, all three opening

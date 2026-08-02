@@ -1,9 +1,16 @@
-import { blockUser, fetchBlockedIds, submitReport, unblockUser } from '../moderation';
+import {
+  blockUser,
+  contentViolation,
+  fetchBlockedIds,
+  submitReport,
+  unblockUser,
+} from '../moderation';
 import { supabase } from '../supabase';
 
-jest.mock('../supabase', () => ({ supabase: { from: jest.fn() } }));
+jest.mock('../supabase', () => ({ supabase: { from: jest.fn(), rpc: jest.fn() } }));
 
 const mockFrom = supabase.from as jest.Mock;
+const mockRpc = supabase.rpc as jest.Mock;
 
 let chain: any;
 let table: string | null = null;
@@ -23,6 +30,7 @@ beforeEach(() => {
     };
     return chain;
   });
+  mockRpc.mockImplementation(() => Promise.resolve({ error: null }));
 });
 
 describe('blockUser', () => {
@@ -68,22 +76,75 @@ describe('fetchBlockedIds', () => {
 });
 
 describe('submitReport', () => {
-  it('trims the note and defaults it to empty', async () => {
+  /**
+   * One RPC, not an insert followed by a block: as two calls, a report that
+   * landed followed by a block that failed read as total failure, and the
+   * retry filed the report twice. file_report does both or neither.
+   */
+  it('sends report and block through the one transactional RPC', async () => {
     await submitReport({
-      reporterId: 'me',
       subjectType: 'plan',
       subjectId: 'p1',
-      reason: 'spam',
-      note: '  spammy  ',
+      reason: 'harassment',
+      note: '  awful  ',
+      blockUserId: 'them',
     });
-    expect(chain.insert).toHaveBeenCalledWith(expect.objectContaining({ note: 'spammy' }));
 
-    await submitReport({
-      reporterId: 'me',
-      subjectType: 'group',
-      subjectId: 'g1',
-      reason: 'other',
+    expect(mockRpc).toHaveBeenCalledWith('file_report', {
+      p_subject_type: 'plan',
+      p_subject_id: 'p1',
+      p_reason: 'harassment',
+      p_note: 'awful',
+      p_block_user_id: 'them',
     });
-    expect(chain.insert).toHaveBeenCalledWith(expect.objectContaining({ note: '' }));
+  });
+
+  it('passes a null block and an empty note when neither is given', async () => {
+    await submitReport({ subjectType: 'group', subjectId: 'g1', reason: 'other' });
+
+    expect(mockRpc).toHaveBeenCalledWith(
+      'file_report',
+      expect.objectContaining({ p_note: '', p_block_user_id: null }),
+    );
+  });
+
+  it('surfaces a failure rather than swallowing it', async () => {
+    mockRpc.mockImplementationOnce(() => Promise.resolve({ error: { message: 'offline' } }));
+
+    await expect(
+      submitReport({ subjectType: 'plan', subjectId: 'p1', reason: 'spam' }),
+    ).rejects.toMatchObject({ message: 'offline' });
+  });
+});
+
+describe('contentViolation', () => {
+  it('lets ordinary plans through', () => {
+    expect(
+      contentViolation({
+        'plan title': 'Friday asado at ours',
+        'plan description': 'Bring spices and grapes — the good gobbledygook.',
+        location: 'Scunthorpe',
+      }),
+    ).toBeNull();
+  });
+
+  it('names the field that carries a blocked term', () => {
+    expect(contentViolation({ 'group name': 'the faggot club' })).toContain('group name');
+  });
+
+  it('sees through lookalike characters and casing', () => {
+    expect(contentViolation({ name: 'F4GG0T' })).not.toBeNull();
+    expect(contentViolation({ name: 'ñíggér' })).not.toBeNull();
+  });
+
+  it('catches plurals without leaking into longer words', () => {
+    expect(contentViolation({ note: 'retards' })).not.toBeNull();
+    // "spices" contains "spic" + "es"; a broader suffix rule would flag it.
+    expect(contentViolation({ note: 'jar of spices' })).toBeNull();
+    expect(contentViolation({ note: 'rapeseed fields walk' })).toBeNull();
+  });
+
+  it('skips empty and missing fields', () => {
+    expect(contentViolation({ a: '', b: null, c: undefined })).toBeNull();
   });
 });

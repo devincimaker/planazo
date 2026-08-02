@@ -19,7 +19,6 @@ import {
   REPORT_REASONS,
   ReportReason,
   ReportSubject,
-  blockUser,
   submitReport,
 } from '../../lib/moderation';
 import { useAuthStore } from '../../stores/authStore';
@@ -70,17 +69,16 @@ export default function ReportScreen() {
     mutationFn: async () => {
       if (!user || !reason || !subjectId) throw new Error('Nothing to report');
 
+      // One RPC, one transaction. Report-then-block as two calls had an ugly
+      // failure mode: the report landed, the block didn't, the alert said
+      // nothing worked — and the natural retry filed the report twice.
       await submitReport({
-        reporterId: user.id,
         subjectType,
         subjectId,
         reason,
         note,
+        blockUserId: alsoBlock && personId ? personId : null,
       });
-
-      if (alsoBlock && personId) {
-        await blockUser(user.id, personId);
-      }
     },
     onSuccess: () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
