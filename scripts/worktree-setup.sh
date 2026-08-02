@@ -148,6 +148,7 @@ shared mode while it may still exist and bill. Delete it and re-run:
   supabase_url=$WT_LOCAL_API_URL
   anon_key=$(printf '%s\n' "$local_env" | sed -n 's/^ANON_KEY="\(.*\)"$/\1/p')
   service_key=$(printf '%s\n' "$local_env" | sed -n 's/^SERVICE_ROLE_KEY="\(.*\)"$/\1/p')
+  db_url=$(printf '%s\n' "$local_env" | sed -n 's/^DB_URL="\(.*\)"$/\1/p')
   [ -n "$anon_key" ] && [ -n "$service_key" ] || wt_die "Could not parse keys from 'supabase status -o env'"
   wt_info "$supabase_url (shared with main — schema changes here affect main)"
 else
@@ -206,6 +207,18 @@ Delete it with: supabase branches delete $branch_name --project-ref $WT_PROJECT_
   wt_upsert_env "$metadata" "PLANAZO_BRANCH_REF" "$branch_ref"
   wt_info "branch ref $branch_ref"
 
+  wt_step "Aligning branch auth config with config.toml"
+  # Hosted defaults require email confirmation and rate-limit signups to a
+  # trickle, which breaks both the integration suite (it signs up throwaway
+  # users and needs a session back immediately) and dev-login flows. Pushing
+  # config.toml gives the branch the same auth behavior as the local stack.
+  # Never the parent project: production's auth config keeps its own semantics.
+  [ "$branch_ref" != "$WT_PROJECT_REF" ] || wt_die \
+    "Branch ref equals the parent project ref — refusing to push config at production."
+  (cd "$target" && echo y | supabase config push --project-ref "$branch_ref" >/dev/null) \
+    || wt_die "Could not push config.toml to branch '$branch_name'"
+  wt_info "auth config aligned (autoconfirm, signup rate limits)"
+
   wt_step "Applying this branch's migrations"
   # `db push` has no --project-ref; it takes a linked project or --db-url.
   if [ -n "$db_url" ]; then
@@ -225,6 +238,11 @@ fi
 wt_upsert_env "$target/.env" "SUPABASE_URL" "$supabase_url"
 wt_upsert_env "$target/.env" "SUPABASE_ANON_KEY" "$anon_key"
 wt_upsert_env "$target/.env" "SUPABASE_SERVICE_ROLE_KEY" "$service_key"
+# Direct Postgres URL for the same database. The integration suite's drift
+# check reads it to verify every migration in the checkout is applied before
+# trusting a run's verdict. Carries a password in branch mode — .env is
+# gitignored and already holds the service-role key.
+wt_upsert_env "$target/.env" "SUPABASE_DB_URL" "${db_url:-}"
 
 wt_upsert_env "$target/apps/mobile/.env" "EXPO_PUBLIC_SUPABASE_URL" "$supabase_url"
 wt_upsert_env "$target/apps/mobile/.env" "EXPO_PUBLIC_SUPABASE_ANON_KEY" "$anon_key"

@@ -7,7 +7,12 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # PR runs: newest push wins, cancel the stale one. Main runs: NEVER cancel —
+  # the deploy job rides this workflow, and cancelling merge A's run because
+  # merge B landed leaves A's migrations undeployed if B then fails. Main runs
+  # queue instead; a superseded queued run loses nothing because db push is
+  # cumulative — whichever run deploys carries every pending migration.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   checks:
@@ -46,6 +51,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # `db push` matches migrations to the remote history table by version
+      # timestamp, so editing a file that production has already applied is
+      # SILENTLY skipped at deploy — CI's fresh stack would test the edit,
+      # production would never receive it, and the two diverge without a single
+      # red signal. Migrations that predate the change are therefore immutable:
+      # fix forward with a new migration. On PRs the baseline is the base
+      # branch; on direct pushes to main it is the previous tip, which turns a
+      # silent divergence into a loud red run at the exact commit that caused
+      # it (and blocks that run's own deploy). A branch's own new migrations
+      # stay freely editable.
+      - name: Existing migrations are immutable
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          else
+            base="${{ github.event.before }}"
+          fi
+          case "$base" in
+            "" | 0000000000000000000000000000000000000000) exit 0 ;;
+          esac
+          git fetch --quiet --depth=1 origin "$base"
+          changed=$(git diff --name-status --diff-filter=MDR \
+            "$base" HEAD -- supabase/migrations/)
+          if [ -n "$changed" ]; then
+            echo "$changed"
+            echo "::error::This change modifies, deletes or renames migrations that already existed. 'supabase db push' identifies migrations by version and silently skips edited content, so production would never receive these changes. Write a new migration instead."
+            exit 1
+          fi
+
       - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v4
@@ -71,3 +105,29 @@ jobs:
 
       - name: Integration tests (RLS, RPCs, triggers)
         run: pnpm --filter @planazo/integration-tests test
+
+  deploy:
+    name: Push migrations to production
+    runs-on: ubuntu-latest
+    # Merges to main only, and only after the same commit passed every test —
+    # this is the one automated writer production has.
+    needs: [checks, migrations]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.90.0
+
+      # The access token alone is enough: link mints a login role for the
+      # session pooler, no database password required (verified in a clean
+      # container). `db push` applies only migrations missing from the remote
+      # history table, so re-runs are no-ops.
+      - name: Link to production
+        run: supabase link --project-ref leszgvpjonzjclhbgzju
+
+      - name: Push migrations
+        run: supabase db push --yes

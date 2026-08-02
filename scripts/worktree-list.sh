@@ -32,7 +32,16 @@ git worktree list --porcelain | awk '
   booted=""
   [ -n "$udid" ] && wt_sim_is_booted "$udid" && booted=" [booted]"
 
-  printf '%-26s %-8s %-7s %-22s %s\n' "$branch" "$mode" "${port}${running}" "${sim}${booted}" "$path"
+  # A worktree whose branch is already contained in origin/main is finished
+  # work still holding a slot — and in branch mode, still billing. Best-effort:
+  # judged against the last-fetched origin/main, no network here.
+  merged=""
+  if [ "$branch" != "(detached)" ] \
+    && git merge-base --is-ancestor "refs/heads/$branch" origin/main 2>/dev/null; then
+    merged="  <-- MERGED into main; reclaim with: pnpm wt:rm $branch"
+  fi
+
+  printf '%-26s %-8s %-7s %-22s %s%s\n' "$branch" "$mode" "${port}${running}" "${sim}${booted}" "$path" "$merged"
 done
 
 echo
