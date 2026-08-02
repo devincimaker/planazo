@@ -14,13 +14,16 @@ export default async function globalSetup(): Promise<void> {
   const stack = resolveStack();
 
   if (!stack.dbUrl) {
-    // Pre-dates wt:setup writing SUPABASE_DB_URL. The ownership guard already
-    // passed, so run rather than block — but say what we couldn't verify.
-    console.warn(
-      '[integration-tests] No SUPABASE_DB_URL for this hosted database — skipping the ' +
-        'schema drift check. Re-run `pnpm wt:setup --db` to record it.',
+    // No Postgres URL means the drift check cannot run, and a verdict about an
+    // unverifiable schema is worth nothing — refuse, same as every other
+    // unverifiable state. Worktrees from before wt:setup recorded
+    // SUPABASE_DB_URL land here until re-run.
+    throw new Error(
+      'No Postgres URL for the target database, so the schema drift check cannot run — ' +
+        'refusing to vouch for a schema it cannot see.\n' +
+        'Branch worktree: re-run `pnpm wt:setup --db` to record SUPABASE_DB_URL in .env.\n' +
+        'Loopback: make sure the local stack is up (`supabase start` from main).',
     );
-    return;
   }
 
   const files = execSync('ls supabase/migrations', { cwd: repoRoot(), encoding: 'utf8' })

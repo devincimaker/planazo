@@ -46,6 +46,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # `db push` matches migrations to the remote history table by version
+      # timestamp, so editing a file that production has already applied is
+      # SILENTLY skipped at deploy — CI's fresh stack would test the edit,
+      # production would never receive it, and the two diverge without a single
+      # red signal. Migrations that exist on the base branch are therefore
+      # immutable: fix forward with a new migration. The branch's own new
+      # migrations stay freely editable.
+      - name: Migrations on the base branch are immutable
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --quiet --depth=1 origin "${{ github.event.pull_request.base.sha }}"
+          changed=$(git diff --name-status --diff-filter=MDR \
+            "${{ github.event.pull_request.base.sha }}" HEAD -- supabase/migrations/)
+          if [ -n "$changed" ]; then
+            echo "$changed"
+            echo "::error::This PR modifies, deletes or renames migrations that already exist on the base branch. 'supabase db push' identifies migrations by version and silently skips edited content, so production would never receive these changes. Write a new migration instead."
+            exit 1
+          fi
+
       - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v4

@@ -40,28 +40,46 @@ function hostedRef(url: string): string | null {
 
 /**
  * The suite signs up throwaway users and mutates rows freely, so it may only
- * target a database this checkout owns:
- *   - a loopback stack (main's local stack, or CI's), or
- *   - THIS worktree's own Supabase branch database, identified by comparing the
- *     URL's project ref against PLANAZO_BRANCH_REF in .env.worktree.
- * Anything else — production, another worktree's branch, anything we cannot
- * verify — is refused. Unverifiable means refused: fail closed.
+ * target the ONE database this checkout owns, decided by its declared mode:
+ *   - branch mode (.env.worktree says PLANAZO_DB_MODE=branch): only this
+ *     worktree's own branch database, ref-matched against PLANAZO_BRANCH_REF.
+ *     Loopback is refused too — wt:setup --db records the mode before it
+ *     rewrites .env, so a setup that died midway leaves a branch-mode worktree
+ *     still pointing at main's stack. Running there would test main's schema
+ *     while claiming branch isolation.
+ *   - everything else (shared worktrees, main, CI): only loopback.
+ * Anything unverifiable is refused: fail closed.
  */
 function assertAllowed(url: string, root: string): void {
-  if (isLoopback(url)) return;
-
-  const ref = hostedRef(url);
   const worktree = parseEnvFile(join(root, '.env.worktree'));
+  const mode = worktree.PLANAZO_DB_MODE ?? '';
   const ownRef = worktree.PLANAZO_BRANCH_REF ?? '';
+  const ref = hostedRef(url);
 
-  if (ref && ownRef && ref === ownRef) return;
+  if (mode === 'branch') {
+    if (ref && ownRef && ref === ownRef) return;
+    throw new Error(
+      `Refusing to run integration tests against ${url}.\n` +
+        `This worktree declares PLANAZO_DB_MODE=branch, so the suite only accepts its ` +
+        `own branch database` +
+        (ownRef ? ` (ref '${ownRef}')` : '') +
+        `.\n` +
+        (isLoopback(url)
+          ? `A loopback URL here usually means wt:setup --db failed before rewriting .env,\n` +
+            `leaving this checkout pointed at main's local stack.\n`
+          : ownRef
+            ? `This URL's ref does not match.\n`
+            : `No PLANAZO_BRANCH_REF is recorded, so no database can be verified as this worktree's.\n`) +
+        `Re-run: pnpm wt:setup --db`,
+    );
+  }
+
+  if (isLoopback(url)) return;
 
   throw new Error(
     `Refusing to run integration tests against ${url}.\n` +
-      `The suite only targets a loopback stack or this worktree's own branch database.\n` +
-      (ownRef
-        ? `This worktree's branch ref is '${ownRef}', which does not match.\n`
-        : `This checkout has no .env.worktree with a PLANAZO_BRANCH_REF, so no hosted database belongs to it.\n`) +
+      `This checkout is not a branch-mode worktree, so the suite only targets a ` +
+      `loopback stack.\n` +
       `If you exported SUPABASE_URL by sourcing the wrong .env, unset it — the suite\n` +
       `reads this checkout's root .env on its own. If this worktree should have its\n` +
       `own database, run: pnpm wt:setup --db`,
