@@ -220,7 +220,7 @@ describe('cancel_plan and restore_plan', () => {
     ).filter((n) => (n.data as { plan_id?: string })?.plan_id === planId);
     expect(notices).toHaveLength(1);
     expect(notices[0].title).toBe('Called off');
-    expect(notices[0].body).toBe('Plan Host called off "Cancel target" — "running late"');
+    expect(notices[0].body).toBe('Plan Host called off "Cancel target": "running late"');
 
     const again = ok(await host.client.rpc('cancel_plan', { p_plan_id: planId })) as {
       cancelled: boolean;
@@ -250,7 +250,7 @@ describe('cancel_plan and restore_plan', () => {
     ).filter((n) => (n.data as { plan_id?: string })?.plan_id === planId);
     expect(reopenNotices).toHaveLength(1);
     expect(reopenNotices[0].title).toBe('Back on');
-    expect(reopenNotices[0].body).toBe('"Cancel target" is back on — your dates still stand.');
+    expect(reopenNotices[0].body).toBe('"Cancel target" is back on. Your dates still stand.');
 
     const notCancelled = await host.client.rpc('restore_plan', { p_plan_id: planId });
     expect(notCancelled.error?.message).toMatch(/Plan is not cancelled/);

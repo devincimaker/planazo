@@ -83,9 +83,9 @@ describe('trg_notify_plan_created', () => {
     const forFlex = onRows.filter((n) => (n.data as { plan_id?: string })?.plan_id === flexId);
     expect(forFixed).toHaveLength(1);
     expect(forFixed[0].title).toBe('New plan');
-    expect(forFixed[0].body).toBe('Trigger Creator put up "Fixed fanout probe" — are you in?');
+    expect(forFixed[0].body).toBe('Trigger Creator put up "Fixed fanout probe". Are you in?');
     expect(forFlex).toHaveLength(1);
-    expect(forFlex[0].body).toBe('Trigger Creator put up "Flexible fanout probe" — pick the dates that work.');
+    expect(forFlex[0].body).toBe('Trigger Creator put up "Flexible fanout probe". Pick the dates that work.');
 
     expect(
       ok(await offMember.client.from('notifications').select('id').eq('type', 'plan_created')),
