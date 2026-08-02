@@ -203,8 +203,11 @@ reviewer through it, because all four parts are required and all four exist:
 
 Blocking is enforced in the database, not in the client: `has_blocked()` is
 part of the plans SELECT policy, so a blocked person's plans stop existing for
-you in the feed, in the group and by direct link alike. It is one-way and
-silent — the blocked party is never told, and cannot read the block row.
+you in the feed, in the group and by direct link alike, and the new-plan
+notification trigger skips anyone who has blocked the poster — otherwise you
+would get a push about a plan the database then refuses to show you. It is
+one-way and silent — the blocked party is never told, and cannot read the
+block row.
 Reports are insert-only for the reporter, so nobody can discover who reported
 them. Triage happens off the service role.
 
