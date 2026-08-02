@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdict", "summary", "findings", "prior_findings_check"],
+  "properties": {
+    "verdict": {
+      "type": "string",
+      "enum": ["approve", "request_changes"],
+      "description": "approve iff there are no high findings and no still_present prior findings"
+    },
+    "summary": {
+      "type": "string",
+      "description": "2-3 sentences: what the change does and the overall state of the review"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "severity", "scenario", "files", "fix_hint"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "stable kebab-case slug, reused if the same defect is reported again in a later round"
+          },
+          "title": { "type": "string" },
+          "severity": { "type": "string", "enum": ["high", "low"] },
+          "scenario": {
+            "type": "string",
+            "description": "concrete failure scenario: with state/input X, Y happens instead of Z. Mandatory for high."
+          },
+          "files": { "type": "array", "items": { "type": "string" } },
+          "fix_hint": { "type": "string", "description": "one-line suggestion of the fix direction; empty string if none" }
+        }
+      }
+    },
+    "prior_findings_check": {
+      "type": "array",
+      "description": "one entry per ledger finding with status fixed-claimed; empty array when no ledger was provided",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "status", "note"],
+        "properties": {
+          "id": { "type": "string" },
+          "status": { "type": "string", "enum": ["fixed", "still_present", "not_verifiable"] },
+          "note": { "type": "string" }
+        }
+      }
+    }
+  }
+}
