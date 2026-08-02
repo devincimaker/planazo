@@ -496,8 +496,9 @@ export default function PlanDetailScreen() {
     showToast('Link copied');
   };
 
-  // 20a: the host menu, guests get it minus "Call it off" (the Edit row is
-  // deferred until a plan-edit screen is designed — see tasks.md).
+  // 20a: the host menu. Guests get it minus the two host rows — editing and
+  // calling it off share one guard, because both are meaningless on a plan
+  // that has already ended or been called off (PLA-31).
   const showMenu = () => {
     const rows: { label: string; action: () => void; destructive?: boolean }[] = [
       { label: 'Copy invite link', action: copyLink },
@@ -509,6 +510,10 @@ export default function PlanDetailScreen() {
       });
     }
     if (d.isHost && !d.isCancelled && !d.isPast) {
+      rows.push({
+        label: 'Edit the details',
+        action: () => router.push(`/plan/${id}/edit`),
+      });
       rows.push({
         label: 'Call it off',
         action: () => router.push(`/plan/${id}/cancel`),

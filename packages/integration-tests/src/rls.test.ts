@@ -232,6 +232,123 @@ describe('plans', () => {
   });
 });
 
+// PLA-31: a host may fix a typo or a moved venue on a live plan. Two rules
+// share the work — the policy picks the row, a column-level GRANT picks the
+// columns — so both halves need their own proof.
+describe('editing a plan', () => {
+  async function freshPlan(creator: TestUser, title: string): Promise<string> {
+    return ok(
+      await creator.client
+        .from('plans')
+        .insert({
+          group_id: group.id,
+          created_by: creator.id,
+          title,
+          location: 'The old place',
+          description: 'Bring cash',
+          plan_type: 'fixed',
+          event_date: daysFromNow(7),
+          min_people: 2,
+        })
+        .select('id')
+        .single(),
+    ).id;
+  }
+
+  it('the creator fixes the title, the place and the notes', async () => {
+    const id = await freshPlan(owner, 'Padle');
+
+    const saved = ok(
+      await owner.client
+        .from('plans')
+        .update({ title: 'Padel', location: 'The new place', description: null })
+        .eq('id', id)
+        .select('title, location, description'),
+    );
+    expect(saved).toEqual([{ title: 'Padel', location: 'The new place', description: null }]);
+  });
+
+  // The screen calls both of these "host" (created_by === me || role admin).
+  // If the policy disagreed with that, the button would silently do nothing.
+  it('a group admin who did not create it is a host too', async () => {
+    const id = await freshPlan(member, "Member's plan");
+
+    expect(
+      ok(await owner.client.from('plans').update({ title: 'Fixed by the admin' }).eq('id', id).select('title')),
+    ).toEqual([{ title: 'Fixed by the admin' }]);
+  });
+
+  // The PLA-16 shape, and the reason the edit screen asks for the row back:
+  // a policy-filtered UPDATE is not an error. It is a 200 with nothing in it.
+  it("a plain member's edit reports success and changes nothing", async () => {
+    const id = await freshPlan(owner, 'Not yours to rename');
+
+    const attempt = await member.client
+      .from('plans')
+      .update({ title: 'Renamed by somebody else' })
+      .eq('id', id)
+      .select('id');
+    expect(attempt.error).toBeNull();
+    expect(attempt.data).toEqual([]);
+
+    expect(ok(await owner.client.from('plans').select('title').eq('id', id).single()).title).toBe(
+      'Not yours to rename',
+    );
+  });
+
+  // The half RLS cannot express. Without the column grant each of these would
+  // succeed for the creator: a cancellation nobody is notified of, a plan
+  // moved into a circle its host isn't in, a minimum rewritten under people
+  // who already answered.
+  it.each(['status', 'min_people', 'max_people', 'group_id', 'created_by', 'locked_date'])(
+    'not even the creator may write %s',
+    async (column) => {
+      const id = await freshPlan(owner, `Column probe ${column}`);
+      const values: Record<string, unknown> = {
+        status: 'cancelled',
+        min_people: 99,
+        max_people: 1,
+        group_id: group.id,
+        created_by: member.id,
+        locked_date: daysFromNow(3),
+      };
+
+      const denied = await owner.client
+        .from('plans')
+        .update({ [column]: values[column] })
+        .eq('id', id);
+      expect(denied.error?.code).toBe('42501');
+    },
+  );
+
+  it('a called-off plan is out of reach, even for the person who called it off', async () => {
+    const id = await freshPlan(owner, 'About to be called off');
+    ok(await owner.client.rpc('cancel_plan', { p_plan_id: id, p_reason: 'Rained off' }));
+
+    const attempt = await owner.client
+      .from('plans')
+      .update({ title: 'Rewriting history' })
+      .eq('id', id)
+      .select('id');
+    expect(attempt.error).toBeNull();
+    expect(attempt.data).toEqual([]);
+  });
+
+  // The revoke narrows `authenticated`, not the table's owner. The four
+  // lifecycle functions are SECURITY DEFINER, so they keep writing the very
+  // columns the client just lost — and are now the only thing that can.
+  it('the lifecycle RPCs still write what the client no longer may', async () => {
+    const id = await freshPlan(owner, 'Cancelled the proper way');
+    ok(await owner.client.rpc('cancel_plan', { p_plan_id: id, p_reason: 'Called off properly' }));
+
+    const plan = ok(
+      await owner.client.from('plans').select('status, cancel_reason').eq('id', id).single(),
+    );
+    expect(plan.status).toBe('cancelled');
+    expect(plan.cancel_reason).toBe('Called off properly');
+  });
+});
+
 // PLA-16: rsvps shipped with INSERT/UPDATE/SELECT and no DELETE policy, so
 // every "Change" in the app deleted nothing and reported success. These pin
 // the rule that replaced it: your own row, on a plan that is still live.
