@@ -383,6 +383,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    // At accessibility text sizes "First time here?" and its link no longer
+    // fit side by side; wrapping stacks them instead of running off-screen.
+    flexWrap: 'wrap',
     gap: 6,
   },
   footerLink: {

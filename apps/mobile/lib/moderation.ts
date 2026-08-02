@@ -45,8 +45,16 @@ export async function submitReport(input: ReportInput): Promise<void> {
 export async function blockUser(blockerId: string, blockedId: string): Promise<void> {
   const { error } = await supabase
     .from('blocked_users')
-    // Blocking twice is not an error, it is the same wish expressed twice.
-    .upsert({ blocker_id: blockerId, blocked_id: blockedId }, { onConflict: 'blocker_id,blocked_id' });
+    // Blocking twice is not an error, it is the same wish expressed twice —
+    // but `ignoreDuplicates` is doing real work here, not just being tidy.
+    // A plain upsert becomes ON CONFLICT DO UPDATE, and blocked_users has no
+    // UPDATE policy on purpose (there is nothing in the row worth changing),
+    // so the second block would come back as an RLS failure. This sends
+    // ON CONFLICT DO NOTHING, which the INSERT policy alone can satisfy.
+    .upsert(
+      { blocker_id: blockerId, blocked_id: blockedId },
+      { onConflict: 'blocker_id,blocked_id', ignoreDuplicates: true },
+    );
   if (error) throw error;
 }
 

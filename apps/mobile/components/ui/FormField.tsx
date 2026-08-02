@@ -40,6 +40,7 @@ export function FormField({ label, hint, secure = false, testID, ...rest }: Form
           accessibilityHint={rest.accessibilityHint ?? hint}
           secureTextEntry={secure && !revealed}
           placeholderTextColor={colors.textFaint}
+          style={[styles.input, secure && styles.inputWithReveal]}
           onFocus={(e) => {
             setFocused(true);
             rest.onFocus?.(e);
@@ -48,7 +49,6 @@ export function FormField({ label, hint, secure = false, testID, ...rest }: Form
             setFocused(false);
             rest.onBlur?.(e);
           }}
-          style={styles.input}
         />
         {secure ? (
           <Pressable
@@ -56,6 +56,7 @@ export function FormField({ label, hint, secure = false, testID, ...rest }: Form
             accessibilityLabel={revealed ? 'Hide password' : 'Show password'}
             hitSlop={LINK_HIT_SLOP}
             onPress={() => setRevealed((v) => !v)}
+            style={styles.reveal}
             testID={testID ? `${testID}-reveal` : undefined}
           >
             <ThemedText variant="caption" color={colors.accentText}>
@@ -77,16 +78,17 @@ const styles = StyleSheet.create({
   field: {
     gap: spacing.sm,
   },
+  // No padding here. It used to live on this wrapper, which made the box look
+  // 51pt tall while only the ~21pt text line actually took a tap — press the
+  // top or bottom third of a field and nothing happened. The padding belongs
+  // on the input, so the whole visible box is the input.
   inputWrap: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
+    alignItems: 'stretch',
     backgroundColor: colors.surface,
     borderWidth: 1.5,
     borderColor: colors.borderStrong,
     borderRadius: 18,
-    paddingVertical: 15,
-    paddingHorizontal: spacing.lg,
   },
   inputWrapFocused: {
     borderColor: colors.accent,
@@ -96,7 +98,20 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodySemiBold,
     fontSize: 17,
     color: colors.textPrimary,
-    padding: 0,
+    // Same 15/16 as the wrapper carried before, so nothing moves visually.
+    paddingVertical: 15,
+    paddingHorizontal: spacing.lg,
+    // Belt and braces for large text settings and short line heights alike:
+    // the tap target never drops under Apple's 44pt however the text renders.
+    minHeight: 44,
+  },
+  inputWithReveal: {
+    // Leave the reveal control its own room rather than running under it.
+    paddingRight: spacing.md,
+  },
+  reveal: {
+    justifyContent: 'center',
+    paddingRight: spacing.lg,
   },
   hint: {
     lineHeight: 19,

@@ -185,8 +185,6 @@ export default function ForgotPasswordScreen() {
               testID="send-link"
             />
 
-            <View style={styles.flex} />
-
             <View style={styles.footer}>
               <ThemedText variant="sub">Remembered it?</ThemedText>
               <Link href="/(auth)/login" asChild>
@@ -221,7 +219,10 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   body: {
-    flex: 1,
+    // flexGrow, not flex. `flex: 1` clamps this to the ScrollView's height, so
+    // at large text sizes the content overflowed instead of making the view
+    // scrollable — the sign-in button ended up below the fold, unreachable.
+    flexGrow: 1,
     paddingHorizontal: spacing.xl,
     paddingTop: 28,
   },
@@ -249,7 +250,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    // At accessibility text sizes "First time here?" and its link no longer
+    // fit side by side; wrapping stacks them instead of running off-screen.
+    flexWrap: 'wrap',
     gap: 6,
+    // Replaces a flex:1 spacer View. Same effect when there is room to spare,
+    // but this one yields once the content is taller than the screen instead
+    // of fighting it.
+    marginTop: 'auto',
     paddingTop: spacing.xxl,
     paddingBottom: 34,
   },

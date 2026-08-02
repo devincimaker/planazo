@@ -235,7 +235,10 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   body: {
-    flex: 1,
+    // flexGrow, not flex. `flex: 1` clamps this to the ScrollView's height, so
+    // at large text sizes the content overflowed instead of making the view
+    // scrollable — the sign-in button ended up below the fold, unreachable.
+    flexGrow: 1,
     paddingHorizontal: spacing.xl,
     paddingTop: 60,
   },

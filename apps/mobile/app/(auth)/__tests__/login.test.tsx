@@ -1,3 +1,4 @@
+import { StyleSheet } from 'react-native';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import LoginScreen from '../login';
 import { supabase } from '../../../lib/supabase';
@@ -86,6 +87,33 @@ describe('LoginScreen', () => {
       expect(mockReplace).toHaveBeenCalledWith('/(app)/(tabs)');
     });
     expect(mockFrom).toHaveBeenCalledWith('profiles');
+  });
+
+  /**
+   * Dynamic Type guards. RNTL cannot lay anything out, so these assert the two
+   * style decisions that broke at Accessibility XXXL rather than the pixels:
+   * a `flex: 1` body clamped to the ScrollView height, so overflowing content
+   * was clipped instead of scrollable and the sign-in button sat below the
+   * fold; and a non-wrapping footer row ran off the side of the screen.
+   */
+  it('lets the form grow past the viewport rather than clamping it', async () => {
+    await render(<LoginScreen />);
+
+    const scroll = screen.getByTestId('login-scroll');
+    expect(StyleSheet.flatten(scroll.props.contentContainerStyle).flexGrow).toBe(1);
+
+    const body = StyleSheet.flatten(screen.getByTestId('login-body').props.style);
+    expect(body.flexGrow).toBe(1);
+    expect(body.flex).toBeUndefined();
+  });
+
+  it('wraps the footer instead of running it off the screen', async () => {
+    await render(<LoginScreen />);
+    const footer = StyleSheet.flatten(screen.getByTestId('login-footer').props.style);
+
+    expect(footer.flexWrap).toBe('wrap');
+    // Pins the footer to the bottom when there is room, yields when there is not.
+    expect(footer.marginTop).toBe('auto');
   });
 
   it('masks the password until the reveal toggle is pressed', async () => {
