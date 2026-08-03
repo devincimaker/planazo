@@ -646,6 +646,10 @@ export type Database = {
       }
       is_group_admin: { Args: { check_group_id: string }; Returns: boolean }
       is_group_member: { Args: { check_group_id: string }; Returns: boolean }
+      is_plan_host: {
+        Args: { p_created_by: string; p_group_id: string }
+        Returns: boolean
+      }
       join_group_by_invite_code: { Args: { p_code: string }; Returns: Json }
       leave_group: { Args: { p_group_id: string }; Returns: Json }
       lock_plan: {
