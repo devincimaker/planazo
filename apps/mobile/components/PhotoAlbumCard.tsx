@@ -14,15 +14,11 @@ import {
   type PlanPhoto,
   type SignedPhoto,
 } from '../lib/photos';
+import { spellCount } from '../lib/words';
 import { colors, radii, spacing, type } from '../theme/tokens';
 
 /** Tiles the strip shows before it stops and lets the count do the talking. */
 const STRIP_MAX = 4;
-
-// Lowercase, because these land mid-sentence ("from five people"). Plan detail
-// keeps its own capitalised list for headlines that start with the number.
-const WORDS = ['no one', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
-const word = (n: number) => WORDS[n] ?? String(n);
 
 export const planPhotosKey = (planId: string) => ['plan-photos', planId] as const;
 
@@ -265,7 +261,7 @@ function summaryLine({
     const name = rows[0]?.uploader?.display_name;
     return name ? `${total} photos from ${name}` : `${total} photos`;
   }
-  return `${total} photos from ${word(uploaders)} people`;
+  return `${total} photos from ${spellCount(uploaders)} people`;
 }
 
 function actionLabel({

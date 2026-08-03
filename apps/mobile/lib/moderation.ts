@@ -11,7 +11,11 @@ import { supabase } from './supabase';
  * `has_blocked()` and the plans SELECT policy in the moderation migration.
  */
 
-export type ReportSubject = 'plan' | 'group' | 'profile';
+// 'photo' (PLA-32) is not a nicety. A word list cannot read a photograph, so
+// for images reporting is not the backstop behind the content filter, it is
+// the entire mechanism. Reporting the plan instead would tell whoever reads
+// the report nothing about which of forty photos was the problem.
+export type ReportSubject = 'plan' | 'group' | 'profile' | 'photo';
 
 export type ReportReason = 'harassment' | 'hate' | 'sexual' | 'violence' | 'spam' | 'other';
 
