@@ -391,6 +391,22 @@ export default function PlanDetailScreen() {
 
     const outCount = (rsvps ?? []).filter((r) => r.response === 'no').length;
 
+    // A confirmed no is a name, not just a number (PLA-29). Built exactly like
+    // goingPeople so the two sections read the same way: you are pulled out
+    // into your own chip, everyone else keeps the order the rows came in.
+    // Its own `seen` set — a person cannot hold a yes and a no at once, but
+    // sharing goingPeople's would silently swallow anyone who did.
+    const notGoingPeople: { id: string; name: string }[] = [];
+    const seenOut = new Set<string>();
+    (rsvps ?? [])
+      .filter((r) => r.response === 'no')
+      .forEach((r) => {
+        if (r.user_id === user?.id || seenOut.has(r.user_id)) return;
+        seenOut.add(r.user_id);
+        notGoingPeople.push({ id: r.user_id, name: r.profile?.display_name ?? '?' });
+      });
+    const youOut = userRsvp?.response === 'no';
+
     // Members who never engaged at all — the nudge target (20a) and the
     // "4 never answered" line on 19c.
     const answeredIds = new Set<string>();
@@ -431,6 +447,8 @@ export default function PlanDetailScreen() {
       goingPeople,
       youIn,
       outCount,
+      notGoingPeople,
+      youOut,
       unanswered,
       isHost,
       viableLead,
@@ -954,6 +972,10 @@ export default function PlanDetailScreen() {
               </View>
             ))}
           </View>
+          {/* An ended plan keeps its one summary line. Naming the declines
+              there would be a second sunken chip row under a sunken going
+              row, which is two records competing where the screen only owes
+              you a fact. A called-off plan stays silent about them entirely. */}
           {d.isExpired && (d.unanswered > 0 || d.outCount > 0) ? (
             <ThemedText variant="caption" color={colors.textMuted}>
               {[
@@ -963,12 +985,46 @@ export default function PlanDetailScreen() {
                 .filter(Boolean)
                 .join(' · ')}
             </ThemedText>
-          ) : !d.isEnded && d.outCount > 0 ? (
-            <ThemedText variant="caption" color={colors.textFaint}>
-              {d.outCount} can't make it
-            </ThemedText>
           ) : null}
         </View>
+
+        {/* PLA-29: who said no, named. Its own section so it never competes
+            with the going list, and muted throughout so the weight matches
+            what it means. Laid out live, so someone changing their mind while
+            you are looking moves between the two lists. */}
+        {!d.isEnded && (d.youOut || d.notGoingPeople.length > 0) ? (
+          <Animated.View
+            layout={LinearTransition}
+            style={styles.section}
+            testID="declined-section"
+          >
+            {/* Shares its wording with the footer's decline button, which is
+                the point: the heading names the group that button puts you in. */}
+            <ThemedText variant="sectionLabel">Can't make it</ThemedText>
+            <View style={styles.people}>
+              {d.youOut ? (
+                <View style={[styles.person, styles.personOut]}>
+                  <View style={styles.avatarOut}>
+                    <Avatar name="You" dark size={26} />
+                  </View>
+                  <ThemedText variant="bodyStrong" color={colors.textMuted}>
+                    You
+                  </ThemedText>
+                </View>
+              ) : null}
+              {d.notGoingPeople.map((p) => (
+                <View key={p.id} style={[styles.person, styles.personOut]}>
+                  <View style={styles.avatarOut}>
+                    <Avatar name={p.name} size={26} />
+                  </View>
+                  <ThemedText variant="bodyStrong" color={colors.textMuted}>
+                    {p.name}
+                  </ThemedText>
+                </View>
+              ))}
+            </View>
+          </Animated.View>
+        ) : null}
 
         {d.isHost && d.isOpenFlexible && d.viableLead ? (
           <Button
@@ -1191,6 +1247,17 @@ const styles = StyleSheet.create({
   personEnded: {
     backgroundColor: colors.surfaceSunken,
     borderColor: colors.endedBorder,
+  },
+  // A no is the same pill with the air let out: sunken fill, the softer of the
+  // two borders, and the name at muted rather than primary (PLA-29).
+  personOut: {
+    backgroundColor: colors.surfaceSunken,
+    borderColor: colors.border,
+  },
+  // The face keeps its colour — it is how you recognise the person — but sits
+  // back so the going list still wins the row.
+  avatarOut: {
+    opacity: 0.75,
   },
   endedCard: {
     backgroundColor: colors.endedCard,

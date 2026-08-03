@@ -817,6 +817,102 @@ describe('PlanDetailScreen — endings', () => {
   });
 });
 
+// PLA-29: a confirmed no was counted and never named, so a host could see that
+// three people were out without knowing which three — exactly the thing you
+// need to decide whether to chase someone or call it off.
+describe('PlanDetailScreen — who said no', () => {
+  it('names the people who declined instead of counting them', async () => {
+    prime({
+      plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(4) },
+      rsvps: [
+        { user_id: 'me', response: 'yes', profile: { display_name: 'Me' } },
+        { user_id: 'u-marta', response: 'yes', profile: { display_name: 'Marta' } },
+        { user_id: 'u-pau', response: 'no', profile: { display_name: 'Pau' } },
+        { user_id: 'u-sam', response: 'no', profile: { display_name: 'Sam' } },
+      ],
+      members: ['me', 'u-marta', 'u-pau', 'u-sam'],
+    });
+    await renderDetail();
+
+    await waitFor(() => expect(screen.getByText('Going')).toBeTruthy());
+    expect(screen.getByTestId('declined-section')).toBeTruthy();
+    expect(screen.getByText('Pau')).toBeTruthy();
+    expect(screen.getByText('Sam')).toBeTruthy();
+    // The bare count it replaces is gone, not merely supplemented
+    expect(screen.queryByText("2 can't make it")).toBeNull();
+  });
+
+  it('leaves the section out entirely when nobody has declined', async () => {
+    prime({
+      plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(4) },
+      rsvps: [{ user_id: 'u-marta', response: 'yes', profile: { display_name: 'Marta' } }],
+      members: ['me', 'u-marta'],
+    });
+    await renderDetail();
+
+    await waitFor(() => expect(screen.getByText('Going')).toBeTruthy());
+    // Queried by testID, not by text: the footer's own decline button carries
+    // the same words on a plan you have not answered.
+    expect(screen.queryByTestId('declined-section')).toBeNull();
+  });
+
+  // Your own no is yours the same way your own yes is: the going list already
+  // splits "You" out of the names, and this list matches it.
+  it('puts you in it when you are the one who declined', async () => {
+    prime({
+      plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(4) },
+      rsvps: [
+        { user_id: 'me', response: 'no', profile: { display_name: 'Me' } },
+        { user_id: 'u-marta', response: 'yes', profile: { display_name: 'Marta' } },
+      ],
+      members: ['me', 'u-marta'],
+    });
+    await renderDetail();
+
+    await waitFor(() => expect(screen.getByTestId('declined-section')).toBeTruthy());
+    expect(screen.getByText('You')).toBeTruthy();
+    // Named once, in the declined list — never mirrored into the going one
+    expect(screen.getAllByText('You')).toHaveLength(1);
+  });
+
+  // A vote of "None of them" writes the same `no` row as a fixed plan's
+  // "Can't make it", so it has to surface in the same place.
+  it('names a flexible-plan decline beside the people still in the mix', async () => {
+    prime({
+      plan: { ...basePlan, plan_type: 'flexible', status: 'open' },
+      options: [{ id: 'o1', date: iso(3) }],
+      avail: [{ id: 'a1', user_id: 'u-marta', date_option_id: 'o1', profile: { display_name: 'Marta' } }],
+      rsvps: [{ user_id: 'u-pau', response: 'no', profile: { display_name: 'Pau' } }],
+      members: ['me', 'u-marta', 'u-pau'],
+    });
+    await renderDetail();
+
+    await waitFor(() => expect(screen.getByText('In the mix')).toBeTruthy());
+    expect(screen.getByText('Marta')).toBeTruthy();
+    expect(screen.getByTestId('declined-section')).toBeTruthy();
+    expect(screen.getByText('Pau')).toBeTruthy();
+  });
+
+  // An ended plan keeps its single summary line: naming the declines there
+  // would be a second sunken chip row under an already sunken going row.
+  it('stays off the ended screens, which keep their summary line', async () => {
+    prime({
+      plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(-2) },
+      rsvps: [
+        { user_id: 'me', response: 'yes', profile: { display_name: 'Me' } },
+        { user_id: 'u-pau', response: 'no', profile: { display_name: 'Pau' } },
+      ],
+      members: ['me', 'u-marta', 'u-jordi', 'u-pau'],
+    });
+    await renderDetail();
+
+    await waitFor(() => expect(screen.getByText('Were in')).toBeTruthy());
+    expect(screen.getByText("2 never answered · 1 couldn't make it")).toBeTruthy();
+    expect(screen.queryByTestId('declined-section')).toBeNull();
+    expect(screen.queryByText('Pau')).toBeNull();
+  });
+});
+
 // PLA-19: an unknown or RLS-hidden plan used to spin forever. `.single()` throws
 // PGRST116, the query settles with no data, and the guard had no error branch.
 describe('PlanDetailScreen — a plan you cannot see', () => {
