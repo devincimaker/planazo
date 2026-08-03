@@ -87,6 +87,17 @@ around them; run the named remedy.
 
 ## After merging
 
-`pnpm wt:list` flags worktrees whose branch is contained in `origin/main` —
-reclaim them with `pnpm wt:rm <slug>` (deletes the billed branch DB too). On
-main after a schema PR lands: `git pull && supabase migration up`.
+**This is automatic for the worktree you are in.** A PostToolUse hook on
+`gh pr merge` (`.claude/settings.json`) runs `scripts/worktree-reap.sh`, which
+reclaims THIS worktree — worktree, simulator, branch DB — and then pulls main
+and applies any new migrations to its local database. It reclaims nothing else:
+other worktrees belong to other sessions, and their branch DBs are live.
+
+It refuses rather than deletes when the PR for the branch is not `MERGED`, or
+when `wt:rm` objects (a dirty tree, most often). Run it by hand with
+`pnpm wt:reap` from inside a worktree.
+
+Other people's merged worktrees still show up in `pnpm wt:list` flagged
+`MERGED into main` — that is a prompt for whoever owns them, not a to-do list.
+Ask before reclaiming one you did not create; a flagged worktree is often a
+session still working in it.

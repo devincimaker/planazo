@@ -22,7 +22,8 @@
     "wt:setup": "bash scripts/worktree-setup.sh",
     "wt:start": "bash scripts/worktree-start.sh",
     "wt:list": "bash scripts/worktree-list.sh",
-    "wt:rm": "bash scripts/worktree-remove.sh"
+    "wt:rm": "bash scripts/worktree-remove.sh",
+    "wt:reap": "bash scripts/worktree-reap.sh"
   },
   "devDependencies": {
     "@supabase/supabase-js": "^2.89.0",
