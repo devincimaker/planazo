@@ -272,6 +272,14 @@ else
   wt_info "installed $(basename "$app") ($(du -sh "$app" | awk '{print $1}'))"
   # The dev menu's onboarding gate blocks deep links on a fresh device.
   xcrun simctl spawn "$sim_udid" defaults write com.planazo.app isOnboardingFinished -bool true 2>/dev/null || true
+  # Pre-approve Planazo's URL schemes, or SpringBoard's "Open in Planazo?"
+  # alert can appear on deep links fired while a modal is up — and that alert
+  # ignores idb taps; only a device reboot clears it (see
+  # .claude/skills/simulator-driving). Approved once here, it never shows.
+  for scheme in planazo com.planazo.app exp+planazo; do
+    xcrun simctl spawn "$sim_udid" defaults write com.apple.launchservices.schemeapproval \
+      "com.apple.CoreSimulator.CoreSimulatorBridge-->$scheme" -string "com.planazo.app" 2>/dev/null || true
+  done
 fi
 
 # --- ledger ------------------------------------------------------------------

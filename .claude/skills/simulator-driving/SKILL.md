@@ -65,33 +65,43 @@ python3 .claude/skills/simulator-driving/sim.py tap "Close" --exact
 Symptom: `sim.py ls` shows only three elements —
 `'Open in "Planazo"?'`, `Cancel`, `Open` — and the app is unreachable.
 
-This one is owned by **SpringBoard, not the app**, and that is why agents get
-stuck. All of these **fail silently** (they report success and change nothing):
+**Prevent it outright (the real fix).** The alert is SpringBoard asking to
+approve a custom URL scheme; on simulators the approvals are just a plist.
+Pre-approve Planazo's schemes and the alert can never appear, no matter what
+modal is up when a deep link fires:
+
+```bash
+UDID=$(grep PLANAZO_SIM_UDID .env.worktree | cut -d= -f2)
+for scheme in planazo com.planazo.app exp+planazo; do
+  xcrun simctl spawn "$UDID" defaults write com.apple.launchservices.schemeapproval \
+    "com.apple.CoreSimulator.CoreSimulatorBridge-->$scheme" -string "com.planazo.app"
+done
+```
+
+`wt:setup` does this for every simulator it creates (since PLA-28), so only
+simulators from before then — or the main checkout's, if it predates a manual
+"Open" tap — still need it. Verified: with the approvals written, the exact
+sequence that used to raise the alert (deep link over the dev-client UI)
+connects silently.
+
+**If the alert is already up**, it is owned by SpringBoard, not the app, and
+that is why agents get stuck. All of these **fail silently** (they report
+success and change nothing):
 
 - `idb ui tap` on the Open button — reports the tap, alert stays
 - `idb ui key 40` (Return) — no effect
 - AppleScript `click at {x,y}` on the Simulator window — lands on the layer *under* the alert
 - `xcrun simctl terminate` + relaunch — the alert outlives the app
 
-**What actually works: reboot the device.**
+The only known dismissal is a device reboot — write the approvals first so it
+is also the last:
 
 ```bash
-UDID=$(grep PLANAZO_SIM_UDID .env.worktree | cut -d= -f2)
 xcrun simctl shutdown "$UDID" && xcrun simctl boot "$UDID"
 until xcrun simctl list devices | grep -q "$UDID) (Booted)"; do sleep 2; done
 ```
 
-**Cause, so you can avoid it:** `simctl openurl` fired while a modal (typically
-the dev-menu sheet) is up. Order that never triggers it:
-
-1. Launch the dev client and connect it to Metro
-2. Dismiss the dev-menu sheet (Continue → Close)
-3. *Then* deep link
-
-Deep links into a foregrounded app with no modal open never raise the alert.
-
-Two attempts, then reboot. Do not keep retrying taps — that is the loop that
-eats a session.
+Do not keep retrying taps — that is the loop that eats a session.
 
 ## Signing in
 
