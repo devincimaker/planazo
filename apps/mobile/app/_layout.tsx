@@ -16,14 +16,19 @@ import {
   InstrumentSans_600SemiBold,
   InstrumentSans_700Bold,
 } from '@expo-google-fonts/instrument-sans';
+import * as Sentry from '@sentry/react-native';
 import { supabase } from '../lib/supabase';
 import { signOutOfAccount } from '../lib/signOut';
 import { initNotificationPresentation, registerPushToken } from '../lib/push';
+import { initSentry, captureError } from '../lib/sentry';
 import { errorCopy, isInvalidSessionError, isOfflineError, retryQuery } from '../lib/queryErrors';
 import { BrandSplash } from '../components/ui';
 import { ErrorState } from '../components/ui/ErrorState';
 import { useAuthStore } from '../stores/authStore';
 import { colors } from '../theme/tokens';
+
+// Before anything else in the app can run and throw.
+initSentry();
 
 SplashScreen.preventAutoHideAsync();
 
@@ -145,7 +150,7 @@ function InitialLayout() {
         return;
       }
 
-      console.error('Supabase has already dropped the stored session; finishing the sign-out.', error);
+      captureError(error, 'Supabase has already dropped the stored session; finishing the sign-out.');
       await endSession();
     } finally {
       if (isMounted.current) {
@@ -176,9 +181,9 @@ function InitialLayout() {
           setInitError(null);
         }
       } catch (error) {
-        console.error(
-          'Failed to load Supabase profile after auth change. Check EXPO_PUBLIC_SUPABASE_URL and that the host is reachable from the simulator.',
-          error
+        captureError(
+          error,
+          'Failed to load Supabase profile after auth change. Check EXPO_PUBLIC_SUPABASE_URL and that the host is reachable from the simulator.'
         );
         if (isMounted.current) {
           setProfile(null);
@@ -279,7 +284,25 @@ function InitialLayout() {
   return <Slot />;
 }
 
-export default function RootLayout() {
+/**
+ * Last resort for a render crash: the error is already in Sentry (the
+ * boundary reports it), so all that's left is giving the user a way back
+ * that isn't force-quitting a white screen.
+ */
+function CrashFallback({ resetError }: { resetError: () => void }) {
+  return (
+    <View style={styles.error}>
+      <ErrorState
+        title="Something went wrong"
+        body="The app hit a problem it couldn't recover from. Try again, and if this keeps happening, close and reopen the app."
+        onRetry={resetError}
+        testID="crash-fallback"
+      />
+    </View>
+  );
+}
+
+function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     BricolageGrotesque_700Bold,
     BricolageGrotesque_800ExtraBold,
@@ -300,12 +323,16 @@ export default function RootLayout() {
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <StatusBar style="dark" />
-      <InitialLayout />
-    </QueryClientProvider>
+    <Sentry.ErrorBoundary fallback={({ resetError }) => <CrashFallback resetError={resetError} />}>
+      <QueryClientProvider client={queryClient}>
+        <StatusBar style="dark" />
+        <InitialLayout />
+      </QueryClientProvider>
+    </Sentry.ErrorBoundary>
   );
 }
+
+export default Sentry.wrap(RootLayout);
 
 const styles = StyleSheet.create({
   error: {

@@ -14,6 +14,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '../../lib/supabase';
+import { captureError } from '../../lib/sentry';
 import { contentViolation } from '../../lib/moderation';
 import { LINK_HIT_SLOP, useAnnounce } from '../../lib/a11y';
 import { useAuthStore } from '../../stores/authStore';
@@ -100,7 +101,7 @@ export default function SignupScreen() {
     } catch (uploadError) {
       // A missing photo is not worth failing the signup over — the account is
       // made either way and the photo can be added from the profile screen.
-      console.error('Avatar upload error:', uploadError);
+      captureError(uploadError, 'Avatar upload failed during signup; account created without a photo.');
       return null;
     }
   }
