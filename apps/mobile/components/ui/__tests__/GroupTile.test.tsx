@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react-native';
+import { render, screen, fireEvent } from '@testing-library/react-native';
 import { GroupTile, groupInitial } from '../GroupTile';
 import { colorForName } from '../Avatar';
 
@@ -34,6 +34,31 @@ describe('GroupTile', () => {
     await render(<GroupTile name="Padel Dilluns" color="#F6C453" imageUrl={PHOTO} testID="tile" />);
 
     expect(screen.getByTestId('tile')).toHaveStyle({ backgroundColor: 'transparent' });
+  });
+
+  // A dead URL used to leave a tile with no photo, no colour and no letter.
+  it('falls back to the letter when the photo will not load', async () => {
+    await render(<GroupTile name="Padel Dilluns" color="#F6C453" imageUrl={PHOTO} testID="tile" />);
+
+    await fireEvent(screen.getByTestId('tile-image'), 'error');
+
+    expect(screen.getByText('P')).toBeTruthy();
+    expect(screen.queryByTestId('tile-image')).toBeNull();
+    expect(screen.getByTestId('tile')).toHaveStyle({ backgroundColor: '#F6C453' });
+  });
+
+  it('tries again when a different photo arrives', async () => {
+    const { rerender } = await render(
+      <GroupTile name="Padel Dilluns" color="#F6C453" imageUrl={PHOTO} testID="tile" />
+    );
+    await fireEvent(screen.getByTestId('tile-image'), 'error');
+    expect(screen.queryByTestId('tile-image')).toBeNull();
+
+    await rerender(
+      <GroupTile name="Padel Dilluns" color="#F6C453" imageUrl={`${PHOTO}&v=2`} testID="tile" />
+    );
+
+    expect(screen.getByTestId('tile-image')).toBeTruthy();
   });
 
   it('keeps the photo inside the squircle at every size', async () => {

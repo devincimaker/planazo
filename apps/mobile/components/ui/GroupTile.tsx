@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { View, StyleSheet, Image } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { colors, fonts } from '../../theme/tokens';
@@ -24,6 +25,13 @@ interface GroupTileProps {
 
 /** Squarish colour tile that is the group's identity everywhere (6a–6e). */
 export function GroupTile({ name, color, imageUrl, size = 46, testID }: GroupTileProps) {
+  // A deleted object, a dead URL or a flaky network would otherwise leave a
+  // tile with nothing in it at all. The letter on the colour is the fallback
+  // everywhere else, so it is the fallback here too.
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [imageUrl]);
+
+  const showImage = !!imageUrl && !failed;
   const radius = Math.round(size * 0.32);
   return (
     <View
@@ -36,14 +44,15 @@ export function GroupTile({ name, color, imageUrl, size = 46, testID }: GroupTil
           borderRadius: radius,
           // A photo covers the tile edge to edge, so the colour behind it would
           // only ever show through a transparent PNG. Keep it out of the way.
-          backgroundColor: imageUrl ? 'transparent' : color ?? colorForName(name),
+          backgroundColor: showImage ? 'transparent' : color ?? colorForName(name),
         },
       ]}
     >
-      {imageUrl ? (
+      {showImage ? (
         <Image
           testID={testID ? `${testID}-image` : undefined}
           source={{ uri: imageUrl }}
+          onError={() => setFailed(true)}
           style={{ width: size, height: size, borderRadius: radius }}
         />
       ) : (

@@ -29,11 +29,28 @@ function requiredEnv(name) {
   return value;
 }
 
-const svc = createClient(
-  requiredEnv('SUPABASE_URL').replace(/\/+$/, ''),
-  requiredEnv('SUPABASE_SERVICE_ROLE_KEY'),
-  { auth: { persistSession: false, autoRefreshToken: false } },
-);
+const supabaseUrl = requiredEnv('SUPABASE_URL').replace(/\/+$/, '');
+
+// This script rewrites group rows and deletes storage objects with the service
+// role. A worktree whose .env was copied from the primary but never repointed
+// would aim all of that at production, so the live ref has to be asked for
+// explicitly — same guard, same flag and same two refs as seed-demo-data.mjs,
+// since a stale .env pointing at the retired project is just as damaging.
+const PRODUCTION_REFS = ['leszgvpjonzjclhbgzju', 'lmgjdvacivzzhctgctqa'];
+const hitRef = PRODUCTION_REFS.find((ref) => supabaseUrl.includes(ref));
+if (hitRef && process.env.SEED_ALLOW_PRODUCTION !== 'yes') {
+  throw new Error(
+    `Refusing to touch PRODUCTION (${hitRef}).\n` +
+      `SUPABASE_URL is ${supabaseUrl}.\n` +
+      `If that is genuinely what you want: SEED_ALLOW_PRODUCTION=yes pnpm demo:group-photo`,
+  );
+}
+
+console.log(`Target: ${supabaseUrl}`);
+
+const svc = createClient(supabaseUrl, requiredEnv('SUPABASE_SERVICE_ROLE_KEY'), {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
 
 function ok(res) {
   if (res.error) throw new Error(res.error.message);
@@ -116,7 +133,9 @@ ok(
 
 // And the other one goes back to its letter, however the last run left it.
 ok(await svc.from('groups').update({ image_url: null }).eq('id', letterGroup.id));
-await svc.storage.from(BUCKET).remove([`${letterGroup.id}/cover.jpg`]);
+// remove() reports failures in `error` rather than throwing, and this script
+// is about to claim the group is back to its letter.
+ok(await svc.storage.from(BUCKET).remove([`${letterGroup.id}/cover.jpg`]));
 
 console.log('Group photo demo ready.');
 console.log(`  ${WITH_PHOTO}: has a photo, and you are an admin (try Change and Remove)`);
