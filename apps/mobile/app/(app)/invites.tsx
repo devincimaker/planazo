@@ -96,7 +96,12 @@ export default function InvitesSheet() {
         <ThemedText variant="caption">{timeAgo(invite.createdAt)}</ThemedText>
       </View>
       <View style={styles.cardBody}>
-        <GroupTile name={invite.groupName} color={invite.groupColor} size={44} />
+        <GroupTile
+          name={invite.groupName}
+          color={invite.groupColor}
+          imageUrl={invite.groupImageUrl}
+          size={44}
+        />
         <View style={styles.cardText}>
           <ThemedText variant="cardTitle" numberOfLines={1}>
             {invite.groupName}

@@ -535,7 +535,7 @@ export default function ManageGroupScreen() {
                 accessibilityRole="button"
                 testID="edit-group"
               >
-                <ThemedText variant="bodyStrong">Rename or recolour</ThemedText>
+                <ThemedText variant="bodyStrong">Group profile</ThemedText>
                 <ThemedText variant="body" color={colors.textFaint}>
                   ›
                 </ThemedText>

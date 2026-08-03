@@ -1,0 +1,195 @@
+import { ActionSheetIOS } from 'react-native';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react-native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import EditGroupScreen from '../edit';
+import { supabase } from '../../../../../lib/supabase';
+import { pickFromLibrary, uploadGroupPhoto, removeGroupPhoto } from '../../../../../lib/images';
+
+const mockBack = jest.fn();
+
+jest.mock('../../../../../lib/supabase', () => ({
+  supabase: { from: jest.fn() },
+}));
+
+jest.mock('../../../../../lib/images', () => ({
+  pickFromLibrary: jest.fn(),
+  takePhoto: jest.fn(),
+  uploadGroupPhoto: jest.fn(),
+  removeGroupPhoto: jest.fn(() => Promise.resolve()),
+}));
+
+jest.mock('expo-router', () => ({
+  useRouter: () => ({ back: mockBack }),
+  useLocalSearchParams: () => ({ id: 'g1' }),
+}));
+
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+  SafeAreaView: ({ children }: { children: React.ReactNode }) => children,
+}));
+
+const mockFrom = supabase.from as jest.Mock;
+const mockPick = pickFromLibrary as jest.Mock;
+const mockUpload = uploadGroupPhoto as jest.Mock;
+const mockRemove = removeGroupPhoto as jest.Mock;
+
+interface GroupRow {
+  id: string;
+  name: string;
+  color: string;
+  image_url: string | null;
+}
+
+const PHOTO_URL = 'https://cdn.example/group-images/g1/cover.jpg?t=1';
+const NO_PHOTO: GroupRow = { id: 'g1', name: 'Padel Dilluns', color: '#F6C453', image_url: null };
+const WITH_PHOTO: GroupRow = { ...NO_PHOTO, image_url: 'https://cdn.example/old.jpg' };
+
+let groupUpdate: jest.Mock;
+
+function primeSupabase(group: GroupRow) {
+  // One spy across every from() call. Saving invalidates the query, so the
+  // refetch builds another chain, and a per-chain spy would be a fresh empty
+  // one by the time the assertion runs.
+  groupUpdate = jest.fn();
+  mockFrom.mockImplementation(() => {
+    const c: any = {};
+    ['select', 'eq'].forEach((m) => {
+      c[m] = jest.fn(() => c);
+    });
+    c.single = jest.fn(() => Promise.resolve({ data: group, error: null }));
+    c.update = jest.fn((u: Record<string, unknown>) => {
+      groupUpdate(u);
+      return c;
+    });
+    c.then = (resolve: (v: unknown) => void) =>
+      Promise.resolve({ data: null, error: null }).then(resolve);
+    return c;
+  });
+}
+
+async function chooseFromSheet(index: number) {
+  const spy = ActionSheetIOS.showActionSheetWithOptions as jest.Mock;
+  const callback = spy.mock.calls[0][1] as (i: number) => void;
+  await act(async () => {
+    callback(index);
+  });
+}
+
+async function renderEdit(group = NO_PHOTO) {
+  primeSupabase(group);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  await render(
+    <QueryClientProvider client={client}>
+      <EditGroupScreen />
+    </QueryClientProvider>
+  );
+  await screen.findByDisplayValue(group.name);
+}
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  jest.spyOn(ActionSheetIOS, 'showActionSheetWithOptions').mockImplementation(() => {});
+  mockUpload.mockResolvedValue(PHOTO_URL);
+});
+
+describe('Group profile', () => {
+  it('Save stays grey until something actually changed', async () => {
+    await renderEdit();
+
+    await fireEvent.press(screen.getByTestId('save'));
+    expect(groupUpdate).not.toHaveBeenCalled();
+  });
+
+  it('offers the colour while the tile is still a letter', async () => {
+    await renderEdit();
+
+    expect(screen.getByText('Colour')).toBeTruthy();
+    expect(screen.getByText('Add a photo')).toBeTruthy();
+  });
+
+  // The colour is still stored and still drives the feed stripe. It just has
+  // no job on a tile the photo has taken over.
+  it('hides the colour once a photo is set, and says why', async () => {
+    await renderEdit(WITH_PHOTO);
+
+    expect(screen.queryByText('Colour')).toBeNull();
+    expect(
+      screen.getByText('Colour is hidden while a photo is set. It comes back the moment the photo goes.')
+    ).toBeTruthy();
+  });
+
+  it('uploads on save, not on pick', async () => {
+    mockPick.mockResolvedValue('file:///picked.jpg');
+    await renderEdit();
+
+    await fireEvent.press(screen.getByTestId('add-photo'));
+    await chooseFromSheet(1);
+    expect(mockUpload).not.toHaveBeenCalled();
+
+    await fireEvent.press(screen.getByTestId('save'));
+    await waitFor(() => {
+      expect(mockUpload).toHaveBeenCalledWith('g1', 'file:///picked.jpg');
+    });
+    expect(groupUpdate).toHaveBeenCalledWith({
+      name: 'Padel Dilluns',
+      color: '#F6C453',
+      image_url: PHOTO_URL,
+    });
+  });
+
+  it('picking a photo is a change worth saving on its own', async () => {
+    mockPick.mockResolvedValue('file:///picked.jpg');
+    await renderEdit();
+
+    await fireEvent.press(screen.getByTestId('add-photo'));
+    await chooseFromSheet(1);
+    await fireEvent.press(screen.getByTestId('save'));
+
+    await waitFor(() => expect(mockBack).toHaveBeenCalled());
+  });
+
+  it('removing clears the row before it deletes the object', async () => {
+    await renderEdit(WITH_PHOTO);
+
+    await fireEvent.press(screen.getByTestId('remove-photo'));
+    await fireEvent.press(screen.getByTestId('save'));
+
+    await waitFor(() => {
+      expect(groupUpdate).toHaveBeenCalledWith({
+        name: 'Padel Dilluns',
+        color: '#F6C453',
+        image_url: null,
+      });
+    });
+    await waitFor(() => expect(mockRemove).toHaveBeenCalledWith('g1'));
+    expect(mockUpload).not.toHaveBeenCalled();
+  });
+
+  // An orphaned object is untidy; a row pointing at a deleted one is a broken
+  // tile on every screen. So a failed delete must not fail the save.
+  it('still saves when the object delete fails', async () => {
+    mockRemove.mockRejectedValue(new Error('storage down'));
+    await renderEdit(WITH_PHOTO);
+
+    await fireEvent.press(screen.getByTestId('remove-photo'));
+    await fireEvent.press(screen.getByTestId('save'));
+
+    await waitFor(() => expect(mockBack).toHaveBeenCalled());
+  });
+
+  it('renaming alone leaves the photo untouched', async () => {
+    await renderEdit(WITH_PHOTO);
+
+    await fireEvent.changeText(screen.getByTestId('name-input'), 'Padel Dimarts');
+    await fireEvent.press(screen.getByTestId('save'));
+
+    await waitFor(() => {
+      expect(groupUpdate).toHaveBeenCalledWith({
+        name: 'Padel Dimarts',
+        color: '#F6C453',
+      });
+    });
+    expect(mockUpload).not.toHaveBeenCalled();
+    expect(mockRemove).not.toHaveBeenCalled();
+  });
+});

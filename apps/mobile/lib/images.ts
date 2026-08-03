@@ -40,3 +40,27 @@ export async function uploadJpeg(bucket: string, path: string, uri: string, upse
     .upload(path, decode(base64), { upsert, contentType: 'image/jpeg' });
   if (error) throw error;
 }
+
+/** PLA-30. One folder per group, which is what the storage policies key on. */
+export const GROUP_PHOTO_BUCKET = 'group-images';
+
+export function groupPhotoPath(groupId: string): string {
+  return `${groupId}/cover.jpg`;
+}
+
+/** Uploads the group's photo and returns the URL to store on the row. */
+export async function uploadGroupPhoto(groupId: string, uri: string): Promise<string> {
+  const path = groupPhotoPath(groupId);
+  await uploadJpeg(GROUP_PHOTO_BUCKET, path, uri, true);
+  const { data } = supabase.storage.from(GROUP_PHOTO_BUCKET).getPublicUrl(path);
+  // Every photo for a group has the same object name, so the URL has to change
+  // or the replaced image stays on screen until the CDN lets go of it.
+  return `${data.publicUrl}?t=${Date.now()}`;
+}
+
+export async function removeGroupPhoto(groupId: string): Promise<void> {
+  const { error } = await supabase.storage
+    .from(GROUP_PHOTO_BUCKET)
+    .remove([groupPhotoPath(groupId)]);
+  if (error) throw error;
+}

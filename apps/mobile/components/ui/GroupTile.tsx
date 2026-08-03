@@ -1,4 +1,4 @@
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Image } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { colors, fonts } from '../../theme/tokens';
 import { colorForName } from './Avatar';
@@ -16,12 +16,15 @@ interface GroupTileProps {
   name: string;
   /** Stored group colour; falls back to the name hash for pre-colour rows */
   color?: string | null;
+  /** PLA-30 group photo; the letter on the colour is the fallback */
+  imageUrl?: string | null;
   size?: number;
   testID?: string;
 }
 
 /** Squarish colour tile that is the group's identity everywhere (6a–6e). */
-export function GroupTile({ name, color, size = 46, testID }: GroupTileProps) {
+export function GroupTile({ name, color, imageUrl, size = 46, testID }: GroupTileProps) {
+  const radius = Math.round(size * 0.32);
   return (
     <View
       testID={testID}
@@ -30,14 +33,24 @@ export function GroupTile({ name, color, size = 46, testID }: GroupTileProps) {
         {
           width: size,
           height: size,
-          borderRadius: Math.round(size * 0.32),
-          backgroundColor: color ?? colorForName(name),
+          borderRadius: radius,
+          // A photo covers the tile edge to edge, so the colour behind it would
+          // only ever show through a transparent PNG. Keep it out of the way.
+          backgroundColor: imageUrl ? 'transparent' : color ?? colorForName(name),
         },
       ]}
     >
-      <ThemedText style={[styles.initial, { fontSize: Math.round(size * 0.44) }]}>
-        {groupInitial(name)}
-      </ThemedText>
+      {imageUrl ? (
+        <Image
+          testID={testID ? `${testID}-image` : undefined}
+          source={{ uri: imageUrl }}
+          style={{ width: size, height: size, borderRadius: radius }}
+        />
+      ) : (
+        <ThemedText style={[styles.initial, { fontSize: Math.round(size * 0.44) }]}>
+          {groupInitial(name)}
+        </ThemedText>
+      )}
     </View>
   );
 }
@@ -46,6 +59,7 @@ const styles = StyleSheet.create({
   tile: {
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   initial: {
     fontFamily: fonts.displayHeavy,
