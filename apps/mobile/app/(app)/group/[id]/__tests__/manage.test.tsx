@@ -1,5 +1,5 @@
 import { Alert } from 'react-native';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react-native';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ManageGroupScreen from '../manage';
 import { useAuthStore } from '../../../../../stores/authStore';
@@ -7,6 +7,14 @@ import { supabase } from '../../../../../lib/supabase';
 
 const mockNavigate = jest.fn();
 const mockPush = jest.fn();
+const mockShowToast = jest.fn();
+
+// Only the toast is faked: SwipeRow and ConfirmSheet are the change under
+// test, so they stay real. The host lives at the app layout, above this screen.
+jest.mock('../../../../../components/ui', () => ({
+  ...jest.requireActual('../../../../../components/ui'),
+  showToast: (...args: unknown[]) => mockShowToast(...args),
+}));
 
 jest.mock('../../../../../lib/supabase', () => ({
   supabase: { from: jest.fn(), rpc: jest.fn() },
@@ -122,18 +130,71 @@ beforeEach(() => {
 });
 
 describe('ManageGroupScreen', () => {
-  it('admin sees themselves first, can promote a member', async () => {
+  it('admin sees themselves first, badged', async () => {
     await renderManage();
 
     expect(await screen.findByText(/· you/)).toBeTruthy();
     expect(screen.getByText('Aina')).toBeTruthy();
+    expect(screen.getByTestId('admin-me')).toBeTruthy();
+  });
 
-    await fireEvent.press(screen.getByTestId('role-u2'));
-    await waitFor(() =>
-      expect(gmUpdates.some((u) => u.mock.calls.some((call) => call[0]?.role === 'admin'))).toBe(
-        true
-      )
-    );
+  // The badge says who runs the group. It is not a control, and there is no
+  // longer any tap on this screen that changes somebody's role — a status pill
+  // was never going to be discovered as the way to do it (PLA-50).
+  it('the admin badge marks admins only, and nothing on it is pressable', async () => {
+    group.group_members[1].role = 'admin';
+    await renderManage();
+
+    await screen.findByText('Aina');
+    expect(screen.getByTestId('admin-u2')).toBeTruthy();
+    expect(screen.queryByText('Member')).toBeNull();
+    expect(screen.queryByTestId('role-u2')).toBeNull();
+
+    group.group_members[1].role = 'member';
+  });
+
+  it('plain members carry no badge at all', async () => {
+    await renderManage();
+
+    await screen.findByText('Aina');
+    expect(screen.queryByTestId('admin-u2')).toBeNull();
+    expect(screen.queryByText('Member')).toBeNull();
+  });
+
+  /**
+   * Invoke a row's accessibility action the way VoiceOver does.
+   *
+   * The two destructive actions live behind a swipe now, so they are hidden
+   * from assistive tech until the row is open, and reachable the whole time
+   * through the row's own `accessibilityActions`. That is the path this drives.
+   *
+   * Deliberately not `fireEvent`: RNTL gates every event through
+   * `isEventEnabled`, which asks the nearest touch responder whether it would
+   * claim a gesture right now (`fire-event.js:34`). A closed SwipeRow answers
+   * no — that is the whole point of it, so vertical scrolling works — and RNTL
+   * then blocks *all* events on it, accessibility included. iOS calls
+   * `onAccessibilityAction` directly and never consults the responder system.
+   */
+  async function invoke(userId: string, action: 'remove' | 'block') {
+    const row = await screen.findByTestId(`person-${userId}-row`);
+    await act(async () => {
+      row.props.onAccessibilityAction({ nativeEvent: { actionName: action } });
+    });
+  }
+
+  it('the swipe actions stay out of the accessibility tree until the row opens', async () => {
+    await renderManage();
+
+    await screen.findByTestId('person-u2-row');
+    expect(screen.queryByTestId('remove-u2')).toBeNull();
+    expect(screen.queryByTestId('block-u2')).toBeNull();
+
+    // The row still offers both, by name, to anyone driving by rotor.
+    const row = screen.getByTestId('person-u2-row');
+    expect(row.props.accessibilityActions).toEqual([
+      { name: 'block', label: 'Block' },
+      { name: 'remove', label: 'Remove' },
+    ]);
   });
 
   // Guideline 1.2: blocking is a personal choice, so it is available to every
@@ -141,14 +202,10 @@ describe('ManageGroupScreen', () => {
   it('blocking a member asks first, then records it', async () => {
     await renderManage();
 
-    await fireEvent.press(await screen.findByTestId('block-u2'));
-    expect(Alert.alert).toHaveBeenCalledWith('Block Aina?', expect.any(String), expect.any(Array));
+    await invoke('u2', 'block');
+    expect(screen.getByText('Block Aina?')).toBeTruthy();
 
-    const buttons = (Alert.alert as jest.Mock).mock.calls.at(-1)![2] as {
-      text: string;
-      onPress?: () => void;
-    }[];
-    await buttons.find((b) => b.text === 'Block')?.onPress?.();
+    await fireEvent.press(screen.getByTestId('member-confirm-confirm'));
 
     await waitFor(() =>
       expect(
@@ -162,28 +219,25 @@ describe('ManageGroupScreen', () => {
   it('backing out of the block confirmation records nothing', async () => {
     await renderManage();
 
-    await fireEvent.press(await screen.findByTestId('block-u2'));
-    const buttons = (Alert.alert as jest.Mock).mock.calls.at(-1)![2] as {
-      text: string;
-      onPress?: () => void;
-    }[];
-    await buttons.find((b) => b.text === 'Cancel')?.onPress?.();
+    await invoke('u2', 'block');
+    await fireEvent.press(screen.getByTestId('member-confirm-cancel'));
 
+    expect(screen.queryByText('Block Aina?')).toBeNull();
     expect(blockUpserts.every((u) => u.mock.calls.length === 0)).toBe(true);
   });
 
   // Undo must not ask again — you already decided once, and the second dialog
   // would be asking permission to be less strict.
-  it('an already-blocked member offers undo, with no confirmation', async () => {
+  it('an already-blocked member unblocks with no confirmation', async () => {
     blockedRows = [{ blocked_id: 'u2' }];
     await renderManage();
 
-    const row = await screen.findByTestId('block-u2');
-    expect(within(row).getByText('Blocked · Undo')).toBeTruthy();
+    const row = await screen.findByTestId('person-u2-row');
+    expect(within(row).getByText('Blocked')).toBeTruthy();
+    expect(row.props.accessibilityActions).toContainEqual({ name: 'block', label: 'Unblock' });
 
-    const alertsBefore = (Alert.alert as jest.Mock).mock.calls.length;
-    await fireEvent.press(row);
-    expect((Alert.alert as jest.Mock).mock.calls.length).toBe(alertsBefore);
+    await invoke('u2', 'block');
+    expect(screen.queryByText(/^Block /)).toBeNull();
     await waitFor(() => expect(blockDeletes.some((d) => d.mock.calls.length > 0)).toBe(true));
   });
 
@@ -198,28 +252,82 @@ describe('ManageGroupScreen', () => {
     });
   });
 
-  it('remove asks first, then deletes the membership', async () => {
+  it('remove asks first, then takes the person off the list before the delete', async () => {
     await renderManage();
 
-    await fireEvent.press(await screen.findByTestId('remove-u2'));
-    expect(Alert.alert).toHaveBeenCalledWith(
-      'Remove Aina?',
-      expect.any(String),
-      expect.any(Array)
-    );
+    await invoke('u2', 'remove');
+    expect(screen.getByText('Remove Aina?')).toBeTruthy();
 
-    const buttons = (Alert.alert as jest.Mock).mock.calls.at(-1)![2];
-    buttons[1].onPress();
+    await fireEvent.press(screen.getByTestId('member-confirm-confirm'));
+
+    // The row goes at once, and the toast offers the way back.
+    await waitFor(() => expect(screen.queryByText('Aina')).toBeNull());
+    expect(mockShowToast.mock.calls.at(-1)![0]).toBe('Aina is out of the group');
+    expect(mockShowToast.mock.calls.at(-1)![1].action.label).toBe('Undo');
+    // Nothing has been deleted yet: that is what makes the undo honest.
+    expect(gmDeletes.every((d) => d.mock.calls.length === 0)).toBe(true);
+  });
+
+  it('undo inside the window means the membership is never deleted', async () => {
+    const view = await renderManage();
+
+    await invoke('u2', 'remove');
+    await fireEvent.press(screen.getByTestId('member-confirm-confirm'));
+    await waitFor(() => expect(screen.queryByText('Aina')).toBeNull());
+
+    await act(async () => {
+      mockShowToast.mock.calls.at(-1)![1].action.onPress();
+    });
+
+    expect(await screen.findByText('Aina')).toBeTruthy();
+    // Leaving the screen commits whatever is still pending, so an unmount here
+    // is the strongest way to say "nothing was pending".
+    view.unmount();
+    expect(gmDeletes.every((d) => d.mock.calls.length === 0)).toBe(true);
+  });
+
+  it('the delete lands when the undo window closes', async () => {
+    jest.useFakeTimers();
+    try {
+      await renderManage();
+
+      await invoke('u2', 'remove');
+      await fireEvent.press(screen.getByTestId('member-confirm-confirm'));
+      await waitFor(() => expect(screen.queryByText('Aina')).toBeNull());
+
+      await act(async () => {
+        jest.advanceTimersByTime(5000);
+      });
+
+      await waitFor(() => expect(gmDeletes.some((d) => d.mock.calls.length > 0)).toBe(true));
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  // A pending removal that vanished with the screen would leave the person
+  // gone from the list and still in the group, with nothing left to say so.
+  it('leaving the screen commits a pending removal immediately', async () => {
+    const view = await renderManage();
+
+    await invoke('u2', 'remove');
+    await fireEvent.press(screen.getByTestId('member-confirm-confirm'));
+    await waitFor(() => expect(screen.queryByText('Aina')).toBeNull());
+    expect(gmDeletes.every((d) => d.mock.calls.length === 0)).toBe(true);
+
+    view.unmount();
+
     await waitFor(() => expect(gmDeletes.some((d) => d.mock.calls.length > 0)).toBe(true));
   });
 
-  it('members see no remove, no role taps, no rename row', async () => {
+  it('members can block but not remove, and get no rename row', async () => {
     group.group_members[0].role = 'member';
     await renderManage();
 
     expect(await screen.findByText('Aina')).toBeTruthy();
-    expect(screen.queryByTestId('remove-u2')).toBeNull();
-    expect(screen.queryByTestId('role-u2')).toBeNull();
+    expect(screen.getByTestId('person-u2-row').props.accessibilityActions).toEqual([
+      { name: 'block', label: 'Block' },
+    ]);
     expect(screen.queryByTestId('edit-group')).toBeNull();
   });
 
