@@ -12,8 +12,6 @@
     "db:migrate:new": "npx supabase migration new",
     "db:gen:types": "npx supabase gen types typescript --local > packages/shared/src/database.types.ts",
     "db:seed:demo": "node scripts/seed-demo-data.mjs",
-    "demo:waitlist": "node scripts/demo-waitlist.mjs",
-    "demo:group-photo": "node scripts/demo-group-photo.mjs",
     "assets:brand": "node scripts/build-brand-assets.mjs",
     "assets:screenshots": "node scripts/build-store-screenshots.mjs",
     "test": "turbo test",
