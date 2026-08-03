@@ -448,39 +448,43 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
-REVOKE ALL ON FUNCTION public.lock_plan(UUID, UUID) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.cancel_plan(UUID, TEXT) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.restore_plan(UUID) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.reopen_plan(UUID) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.lock_plan(UUID, UUID) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.cancel_plan(UUID, TEXT) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.restore_plan(UUID) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.reopen_plan(UUID) TO authenticated;
+-- No grants are re-issued above. CREATE OR REPLACE FUNCTION keeps the existing
+-- ACL, and all four already carry exactly these grants from the migrations that
+-- introduced them; 20260802000005 re-emits three of the same functions and
+-- re-grants nothing. Restating them here would read as if this migration were
+-- changing privileges, in a migration whose subject is privileges.
 
 
--- 3. The same test on the direct writes -------------------------------------
+-- 3. The same test on the two write policies that mention created_by ---------
 --
--- These three are hardening, not live bugs, and it is worth being exact about
+-- These two are hardening, not live bugs, and it is worth being exact about
 -- why — the difference is the whole reason section 2 above exists.
 --
--- A removed member cannot reach any of these today, but not because the
--- policies below say so. Postgres applies SELECT policies to the rows an
--- UPDATE or DELETE names in its WHERE clause, and PostgREST omits RETURNING
--- when the client does not ask for the row back, so `PATCH /plans?id=eq.X`
--- with no `select` is still filtered by "Group members can view plans" before
--- the UPDATE policy is ever consulted. The date-options policy is covered by
--- the same accident: its WITH CHECK subquery reads public.plans, and that read
+-- A removed member cannot reach either of them today, but not because the
+-- policies say so. Postgres applies SELECT policies to the rows an UPDATE or
+-- DELETE names in its WHERE clause, and PostgREST omits RETURNING when the
+-- client does not ask for the row back, so `PATCH /plans?id=eq.X` with no
+-- `select` is still filtered by "Group members can view plans" before the
+-- UPDATE policy is ever consulted. The date-options policy is covered by the
+-- same accident: its WITH CHECK subquery reads public.plans, and that read
 -- obeys RLS too.
 --
 -- Which is to say the protection is entirely a side effect of a removed person
 -- being unable to SELECT the plan. That held here and did not hold for the
 -- RPCs, because SECURITY DEFINER switches RLS off — one seam away, the same
--- authorisation bug was live. Leaving these to rest on the SELECT policy means
--- any future widening of it inherits a write hole silently, and 20260729000002
--- widened exactly that kind of policy once already, so invitees could preview a
--- group they had not joined.
+-- authorisation bug was live. Leaving it resting on the SELECT policy means any
+-- future widening of that policy inherits a write hole silently, and
+-- 20260729000002 widened exactly that kind of policy once already, so invitees
+-- could preview a group they had not joined.
 --
--- So: say it directly, on the write side, where it can be read.
+-- Scope, so the next reader is not misled about what this bought: only these
+-- two policies name created_by, and only these two are changed. The write
+-- policies on rsvps (20260731000000) and date_availability (20241229000000)
+-- derive membership through the same plans-subquery accident, and they are NOT
+-- hardened here — they authorise on `user_id = auth.uid()`, so the worst a
+-- removed member could do is edit their own already-deleted rows. They are
+-- listed because "which policies are load-bearing" should not have to be
+-- rediscovered.
 DROP POLICY IF EXISTS "Host can edit a live plan" ON public.plans;
 
 CREATE POLICY "Host can edit a live plan"

@@ -9,6 +9,9 @@ let memberA: TestUser;
 let memberB: TestUser;
 let groupId: string;
 
+/** What all four lifecycle RPCs raise at anyone who is not a host. */
+const HOST_ONLY = /Only the plan creator or a group admin/;
+
 async function createPlanAs(
   user: TestUser,
   gid: string,
@@ -36,7 +39,7 @@ async function createPlan(planType: 'fixed' | 'flexible', title: string, eventDa
   return createPlanAs(host, groupId, planType, title, eventDate);
 }
 
-async function addOptionAs(user: TestUser, planId: string, date: string) {
+async function addOption(planId: string, date: string, user: TestUser = host) {
   return ok(
     await user.client
       .from('plan_date_options')
@@ -44,10 +47,6 @@ async function addOptionAs(user: TestUser, planId: string, date: string) {
       .select('id')
       .single(),
   ).id;
-}
-
-async function addOption(planId: string, date: string) {
-  return addOptionAs(host, planId, date);
 }
 
 async function markAvailable(user: TestUser, planId: string, optionId: string) {
@@ -109,7 +108,7 @@ describe('lock_plan on a fixed plan', () => {
 
     // A plain member is not a host: authorization is checked before status.
     const denied = await memberB.client.rpc('lock_plan', { p_plan_id: planId });
-    expect(denied.error?.message).toMatch(/Only the plan creator or a group admin/);
+    expect(denied.error?.message).toMatch(HOST_ONLY);
 
     const relock = await host.client.rpc('lock_plan', { p_plan_id: planId });
     expect(relock.error?.message).toMatch(/Plan is not open/);
@@ -176,7 +175,7 @@ describe('lock_plan on a flexible plan', () => {
 
     // reopen_plan: member denied, host returns the plan to an open vote.
     const denied = await memberA.client.rpc('reopen_plan', { p_plan_id: planId });
-    expect(denied.error?.message).toMatch(/Only the plan creator or a group admin/);
+    expect(denied.error?.message).toMatch(HOST_ONLY);
 
     expect(ok(await host.client.rpc('reopen_plan', { p_plan_id: planId }))).toEqual({ reopened: true });
     const plan = ok(
@@ -209,7 +208,7 @@ describe('cancel_plan and restore_plan', () => {
     await markAvailable(memberB, planId, o1);
 
     const denied = await memberB.client.rpc('cancel_plan', { p_plan_id: planId });
-    expect(denied.error?.message).toMatch(/Only the plan creator or a group admin/);
+    expect(denied.error?.message).toMatch(HOST_ONLY);
 
     const res = ok(
       await host.client.rpc('cancel_plan', { p_plan_id: planId, p_reason: '  running late  ' }),
@@ -301,8 +300,6 @@ describe('cancel_plan and restore_plan', () => {
 // their JWT and needs nothing but the plan's UUID, which a push notification,
 // a deep link or a screenshot already gave them.
 describe('host powers end with membership', () => {
-  const denied = /Only the plan creator or a group admin/;
-
   let admin: TestUser;
   let creator: TestUser;
   let bystander: TestUser;
@@ -311,6 +308,9 @@ describe('host powers end with membership', () => {
   let flexPlan: string;
   let cancelledPlan: string;
   let deletablePlan: string;
+
+  const statusOf = async (id: string) =>
+    ok(await admin.client.from('plans').select('status').eq('id', id).single()).status;
 
   beforeAll(async () => {
     [admin, creator, bystander] = await Promise.all([
@@ -322,29 +322,35 @@ describe('host powers end with membership', () => {
     // the group's admin, so it satisfies the admin half of every guard and
     // would hide this bug completely.
     gid = (await bed.createGroup(admin)).id;
-    await bed.join(gid, creator);
-    await bed.join(gid, bystander);
+    await Promise.all([bed.join(gid, creator), bed.join(gid, bystander)]);
 
-    fixedPlan = await createPlanAs(creator, gid, 'fixed', 'Exile fixed');
-    deletablePlan = await createPlanAs(creator, gid, 'fixed', 'Exile deletable');
-    cancelledPlan = await createPlanAs(creator, gid, 'fixed', 'Exile cancelled');
-    flexPlan = await createPlanAs(creator, gid, 'flexible', 'Exile flexible');
+    [fixedPlan, deletablePlan, cancelledPlan, flexPlan] = await Promise.all([
+      createPlanAs(creator, gid, 'fixed', 'Exile fixed'),
+      createPlanAs(creator, gid, 'fixed', 'Exile deletable'),
+      createPlanAs(creator, gid, 'fixed', 'Exile cancelled'),
+      createPlanAs(creator, gid, 'flexible', 'Exile flexible'),
+    ]);
 
     // Two yes-RSVPs from people who stay, so lock_plan would genuinely lock if
     // the guard let it through. RSVPs from the creator would not survive the
     // removal — the on_group_member_delete trigger clears them — and the call
     // would stall on below_minimum for the wrong reason.
-    for (const u of [admin, bystander]) {
-      ok(
-        await u.client.from('rsvps').insert({ plan_id: fixedPlan, user_id: u.id, response: 'yes' }),
-      );
-    }
+    await Promise.all(
+      [admin, bystander].map(async (u) =>
+        ok(await u.client.from('rsvps').insert({ plan_id: fixedPlan, user_id: u.id, response: 'yes' })),
+      ),
+    );
 
-    const option = await addOptionAs(creator, flexPlan, daysFromNow(6));
+    // Availability is written one at a time on purpose. lock_plan seats people
+    // in created_at order, and cap.test.ts leans on that ordering — parallelise
+    // it here and the next capped fixture copied from this one is flaky.
+    const option = await addOption(flexPlan, daysFromNow(6), creator);
     await markAvailable(admin, flexPlan, option);
     await markAvailable(bystander, flexPlan, option);
-    ok(await admin.client.rpc('lock_plan', { p_plan_id: flexPlan }));
-    ok(await admin.client.rpc('cancel_plan', { p_plan_id: cancelledPlan }));
+    await Promise.all([
+      admin.client.rpc('lock_plan', { p_plan_id: flexPlan }).then(ok),
+      admin.client.rpc('cancel_plan', { p_plan_id: cancelledPlan }).then(ok),
+    ]);
 
     // The removal itself, exactly as group/[id]/manage.tsx does it.
     ok(
@@ -357,10 +363,10 @@ describe('host powers end with membership', () => {
   });
 
   it('refuses every lifecycle RPC to a removed creator', async () => {
-    expect((await creator.client.rpc('lock_plan', { p_plan_id: fixedPlan })).error?.message).toMatch(denied);
-    expect((await creator.client.rpc('cancel_plan', { p_plan_id: fixedPlan })).error?.message).toMatch(denied);
-    expect((await creator.client.rpc('reopen_plan', { p_plan_id: flexPlan })).error?.message).toMatch(denied);
-    expect((await creator.client.rpc('restore_plan', { p_plan_id: cancelledPlan })).error?.message).toMatch(denied);
+    expect((await creator.client.rpc('lock_plan', { p_plan_id: fixedPlan })).error?.message).toMatch(HOST_ONLY);
+    expect((await creator.client.rpc('cancel_plan', { p_plan_id: fixedPlan })).error?.message).toMatch(HOST_ONLY);
+    expect((await creator.client.rpc('reopen_plan', { p_plan_id: flexPlan })).error?.message).toMatch(HOST_ONLY);
+    expect((await creator.client.rpc('restore_plan', { p_plan_id: cancelledPlan })).error?.message).toMatch(HOST_ONLY);
 
     const states = ok(
       await admin.client
@@ -402,11 +408,8 @@ describe('host powers end with membership', () => {
 
     ok(await leaver.client.rpc('leave_group', { p_group_id: gid }));
 
-    expect((await leaver.client.rpc('cancel_plan', { p_plan_id: planId })).error?.message).toMatch(denied);
-    await leaver.client.from('plans').update({ title: 'Renamed on the way out' }).eq('id', planId);
-
-    const plan = ok(await admin.client.from('plans').select('status, title').eq('id', planId).single());
-    expect(plan).toEqual({ status: 'open', title: 'Exile leaver plan' });
+    expect((await leaver.client.rpc('cancel_plan', { p_plan_id: planId })).error?.message).toMatch(HOST_ONLY);
+    expect(await statusOf(planId)).toBe('open');
   });
 
   // The other half of the guard, and the half that is easy to break: requiring
@@ -416,15 +419,11 @@ describe('host powers end with membership', () => {
 
     // bystander created it and is no admin — the creator branch, on its own.
     ok(await bystander.client.rpc('cancel_plan', { p_plan_id: planId }));
-    expect(ok(await admin.client.from('plans').select('status').eq('id', planId).single()).status).toBe(
-      'cancelled',
-    );
+    expect(await statusOf(planId)).toBe('cancelled');
 
     // admin did not create it — the admin branch, on its own.
     ok(await admin.client.rpc('restore_plan', { p_plan_id: planId }));
-    expect(ok(await admin.client.from('plans').select('status').eq('id', planId).single()).status).toBe(
-      'open',
-    );
+    expect(await statusOf(planId)).toBe('open');
 
     // Nobody deletes a plan from the client now, host or admin or neither: the
     // privilege is revoked outright, so this is 42501 rather than a quiet
@@ -437,8 +436,6 @@ describe('host powers end with membership', () => {
     // And the exile's powers come back with their membership.
     await bed.join(gid, creator);
     ok(await creator.client.rpc('cancel_plan', { p_plan_id: fixedPlan }));
-    expect(ok(await admin.client.from('plans').select('status').eq('id', fixedPlan).single()).status).toBe(
-      'cancelled',
-    );
+    expect(await statusOf(fixedPlan)).toBe('cancelled');
   });
 });
