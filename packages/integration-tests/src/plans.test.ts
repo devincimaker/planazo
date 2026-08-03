@@ -9,13 +9,19 @@ let memberA: TestUser;
 let memberB: TestUser;
 let groupId: string;
 
-async function createPlan(planType: 'fixed' | 'flexible', title: string, eventDate?: string) {
+async function createPlanAs(
+  user: TestUser,
+  gid: string,
+  planType: 'fixed' | 'flexible',
+  title: string,
+  eventDate?: string,
+) {
   return ok(
-    await host.client
+    await user.client
       .from('plans')
       .insert({
-        group_id: groupId,
-        created_by: host.id,
+        group_id: gid,
+        created_by: user.id,
         title,
         plan_type: planType,
         event_date: eventDate ?? (planType === 'fixed' ? daysFromNow(7) : null),
@@ -26,14 +32,22 @@ async function createPlan(planType: 'fixed' | 'flexible', title: string, eventDa
   ).id;
 }
 
-async function addOption(planId: string, date: string) {
+async function createPlan(planType: 'fixed' | 'flexible', title: string, eventDate?: string) {
+  return createPlanAs(host, groupId, planType, title, eventDate);
+}
+
+async function addOptionAs(user: TestUser, planId: string, date: string) {
   return ok(
-    await host.client
+    await user.client
       .from('plan_date_options')
       .insert({ plan_id: planId, date })
       .select('id')
       .single(),
   ).id;
+}
+
+async function addOption(planId: string, date: string) {
+  return addOptionAs(host, planId, date);
 }
 
 async function markAvailable(user: TestUser, planId: string, optionId: string) {
@@ -277,5 +291,154 @@ describe('cancel_plan and restore_plan', () => {
 
     const res = await host.client.rpc('restore_plan', { p_plan_id: planId });
     expect(res.error?.message).toMatch(/The date has passed/);
+  });
+});
+
+// PLA-42: created_by is not a standing permission. Removal takes away the
+// membership row, the RSVPs and the ability to read the group — but the
+// lifecycle RPCs are SECURITY DEFINER, so RLS never runs inside them, and
+// `created_by = auth.uid()` went on being true forever. A removed person keeps
+// their JWT and needs nothing but the plan's UUID, which a push notification,
+// a deep link or a screenshot already gave them.
+describe('host powers end with membership', () => {
+  const denied = /Only the plan creator or a group admin/;
+
+  let admin: TestUser;
+  let creator: TestUser;
+  let bystander: TestUser;
+  let gid: string;
+  let fixedPlan: string;
+  let flexPlan: string;
+  let cancelledPlan: string;
+  let deletablePlan: string;
+
+  beforeAll(async () => {
+    [admin, creator, bystander] = await Promise.all([
+      bed.createUser('Exile Admin'),
+      bed.createUser('Exile Creator'),
+      bed.createUser('Exile Bystander'),
+    ]);
+    // The creator joins as a plain member on purpose. The file's own `host` is
+    // the group's admin, so it satisfies the admin half of every guard and
+    // would hide this bug completely.
+    gid = (await bed.createGroup(admin)).id;
+    await bed.join(gid, creator);
+    await bed.join(gid, bystander);
+
+    fixedPlan = await createPlanAs(creator, gid, 'fixed', 'Exile fixed');
+    deletablePlan = await createPlanAs(creator, gid, 'fixed', 'Exile deletable');
+    cancelledPlan = await createPlanAs(creator, gid, 'fixed', 'Exile cancelled');
+    flexPlan = await createPlanAs(creator, gid, 'flexible', 'Exile flexible');
+
+    // Two yes-RSVPs from people who stay, so lock_plan would genuinely lock if
+    // the guard let it through. RSVPs from the creator would not survive the
+    // removal — the on_group_member_delete trigger clears them — and the call
+    // would stall on below_minimum for the wrong reason.
+    for (const u of [admin, bystander]) {
+      ok(
+        await u.client.from('rsvps').insert({ plan_id: fixedPlan, user_id: u.id, response: 'yes' }),
+      );
+    }
+
+    const option = await addOptionAs(creator, flexPlan, daysFromNow(6));
+    await markAvailable(admin, flexPlan, option);
+    await markAvailable(bystander, flexPlan, option);
+    ok(await admin.client.rpc('lock_plan', { p_plan_id: flexPlan }));
+    ok(await admin.client.rpc('cancel_plan', { p_plan_id: cancelledPlan }));
+
+    // The removal itself, exactly as group/[id]/manage.tsx does it.
+    ok(
+      await admin.client
+        .from('group_members')
+        .delete()
+        .eq('group_id', gid)
+        .eq('user_id', creator.id),
+    );
+  });
+
+  it('refuses every lifecycle RPC to a removed creator', async () => {
+    expect((await creator.client.rpc('lock_plan', { p_plan_id: fixedPlan })).error?.message).toMatch(denied);
+    expect((await creator.client.rpc('cancel_plan', { p_plan_id: fixedPlan })).error?.message).toMatch(denied);
+    expect((await creator.client.rpc('reopen_plan', { p_plan_id: flexPlan })).error?.message).toMatch(denied);
+    expect((await creator.client.rpc('restore_plan', { p_plan_id: cancelledPlan })).error?.message).toMatch(denied);
+
+    const states = ok(
+      await admin.client
+        .from('plans')
+        .select('id, status')
+        .in('id', [fixedPlan, flexPlan, cancelledPlan]),
+    );
+    expect(Object.fromEntries(states.map((p) => [p.id, p.status]))).toEqual({
+      [fixedPlan]: 'open',
+      [flexPlan]: 'locked',
+      [cancelledPlan]: 'cancelled',
+    });
+  });
+
+  it('refuses the direct writes too: rename, delete, extra dates', async () => {
+    // No .select() on the writes. PostgREST only adds RETURNING when you ask
+    // for the row back, and without RETURNING the SELECT policy never runs —
+    // so "they cannot read the plan" is not the protection here. The UPDATE
+    // and DELETE policies have to stop this on their own.
+    await creator.client
+      .from('plans')
+      .update({ title: 'Renamed from outside' })
+      .eq('id', fixedPlan);
+    expect(ok(await admin.client.from('plans').select('title').eq('id', fixedPlan).single()).title).toBe(
+      'Exile fixed',
+    );
+
+    await creator.client.from('plans').delete().eq('id', deletablePlan);
+    expect(ok(await admin.client.from('plans').select('id').eq('id', deletablePlan))).toHaveLength(1);
+
+    await creator.client.from('plan_date_options').insert({ plan_id: flexPlan, date: daysFromNow(9) });
+    expect(ok(await admin.client.from('plan_date_options').select('id').eq('plan_id', flexPlan))).toHaveLength(1);
+  });
+
+  it('holds for leaving voluntarily, which is the common case', async () => {
+    const leaver = await bed.createUser('Exile Leaver');
+    await bed.join(gid, leaver);
+    const planId = await createPlanAs(leaver, gid, 'fixed', 'Exile leaver plan');
+
+    ok(await leaver.client.rpc('leave_group', { p_group_id: gid }));
+
+    expect((await leaver.client.rpc('cancel_plan', { p_plan_id: planId })).error?.message).toMatch(denied);
+    await leaver.client.from('plans').update({ title: 'Renamed on the way out' }).eq('id', planId);
+
+    const plan = ok(await admin.client.from('plans').select('status, title').eq('id', planId).single());
+    expect(plan).toEqual({ status: 'open', title: 'Exile leaver plan' });
+  });
+
+  // The other half of the guard, and the half that is easy to break: requiring
+  // membership must not cost a plain member the plans they host.
+  it('leaves current members their host powers, and rejoining hands them back', async () => {
+    const planId = await createPlanAs(bystander, gid, 'fixed', 'Bystander plan');
+
+    // bystander created it and is no admin — the creator branch, on its own.
+    ok(await bystander.client.rpc('cancel_plan', { p_plan_id: planId }));
+    expect(ok(await admin.client.from('plans').select('status').eq('id', planId).single()).status).toBe(
+      'cancelled',
+    );
+
+    // admin did not create it — the admin branch, on its own.
+    ok(await admin.client.rpc('restore_plan', { p_plan_id: planId }));
+    expect(ok(await admin.client.from('plans').select('status').eq('id', planId).single()).status).toBe(
+      'open',
+    );
+
+    // Nobody deletes a plan from the client now, host or admin or neither: the
+    // privilege is revoked outright, so this is 42501 rather than a quiet
+    // no-op. Ending a plan is cancel_plan, which leaves a record and tells
+    // everyone who was in.
+    const hardDelete = await admin.client.from('plans').delete().eq('id', planId);
+    expect(hardDelete.error?.code).toBe('42501');
+    expect(ok(await admin.client.from('plans').select('id').eq('id', planId))).toHaveLength(1);
+
+    // And the exile's powers come back with their membership.
+    await bed.join(gid, creator);
+    ok(await creator.client.rpc('cancel_plan', { p_plan_id: fixedPlan }));
+    expect(ok(await admin.client.from('plans').select('status').eq('id', fixedPlan).single()).status).toBe(
+      'cancelled',
+    );
   });
 });
