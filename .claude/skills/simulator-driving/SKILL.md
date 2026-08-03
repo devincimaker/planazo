@@ -142,15 +142,43 @@ is refusing taps", so the next step was a reboot, and the tool's own error text
 recommended exactly that. `sim.py` now ranks tappable types above tree order
 and reports whether the screen changed, so this specific trap is gone.
 
-**Still unverified:** whether a correctly aimed tap on the `Open` *button*
-dismisses this particular alert. It has not been observed working, because the
-alert could not be reproduced on a simulator whose scheme approval was already
-recorded, which is every simulator once it has been approved even once. These
-were all seen to fail and are not worth retrying: `idb ui key 40` (Return),
+**Verified against a live alert.** On a reproduction (recipe below) `unblock`
+answered `cleared with 'Open' after 1 tap(s)` and the app came up. One
+correctly aimed tap is all it takes, and no reboot is needed. On the same
+alert the frames were:
+
+```
+StaticText  'Open in “Planazo”?'   x=82  y=419  w=238 h=20   <- old code tapped (201,429)
+Button      'Cancel'               x=66  y=459  w=135 h=44
+Button      'Open'                 x=201 y=459  w=135 h=44   <- correct target (268,481)
+```
+
+The old aim was 52pt above the button, on 20pt-tall inert text. Note the title
+uses **curly** quotes, so match on `Open in`, never on the full string.
+
+These do genuinely fail and are not worth retrying: `idb ui key 40` (Return),
 AppleScript `click at {x,y}` on the Simulator window (it lands on the layer
 *under* the alert), and `simctl terminate` plus relaunch (the alert outlives
-the app). `unblock` tries the button, verifies, and reboots if it did not work,
-so it lands somewhere sane either way.
+the app).
+
+### Reproducing it on purpose
+
+The approval is what makes the alert unreproducible once it has been answered
+once. Delete it and the next deep link prompts again, which is how to test any
+of this:
+
+```bash
+for scheme in planazo com.planazo.app exp+planazo; do
+  xcrun simctl spawn "$UDID" defaults delete com.apple.launchservices.schemeapproval \
+    "com.apple.CoreSimulator.CoreSimulatorBridge-->$scheme"
+done
+xcrun simctl terminate "$UDID" com.planazo.app; sleep 2
+xcrun simctl openurl "$UDID" "com.planazo.app://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081"
+```
+
+No reboot is needed for the deletion to take effect. **Write the approvals back
+afterwards** with the loop above, or you leave the simulator primed to trap the
+next session.
 
 A second reason it looks immortal: **every queued `simctl openurl` raises its
 own alert.** Clear one and the next appears, identical. `unblock` loops.
