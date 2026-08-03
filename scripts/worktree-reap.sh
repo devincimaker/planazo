@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 # Reclaim the worktree you are standing in, once its PR has merged.
 #
-#   scripts/worktree-reap.sh          # decide and act
-#   pnpm wt:reap                      # same, by hand
-#
-# Wired to a PostToolUse hook on `gh pr merge` (.claude/settings.json), so the
-# reclaim stops being something anyone has to remember. The branch database
+# Not run by hand. A PostToolUse hook on `gh pr merge` (.claude/settings.json)
+# invokes it and feeds it the tool payload on stdin — that payload is how it
+# knows which worktree the merge happened in. The reclaim exists as a hook
+# precisely because nobody should have to remember it: the branch database
 # bills until it is deleted.
 #
 # It reclaims THIS worktree and no other. Every other worktree belongs to
@@ -39,15 +38,17 @@ emit() { # emit <message-for-the-user> [context-for-claude]
 
 command -v jq >/dev/null 2>&1 || exit 0
 
-# Hook payload on stdin; empty when run by hand from a worktree.
-payload=""
-[ -t 0 ] || payload=$(cat 2>/dev/null)
-if [ -n "$payload" ]; then
-  cmd=$(jq -r '.tool_input.command // ""' <<<"$payload" 2>/dev/null)
-  [[ "$cmd" == *"gh pr merge"* ]] || exit 0
-  cwd=$(jq -r '.cwd // ""' <<<"$payload" 2>/dev/null)
-fi
-[ -n "${cwd:-}" ] && [ -d "$cwd" ] || cwd=$(pwd)
+payload=$(cat 2>/dev/null || echo '{}')
+
+# The `if` filter in settings.json already narrows this to `gh pr merge`, but
+# the filter is config and this is the thing that deletes a database.
+cmd=$(jq -r '.tool_input.command // ""' <<<"$payload" 2>/dev/null)
+[[ "$cmd" == *"gh pr merge"* ]] || exit 0
+
+# The merge happened wherever the session was standing, which is the worktree
+# to reclaim. pwd is a fallback for builds that do not send cwd.
+cwd=$(jq -r '.cwd // ""' <<<"$payload" 2>/dev/null)
+[ -n "$cwd" ] && [ -d "$cwd" ] || cwd=$(pwd)
 cd "$cwd" 2>/dev/null || exit 0
 
 primary=$(wt_primary_path 2>/dev/null) || exit 0

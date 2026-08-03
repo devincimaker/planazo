@@ -94,8 +94,8 @@ and applies any new migrations to its local database. It reclaims nothing else:
 other worktrees belong to other sessions, and their branch DBs are live.
 
 It refuses rather than deletes when the PR for the branch is not `MERGED`, or
-when `wt:rm` objects (a dirty tree, most often). Run it by hand with
-`pnpm wt:reap` from inside a worktree.
+when `wt:rm` objects (a dirty tree, most often). When it refuses it says why,
+and the fix is yours to carry out — it will not retry itself.
 
 Other people's merged worktrees still show up in `pnpm wt:list` flagged
 `MERGED into main` — that is a prompt for whoever owns them, not a to-do list.
