@@ -2,6 +2,7 @@ import { Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
+import { GROUP_PHOTO_BUCKET, groupPhotoPath } from '@planazo/shared';
 import { supabase } from './supabase';
 
 export async function pickFromLibrary(opts: { square?: boolean } = {}): Promise<string | null> {
@@ -41,22 +42,25 @@ export async function uploadJpeg(bucket: string, path: string, uri: string, upse
   if (error) throw error;
 }
 
-/** PLA-30. One folder per group, which is what the storage policies key on. */
-export const GROUP_PHOTO_BUCKET = 'group-images';
-
-export function groupPhotoPath(groupId: string): string {
-  return `${groupId}/cover.jpg`;
-}
-
-/** Uploads the group's photo and returns the URL to store on the row. */
-export async function uploadGroupPhoto(groupId: string, uri: string): Promise<string> {
-  const path = groupPhotoPath(groupId);
-  await uploadJpeg(GROUP_PHOTO_BUCKET, path, uri, true);
-  const { data } = supabase.storage.from(GROUP_PHOTO_BUCKET).getPublicUrl(path);
-  // Every photo for a group has the same object name, so the URL has to change
-  // or the replaced image stays on screen until the CDN lets go of it.
+/**
+ * Uploads to a public bucket and returns the URL to store on the row.
+ *
+ * Every photo of a given thing reuses one object name, so the URL has to change
+ * or the replaced image stays on screen until the CDN lets go of it. That is
+ * why both `profiles.avatar_url` and `groups.image_url` hold a full URL with a
+ * `?t=` suffix rather than a bare storage path.
+ */
+export async function uploadPublicPhoto(bucket: string, path: string, uri: string): Promise<string> {
+  await uploadJpeg(bucket, path, uri, true);
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
   return `${data.publicUrl}?t=${Date.now()}`;
 }
+
+export const uploadGroupPhoto = (groupId: string, uri: string): Promise<string> =>
+  uploadPublicPhoto(GROUP_PHOTO_BUCKET, groupPhotoPath(groupId), uri);
+
+export const uploadAvatar = (userId: string, uri: string): Promise<string> =>
+  uploadPublicPhoto('avatars', `${userId}/avatar.jpg`, uri);
 
 export async function removeGroupPhoto(groupId: string): Promise<void> {
   const { error } = await supabase.storage

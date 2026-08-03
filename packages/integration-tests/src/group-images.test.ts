@@ -2,9 +2,8 @@
 // group admins can write to, and no mocked test can tell you whether the
 // storage policies in 20260803000001_group_images.sql actually say that.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { GROUP_PHOTO_BUCKET as BUCKET, groupPhotoPath as objectPath } from '@planazo/shared';
 import { TestBed, TestUser, ok } from './testbed';
-
-const BUCKET = 'group-images';
 
 const bed = new TestBed();
 let owner: TestUser;
@@ -19,9 +18,9 @@ const JPEG = new Uint8Array([
   0xff, 0xd8, 0xff, 0xdb, 0x00, 0x43, 0x00, 0xff, 0xd9,
 ]);
 
-function objectPath(groupId: string) {
-  return `${groupId}/cover.jpg`;
-}
+/** The write under test, as the app performs it. Only the actor and path vary. */
+const upload = (as: TestUser, path: string) =>
+  as.client.storage.from(BUCKET).upload(path, JPEG, { upsert: true, contentType: 'image/jpeg' });
 
 beforeAll(async () => {
   [owner, member, otherAdmin] = await Promise.all([
@@ -29,8 +28,10 @@ beforeAll(async () => {
     bed.createUser('Photo Member'),
     bed.createUser('Photo Other Admin'),
   ]);
-  group = await bed.createGroup(owner);
-  otherGroup = await bed.createGroup(otherAdmin);
+  [group, otherGroup] = await Promise.all([
+    bed.createGroup(owner),
+    bed.createGroup(otherAdmin),
+  ]);
   await bed.join(group.id, member);
 });
 
@@ -44,42 +45,32 @@ afterAll(async () => {
 
 describe('group photo storage', () => {
   it('lets an admin upload into their own group folder', async () => {
-    const { error } = await owner.client.storage
-      .from(BUCKET)
-      .upload(objectPath(group.id), JPEG, { upsert: true, contentType: 'image/jpeg' });
+    const { error } = await upload(owner, objectPath(group.id));
 
     expect(error).toBeNull();
   });
 
   it('lets the admin replace it, which is what upsert does', async () => {
-    const { error } = await owner.client.storage
-      .from(BUCKET)
-      .upload(objectPath(group.id), JPEG, { upsert: true, contentType: 'image/jpeg' });
+    const { error } = await upload(owner, objectPath(group.id));
 
     expect(error).toBeNull();
   });
 
   it('refuses an ordinary member of the same group', async () => {
-    const { error } = await member.client.storage
-      .from(BUCKET)
-      .upload(objectPath(group.id), JPEG, { upsert: true, contentType: 'image/jpeg' });
+    const { error } = await upload(member, objectPath(group.id));
 
     expect(error).not.toBeNull();
   });
 
   // Being an admin somewhere is not being an admin here.
   it('refuses an admin of a different group', async () => {
-    const { error } = await otherAdmin.client.storage
-      .from(BUCKET)
-      .upload(objectPath(group.id), JPEG, { upsert: true, contentType: 'image/jpeg' });
+    const { error } = await upload(otherAdmin, objectPath(group.id));
 
     expect(error).not.toBeNull();
   });
 
   it('still lets that admin write their own group folder', async () => {
-    const { error } = await otherAdmin.client.storage
-      .from(BUCKET)
-      .upload(objectPath(otherGroup.id), JPEG, { upsert: true, contentType: 'image/jpeg' });
+    const { error } = await upload(otherAdmin, objectPath(otherGroup.id));
 
     expect(error).toBeNull();
   });
@@ -87,9 +78,7 @@ describe('group photo storage', () => {
   // The policy casts the folder name to a UUID. Unguarded that raises 22P02
   // rather than simply failing the check, which would be a 500 not a 403.
   it('refuses a folder name that is not a group id, without erroring on the cast', async () => {
-    const { error } = await owner.client.storage
-      .from(BUCKET)
-      .upload('not-a-uuid/cover.jpg', JPEG, { upsert: true, contentType: 'image/jpeg' });
+    const { error } = await upload(owner, 'not-a-uuid/cover.jpg');
 
     expect(error).not.toBeNull();
     expect(JSON.stringify(error)).not.toContain('22P02');

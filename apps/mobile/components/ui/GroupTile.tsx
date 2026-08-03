@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { View, StyleSheet, Image } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { colors, fonts } from '../../theme/tokens';
@@ -11,6 +11,11 @@ export function groupInitial(name: string): string {
     .split(' ')
     .filter((w) => w.length > 2);
   return (words[0] ?? name).charAt(0).toUpperCase() || '?';
+}
+
+/** The squircle's corner at a given size. Exported so previews of the tile agree with it. */
+export function tileRadius(size: number): number {
+  return Math.round(size * 0.32);
 }
 
 interface GroupTileProps {
@@ -27,12 +32,13 @@ interface GroupTileProps {
 export function GroupTile({ name, color, imageUrl, size = 46, testID }: GroupTileProps) {
   // A deleted object, a dead URL or a flaky network would otherwise leave a
   // tile with nothing in it at all. The letter on the colour is the fallback
-  // everywhere else, so it is the fallback here too.
-  const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [imageUrl]);
+  // everywhere else, so it is the fallback here too. Remembering *which* URL
+  // failed rather than a bare flag means a replacement photo renders on the
+  // first frame instead of showing the letter until an effect resets it.
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
 
-  const showImage = !!imageUrl && !failed;
-  const radius = Math.round(size * 0.32);
+  const showImage = !!imageUrl && imageUrl !== failedUrl;
+  const radius = tileRadius(size);
   return (
     <View
       testID={testID}
@@ -49,11 +55,12 @@ export function GroupTile({ name, color, imageUrl, size = 46, testID }: GroupTil
       ]}
     >
       {showImage ? (
+        // The tile already clips to the squircle, so the image just fills it.
         <Image
           testID={testID ? `${testID}-image` : undefined}
           source={{ uri: imageUrl }}
-          onError={() => setFailed(true)}
-          style={{ width: size, height: size, borderRadius: radius }}
+          onError={() => setFailedUrl(imageUrl ?? null)}
+          style={styles.fill}
         />
       ) : (
         <ThemedText style={[styles.initial, { fontSize: Math.round(size * 0.44) }]}>
@@ -69,6 +76,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+  },
+  fill: {
+    width: '100%',
+    height: '100%',
   },
   initial: {
     fontFamily: fonts.displayHeavy,

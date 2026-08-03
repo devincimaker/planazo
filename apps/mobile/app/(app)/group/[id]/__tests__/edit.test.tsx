@@ -133,21 +133,13 @@ describe('Group profile', () => {
     await waitFor(() => {
       expect(mockUpload).toHaveBeenCalledWith('g1', 'file:///picked.jpg');
     });
+    // Reaching this at all proves picking a photo made the screen dirty on its
+    // own: Save is inert otherwise.
     expect(groupUpdate).toHaveBeenCalledWith({
       name: 'Padel Dilluns',
       color: '#F6C453',
       image_url: PHOTO_URL,
     });
-  });
-
-  it('picking a photo is a change worth saving on its own', async () => {
-    mockPick.mockResolvedValue('file:///picked.jpg');
-    await renderEdit();
-
-    await fireEvent.press(screen.getByTestId('add-photo'));
-    await chooseFromSheet(1);
-    await fireEvent.press(screen.getByTestId('save'));
-
     await waitFor(() => expect(mockBack).toHaveBeenCalled());
   });
 

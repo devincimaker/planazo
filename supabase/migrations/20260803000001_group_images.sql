@@ -19,6 +19,14 @@
 -- That matches profiles.avatar_url and how profile/edit.tsx writes it:
 -- replacing a photo reuses the same object name, so without the ?t= suffix the
 -- old image stays on screen until the CDN cache expires.
+--
+-- The cost of that consistency, stated rather than discovered later: the column
+-- hardcodes the storage host, so changing project ref would blank every tile at
+-- once and the repair is a migration that rewrites URLs by matching the dead
+-- hostname. This project has already retired a ref once. The alternative that
+-- avoids it is storing only image_updated_at and deriving the URL from the id,
+-- which is worth revisiting if avatar_url is ever reshaped too — doing it for
+-- one of the two columns would be worse than doing it for neither.
 ALTER TABLE public.groups ADD COLUMN image_url TEXT;
 
 -- Nothing to grant. `groups` has no column-level GRANTs and its UPDATE policy

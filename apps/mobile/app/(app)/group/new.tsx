@@ -174,7 +174,13 @@ export default function NewGroupScreen() {
             onRemove={() => setPhotoUri(null)}
           />
 
-          {photoUri ? null : (
+          {photoUri ? (
+            // Group profile says the same thing when a photo hides the
+            // swatches. Saying nothing here made them look like a glitch.
+            <ThemedText variant="sub">
+              Colour is hidden while a photo is set. It comes back the moment the photo goes.
+            </ThemedText>
+          ) : (
             <View style={styles.section}>
               <ThemedText variant="sectionLabel">Colour</ThemedText>
               <View style={styles.swatches}>

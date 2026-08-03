@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/react-native';
-import { GroupTile, groupInitial } from '../GroupTile';
+import { GroupTile, groupInitial, tileRadius } from '../GroupTile';
 import { colorForName } from '../Avatar';
 
 const PHOTO = 'https://cdn.example.com/group-images/g1/cover.jpg?t=1';
@@ -64,9 +64,11 @@ describe('GroupTile', () => {
   it('keeps the photo inside the squircle at every size', async () => {
     await render(<GroupTile name="Padel" imageUrl={PHOTO} size={52} testID="tile" />);
 
-    // 52 * 0.32 = 16.64, and the design's identity row asks for 17.
+    // 52 * 0.32 = 16.64, and the design's identity row asks for 17. The tile
+    // clips, so the image only has to fill it.
     expect(screen.getByTestId('tile')).toHaveStyle({ borderRadius: 17, overflow: 'hidden' });
-    expect(screen.getByTestId('tile-image').props.style).toMatchObject({ borderRadius: 17 });
+    expect(screen.getByTestId('tile-image')).toHaveStyle({ width: '100%', height: '100%' });
+    expect(tileRadius(52)).toBe(17);
   });
 });
 

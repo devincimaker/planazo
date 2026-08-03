@@ -1,6 +1,7 @@
-import { ActionSheetIOS } from 'react-native';
+import { ActionSheetIOS, StyleSheet, type ViewStyle } from 'react-native';
 import { render, screen, fireEvent, act } from '@testing-library/react-native';
 import { GroupPhotoField } from '../GroupPhotoField';
+import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
 import { pickFromLibrary, takePhoto } from '../../../lib/images';
 
 jest.mock('../../../lib/images', () => ({
@@ -114,6 +115,28 @@ describe('GroupPhotoField', () => {
     await renderField({ uri: PHOTO });
 
     expect(screen.getByText(CAPTION)).toBeTruthy();
+  });
+
+  // PLA-40's floor, asserted the same way touchTargets.test.tsx does it. It
+  // lives here rather than in that suite because this component reaches
+  // lib/images, and that suite is deliberately mock-free.
+  it('gives every control the 44pt minimum', async () => {
+    const floorOf = (style: unknown) =>
+      ((StyleSheet.flatten(style as ViewStyle) ?? {}) as ViewStyle).minHeight;
+
+    await renderField();
+    expect(floorOf(screen.getByTestId('add-photo').props.style)).toBeGreaterThanOrEqual(
+      MIN_TOUCH_TARGET
+    );
+
+    // Change and Remove are 20pt words that claim 44 and hand the surplus back
+    // with a negative margin, so the row does not grow.
+    await renderField({ uri: PHOTO });
+    for (const id of ['change-photo', 'remove-photo']) {
+      expect(floorOf(screen.getByTestId(id).props.style)).toBeGreaterThanOrEqual(
+        MIN_TOUCH_TARGET
+      );
+    }
   });
 
   // Nothing to change or remove while it is in flight, and no invented percentage.

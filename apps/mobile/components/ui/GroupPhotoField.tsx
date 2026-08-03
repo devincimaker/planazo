@@ -11,9 +11,10 @@ import {
   View,
 } from 'react-native';
 import { ThemedText } from './ThemedText';
+import { tileRadius } from './GroupTile';
 import { pickFromLibrary, takePhoto } from '../../lib/images';
 import { MIN_TOUCH_TARGET } from '../../lib/a11y';
-import { colors, fonts, spacing } from '../../theme/tokens';
+import { colors, fonts, radii, spacing } from '../../theme/tokens';
 
 const SHEET_TITLE = 'A photo makes the group easier to spot in a list.';
 const TILE = 64;
@@ -41,42 +42,43 @@ export function GroupPhotoField({
   onPick,
   onRemove,
 }: GroupPhotoFieldProps) {
-  const applyChoice = async (index: number) => {
-    if (index === 0) {
-      const picked = await takePhoto();
-      if (picked) onPick(picked);
-    } else if (index === 1) {
-      const picked = await pickFromLibrary({ square: true });
-      if (picked) onPick(picked);
-    } else if (index === 2) {
-      onRemove();
-    }
-  };
+  // One list, so the labels and what they do cannot drift apart, and so the
+  // indices the two platform branches dispatch on are derived rather than
+  // written out twice. "Use the letter instead" only exists once there is a
+  // photo to undo, which is exactly why nothing here may hardcode a position.
+  const choices = [
+    {
+      label: 'Take a photo',
+      run: async () => {
+        const picked = await takePhoto();
+        if (picked) onPick(picked);
+      },
+    },
+    {
+      label: 'Choose from library',
+      run: async () => {
+        const picked = await pickFromLibrary({ square: true });
+        if (picked) onPick(picked);
+      },
+    },
+    ...(uri ? [{ label: 'Use the letter instead', run: async () => onRemove() }] : []),
+  ];
 
   const openPhotoOptions = () => {
-    // "Use the letter instead" only exists once there is a photo to undo.
-    const options = uri
-      ? ['Take a photo', 'Choose from library', 'Use the letter instead', 'Cancel']
-      : ['Take a photo', 'Choose from library', 'Cancel'];
-    const cancelIndex = options.length - 1;
-
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
         {
           title: SHEET_TITLE,
-          options,
-          cancelButtonIndex: cancelIndex,
-          ...(uri ? { destructiveButtonIndex: 2 } : {}),
+          options: [...choices.map((c) => c.label), 'Cancel'],
+          cancelButtonIndex: choices.length,
+          ...(uri ? { destructiveButtonIndex: choices.length - 1 } : {}),
         },
-        (index) => {
-          if (index !== cancelIndex) void applyChoice(index);
-        }
+        // Cancel indexes past the end, so it resolves to undefined and no-ops.
+        (index) => void choices[index]?.run()
       );
     } else {
       Alert.alert('Group photo', SHEET_TITLE, [
-        { text: 'Take a photo', onPress: () => void applyChoice(0) },
-        { text: 'Choose from library', onPress: () => void applyChoice(1) },
-        ...(uri ? [{ text: 'Use the letter instead', onPress: () => void applyChoice(2) }] : []),
+        ...choices.map((c) => ({ text: c.label, onPress: () => void c.run() })),
         { text: 'Cancel', style: 'cancel' as const },
       ]);
     }
@@ -102,7 +104,6 @@ export function GroupPhotoField({
             accessibilityRole="button"
             accessibilityLabel="Change the group photo"
             onPress={openPhotoOptions}
-            testID="group-photo-tile"
           >
             <Image source={{ uri }} style={styles.tile} />
           </Pressable>
@@ -169,8 +170,10 @@ function ProgressBar() {
   const travel = useRef(new Animated.Value(0)).current;
   const [track, setTrack] = useState(0);
 
+  // Started once, not per layout pass: the interpolation below is rebuilt on
+  // every render anyway, so it picks up the measured width without the loop
+  // having to stop and restart.
   useEffect(() => {
-    if (!track) return;
     const loop = Animated.loop(
       Animated.timing(travel, {
         toValue: 1,
@@ -181,7 +184,7 @@ function ProgressBar() {
     );
     loop.start();
     return () => loop.stop();
-  }, [track, travel]);
+  }, [travel]);
 
   const segment = Math.max(24, track * 0.4);
 
@@ -220,10 +223,12 @@ const styles = StyleSheet.create({
   rowPressed: {
     opacity: 0.7,
   },
+  // Same squircle as the real tile, by reference rather than by a 20 that
+  // happens to match today.
   tile: {
     width: TILE,
     height: TILE,
-    borderRadius: 20,
+    borderRadius: tileRadius(TILE),
     overflow: 'hidden',
   },
   tileEmpty: {
@@ -274,13 +279,13 @@ const styles = StyleSheet.create({
   },
   progressTrack: {
     height: 3,
-    borderRadius: 999,
+    borderRadius: radii.pill,
     backgroundColor: colors.borderStrong,
     overflow: 'hidden',
   },
   progressFill: {
     height: 3,
-    borderRadius: 999,
+    borderRadius: radii.pill,
     backgroundColor: colors.accent,
   },
 });
