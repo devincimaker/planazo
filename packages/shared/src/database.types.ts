@@ -420,6 +420,51 @@ export type Database = {
           },
         ]
       }
+      plan_photos: {
+        Row: {
+          created_at: string
+          height: number | null
+          id: string
+          plan_id: string
+          storage_path: string
+          uploaded_by: string
+          width: number | null
+        }
+        Insert: {
+          created_at?: string
+          height?: number | null
+          id?: string
+          plan_id: string
+          storage_path: string
+          uploaded_by: string
+          width?: number | null
+        }
+        Update: {
+          created_at?: string
+          height?: number | null
+          id?: string
+          plan_id?: string
+          storage_path?: string
+          uploaded_by?: string
+          width?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_photos_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plan_photos_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plans: {
         Row: {
           cancel_reason: string | null
@@ -597,6 +642,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_add_plan_photo: { Args: { p_plan_id: string }; Returns: boolean }
+      can_view_plan_photos: { Args: { p_plan_id: string }; Returns: boolean }
       cancel_plan: {
         Args: { p_plan_id: string; p_reason?: string }
         Returns: Json
@@ -661,6 +708,7 @@ export type Database = {
         Args: { p_date_option_id?: string; p_plan_id: string }
         Returns: Json
       }
+      plan_photo_plan_id: { Args: { p_name: string }; Returns: string }
       reopen_plan: { Args: { p_plan_id: string }; Returns: Json }
       respond_friend_request: {
         Args: { p_accept: boolean; p_friendship_id: string }
