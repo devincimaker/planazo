@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -11,14 +11,20 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ThemedText } from '../../../../components/ui/ThemedText';
-import { planPhotosKey } from '../../../../components/PhotoAlbumCard';
-import { supabase } from '../../../../lib/supabase';
-import { deletePhoto, signPhotos, type PlanPhoto, type SignedPhoto } from '../../../../lib/photos';
-import { spellCount } from '../../../../lib/words';
+import { PhotoTile } from '../../../../components/ui/PhotoTile';
+import { ErrorState } from '../../../../components/ui/ErrorState';
+import { usePlanPhotos, planPhotosKey } from '../../../../lib/usePlanPhotos';
+import {
+  albumSummary,
+  deletePhoto,
+  type PhotoRow,
+  type SignedPhoto,
+} from '../../../../lib/photos';
+import { errorCopy } from '../../../../lib/queryErrors';
 import { useAuthStore } from '../../../../stores/authStore';
-import { colors, radii, spacing } from '../../../../theme/tokens';
+import { colors, spacing } from '../../../../theme/tokens';
 
 /**
  * Every photo on a plan.
@@ -37,78 +43,34 @@ import { colors, radii, spacing } from '../../../../theme/tokens';
  */
 const COLUMNS = 3;
 
-interface PhotoRow extends PlanPhoto {
-  uploader: { display_name: string } | null;
-}
-
-/** A row that has been signed, still carrying who took it. */
-type ViewerPhoto = SignedPhoto & { uploader?: { display_name: string } | null };
-
 export default function PlanAlbumScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const planId = String(id);
   const router = useRouter();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
-  // Which photo the viewer is on, as an index into `viewable` rather than the
-  // photo itself, because swiping moves it and the caption has to follow.
+  // Which photo the viewer is on, as an index rather than the photo itself,
+  // because swiping moves it and the caption has to follow.
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   const { width } = useWindowDimensions();
 
-  const { data: rows, isLoading } = useQuery({
-    queryKey: planPhotosKey(String(id)),
-    queryFn: async (): Promise<PhotoRow[]> => {
-      const { data, error } = await supabase
-        .from('plan_photos')
-        .select(
-          'id, plan_id, uploaded_by, storage_path, width, height, created_at, uploader:profiles!plan_photos_uploaded_by_fkey(display_name)',
-        )
-        .eq('plan_id', String(id))
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as unknown as PhotoRow[];
-    },
-  });
+  const { rows, signed, isLoading, error } = usePlanPhotos(planId);
 
-  const { data: signed } = useQuery({
-    queryKey: [...planPhotosKey(String(id)), 'signed', rows?.length ?? 0, rows?.[0]?.id ?? null],
-    enabled: !!rows?.length,
-    staleTime: 30 * 60 * 1000,
-    queryFn: async () => (await signPhotos(rows ?? [])).photos,
-  });
+  // Signed photos are the only ones with anything to show, so they are both
+  // what the pager pages over and what a tile can open.
+  const viewable = signed ?? [];
+  const current = openIndex === null ? null : (viewable[openIndex] ?? null);
+  const close = useCallback(() => setOpenIndex(null), []);
 
-  const subtitle = useMemo(() => {
-    const total = rows?.length ?? 0;
-    if (!total) return '';
-    const people = new Set((rows ?? []).map((r) => r.uploaded_by)).size;
-    if (people === 1) {
-      const name = rows?.[0]?.uploader?.display_name;
-      return name ? `${total} photos from ${name}` : `${total} photos`;
-    }
-    return `${total} photos from ${spellCount(people)} people`;
-  }, [rows]);
-
-  // The rows arrive before the signatures do, so the grid can hold its shape
-  // with placeholder tiles instead of reflowing when the images land. An
-  // unsigned tile carries an empty url and is not tappable.
-  //
-  // `signPhotos` spreads the row it was given, so the uploader survives the
-  // trip even though SignedPhoto does not promise it. Saying so here is what
-  // lets the viewer name who took the photo without casting at every use.
-  const tiles: ViewerPhoto[] = signed?.length
-    ? (signed as ViewerPhoto[])
-    : (rows ?? []).map((r) => ({ ...r, url: '' }));
-
-  // Only signed photos are swipeable: an unsigned tile has nothing to show, so
-  // letting the viewer land on one would be a blank page between two photos.
-  const viewable = tiles.filter((t) => t.url);
-  const current = openIndex === null ? null : viewable[openIndex] ?? null;
-  const close = () => setOpenIndex(null);
+  // Before the signatures land the grid still knows how many tiles to hold,
+  // which is what stops it reflowing when the images arrive.
+  const tiles: (SignedPhoto | PhotoRow)[] = viewable.length ? viewable : (rows ?? []);
 
   const remove = useMutation({
-    mutationFn: async (photo: SignedPhoto) => deletePhoto(photo),
+    mutationFn: (photo: SignedPhoto) => deletePhoto(photo),
     onSuccess: () => {
       close();
-      queryClient.invalidateQueries({ queryKey: planPhotosKey(String(id)) });
+      queryClient.invalidateQueries({ queryKey: planPhotosKey(planId) });
     },
     onError: () =>
       Alert.alert('That did not work', 'The photo is still there. Try again in a moment.'),
@@ -134,99 +96,100 @@ export default function PlanAlbumScreen() {
 
       <View style={styles.title}>
         <ThemedText variant="headerTitle">Photos</ThemedText>
-        {subtitle ? (
+        {rows?.length ? (
           <ThemedText variant="sub" color={colors.textSecondary}>
-            {subtitle}
+            {albumSummary(rows)}
           </ThemedText>
         ) : null}
       </View>
 
-      <FlatList
-        data={tiles}
-        keyExtractor={(item) => item.id}
-        numColumns={COLUMNS}
-        columnWrapperStyle={styles.row}
-        contentContainerStyle={styles.grid}
-        ListEmptyComponent={
-          isLoading ? null : (
-            <ThemedText variant="body" color={colors.textMuted}>
-              Nothing here yet.
-            </ThemedText>
-          )
-        }
-        renderItem={({ item, index }) => (
-          <Pressable
-            onPress={() => {
-              if (!item.url) return;
-              const at = viewable.findIndex((v) => v.id === item.id);
-              if (at >= 0) setOpenIndex(at);
-            }}
-            disabled={!item.url}
-            accessibilityRole="button"
-            accessibilityLabel={`Photo ${index + 1}${
-              item.uploader ? `, from ${item.uploader.display_name}` : ''
-            }`}
-            style={[
-              styles.tile,
-              { backgroundColor: index % 2 ? colors.photoPlaceholderAlt : colors.photoPlaceholder },
-            ]}
-            testID={`album-tile-${index}`}
-          >
-            {item.url ? (
-              <Image source={{ uri: item.url }} style={styles.fill} resizeMode="cover" />
-            ) : null}
-          </Pressable>
-        )}
-      />
+      {error ? (
+        <ErrorState {...errorCopy(error)} />
+      ) : (
+        <FlatList
+          data={tiles}
+          keyExtractor={(item) => item.id}
+          numColumns={COLUMNS}
+          columnWrapperStyle={styles.row}
+          contentContainerStyle={styles.grid}
+          ListEmptyComponent={
+            isLoading ? null : (
+              <ThemedText variant="body" color={colors.textMuted}>
+                Nothing here yet.
+              </ThemedText>
+            )
+          }
+          renderItem={({ item, index }) => (
+            <Pressable
+              onPress={() => ('url' in item ? setOpenIndex(index) : undefined)}
+              disabled={!('url' in item)}
+              accessibilityRole="button"
+              accessibilityLabel={`Photo ${index + 1}${
+                item.uploader ? `, from ${item.uploader.display_name}` : ''
+              }`}
+              style={styles.cell}
+              testID={`album-tile-${index}`}
+            >
+              <PhotoTile url={'url' in item ? item.url : undefined} index={index} />
+            </Pressable>
+          )}
+        />
+      )}
 
-      <Modal
-        visible={openIndex !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={close}
-      >
+      <Modal visible={openIndex !== null} transparent animationType="fade" onRequestClose={close}>
         <View style={styles.backdrop}>
-          {/* One full-width page per photo, so a swipe moves between them and
-              a tap anywhere on the page dismisses.
-
-              The photo itself takes pointerEvents="none". An Image is a view
-              like any other: it occupies its whole box and swallows taps even
-              where `contain` has left the box transparent, so a portrait photo
-              on a tall screen used to leave only a thin strip at each end that
-              would actually close the viewer. Passing touches through is what
-              makes "tap outside the photo" mean what it says. */}
-          <FlatList
-            data={viewable}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            keyExtractor={(item) => item.id}
-            // contentOffset rather than initialScrollIndex: the latter scrolls
-            // programmatically after mount, which fires onMomentumScrollEnd and
-            // lands the index one page off whatever was tapped.
-            contentOffset={{ x: (openIndex ?? 0) * width, y: 0 }}
-            getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
-            onMomentumScrollEnd={(event) =>
-              setOpenIndex(Math.round(event.nativeEvent.contentOffset.x / width))
-            }
-            renderItem={({ item }) => (
-              // Not accessible: every page carried the same "Close photo"
-              // label, so a screen reader met the dismiss button once per
-              // photo. The bar below has one, which is also easier to find
-              // than the knowledge that tapping the picture works.
-              <Pressable
-                style={[styles.page, { width }]}
-                onPress={close}
-                accessible={false}
-                importantForAccessibility="no-hide-descendants"
-                testID="viewer-page"
-              >
-                <View pointerEvents="none" style={styles.imageWrap}>
-                  <Image source={{ uri: item.url }} style={styles.full} resizeMode="contain" />
-                </View>
-              </Pressable>
-            )}
-          />
+          {/* Mounted only while the viewer is open, and this is load-bearing.
+              A Modal keeps its children mounted when hidden, so a pager left
+              behind sat at offset 0 and said so: the index snapped to the
+              first photo, which opened the viewer on entering the screen and
+              reopened it every time you dismissed it. Unmounting also means
+              `contentOffset` is read fresh on each open, which is what lands
+              it on the photo that was actually tapped. */}
+          {openIndex === null ? null : (
+            <FlatList
+              data={viewable}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              style={styles.pager}
+              keyExtractor={(item) => item.id}
+              // contentOffset rather than initialScrollIndex: the latter
+              // scrolls programmatically after mount, which fires
+              // onMomentumScrollEnd and lands a page off what was tapped.
+              contentOffset={{ x: openIndex * width, y: 0 }}
+              getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
+              // The window is computed from index 0 whatever the offset, so
+              // the defaults would download and decode the first ten photos
+              // before showing the one that was tapped.
+              initialNumToRender={1}
+              windowSize={3}
+              onMomentumScrollEnd={(event) => {
+                const next = Math.round(event.nativeEvent.contentOffset.x / width);
+                if (next !== openIndex) setOpenIndex(next);
+              }}
+              renderItem={({ item }) => (
+                // Not accessible: every page carried the same "Close photo"
+                // label, so a screen reader met the dismiss button once per
+                // photo. The bar below has one, which is also easier to find
+                // than the knowledge that tapping the picture works.
+                <Pressable
+                  style={[styles.page, { width }]}
+                  onPress={close}
+                  accessible={false}
+                  importantForAccessibility="no-hide-descendants"
+                  testID="viewer-page"
+                >
+                  {/* An Image is a view like any other: it occupies its whole
+                      box and swallows taps even where `contain` has left that
+                      box transparent, which used to leave only a thin strip at
+                      each end that would actually dismiss. */}
+                  <View pointerEvents="none" style={styles.imageWrap}>
+                    <Image source={{ uri: item.url }} style={styles.full} resizeMode="contain" />
+                  </View>
+                </Pressable>
+              )}
+            />
+          )}
 
           {/* The bar sits over the backdrop rather than over the photograph,
               so nothing a person is trying to look at is under a control. */}
@@ -312,41 +275,39 @@ const styles = StyleSheet.create({
   row: {
     gap: spacing.xs,
   },
-  tile: {
+  cell: {
     flex: 1 / COLUMNS,
-    aspectRatio: 1,
-    borderRadius: radii.photoTile,
-    overflow: 'hidden',
   },
-  fill: {
-    width: '100%',
-    height: '100%',
-  },
+  // No justifyContent here. Centring at this level sizes the pager to its
+  // content rather than letting it fill, which left the photo sitting high
+  // with the space unevenly split around it. The page centres its own photo,
+  // which is the level that knows how much room the bar takes.
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(23,18,21,0.94)',
-    justifyContent: 'center',
+    backgroundColor: colors.photoBackdrop,
   },
-  // A page in a horizontal list takes its width from the prop and its height
-  // from the list. `flex: 1` here is what a vertical list would want, and in a
-  // row it fights the explicit width until every page stacks at the same
-  // offset and nothing pages at all.
+  pager: {
+    flex: 1,
+  },
   page: {
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
+    // Clears the action bar, so "centred" means centred in the space you can
+    // actually see rather than in the whole screen.
+    paddingBottom: spacing.xxxl * 2 + spacing.xxl,
   },
   imageWrap: {
+    flex: 1,
     width: '100%',
-    alignItems: 'center',
+    justifyContent: 'center',
   },
   full: {
     width: '100%',
-    height: '78%',
+    height: '100%',
   },
   viewerWho: {
     flexShrink: 1,
-    gap: 1,
     alignItems: 'center',
   },
   viewerBar: {

@@ -1,9 +1,8 @@
-import { Alert } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
-import { decode } from 'base64-arraybuffer';
 import { supabase } from './supabase';
+import { pickManyFromLibrary, uploadJpeg, type PickedImage } from './images';
+import { spellCount } from './words';
 
 export const PHOTO_BUCKET = 'plan-photos';
 
@@ -22,18 +21,9 @@ const QUALITY = 0.72;
 
 /** How long a signed URL lasts. Long enough to browse an album without
  *  re-signing mid-scroll, short enough that a link someone screenshots out of
- *  a debugger is dead by the time it travels. */
+ *  a debugger is dead by the time it travels. The query that holds them keeps
+ *  a staleTime derived from this. */
 export const SIGNED_URL_TTL_SECONDS = 3600;
-
-/** Re-sign this long before expiry rather than at it, so a slow image request
- *  started just under the wire still completes. */
-const RESIGN_MARGIN_MS = 5 * 60 * 1000;
-
-export interface PickedPhoto {
-  uri: string;
-  width: number;
-  height: number;
-}
 
 export interface PlanPhoto {
   id: string;
@@ -44,6 +34,21 @@ export interface PlanPhoto {
   height: number | null;
   created_at: string;
 }
+
+/** A row with the display name of whoever took it. */
+export interface PhotoRow extends PlanPhoto {
+  uploader: { display_name: string } | null;
+}
+
+export interface SignedPhoto extends PhotoRow {
+  url: string;
+}
+
+/** Selected by both the plan-detail card and the album screen. The FK hint is
+ *  a string the compiler cannot check, which is reason enough for it to exist
+ *  exactly once. */
+export const PHOTO_SELECT =
+  'id, plan_id, uploaded_by, storage_path, width, height, created_at, uploader:profiles!plan_photos_uploaded_by_fkey(display_name)';
 
 /**
  * Path for a new photo: `<plan>/<uploader>/<key>.jpg`.
@@ -60,31 +65,9 @@ function photoKey(): string {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 }
 
-/**
- * Pick up to `limit` photos. Returns [] when the person cancels or declines
- * the permission, so callers never have to distinguish "said no" from "picked
- * nothing" — neither is an error and both mean the same thing here.
- */
-export async function pickPhotos(limit: number): Promise<PickedPhoto[]> {
-  const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!perm.granted) {
-    Alert.alert('Photos access needed', 'Allow photo access in Settings to add photos.');
-    return [];
-  }
-
-  const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ['images'],
-    allowsMultipleSelection: true,
-    selectionLimit: limit,
-    quality: 1,
-  });
-  if (result.canceled) return [];
-
-  return result.assets.map((a) => ({
-    uri: a.uri,
-    width: a.width ?? 0,
-    height: a.height ?? 0,
-  }));
+/** Up to `limit` photos from the library, with their dimensions. */
+export function pickPhotos(limit: number): Promise<PickedImage[]> {
+  return pickManyFromLibrary(limit);
 }
 
 /**
@@ -94,12 +77,15 @@ export async function pickPhotos(limit: number): Promise<PickedPhoto[]> {
  * resolution survives into the bucket. This is the step that makes an album
  * affordable, and it runs before upload so a flaky connection is carrying
  * 500KB rather than 2.5MB.
+ *
+ * Returns the original when it is already small enough, so the caller has to
+ * know whether it owns the file it got back before deleting it.
  */
-export async function preparePhoto(photo: PickedPhoto): Promise<PickedPhoto> {
+async function preparePhoto(photo: PickedImage): Promise<{ photo: PickedImage; temp: boolean }> {
   const longest = Math.max(photo.width, photo.height);
   if (!longest || longest <= MAX_EDGE) {
     // Already small. Re-encoding would cost quality for nothing.
-    return photo;
+    return { photo, temp: false };
   }
 
   const resize = photo.width >= photo.height ? { width: MAX_EDGE } : { height: MAX_EDGE };
@@ -108,7 +94,7 @@ export async function preparePhoto(photo: PickedPhoto): Promise<PickedPhoto> {
     format: ImageManipulator.SaveFormat.JPEG,
   });
 
-  return { uri: out.uri, width: out.width, height: out.height };
+  return { photo: { uri: out.uri, width: out.width, height: out.height }, temp: true };
 }
 
 export interface UploadOutcome {
@@ -116,8 +102,6 @@ export interface UploadOutcome {
   added: number;
   /** Photos that did not, for any reason. */
   failed: number;
-  /** Set when the database refused because an album or a person is full. */
-  capReached: boolean;
 }
 
 /**
@@ -127,8 +111,8 @@ export interface UploadOutcome {
  * obvious order and deliberate. Two reasons:
  *
  *   1. The caps live in a trigger on the row. Inserting first means someone
- *      who is already at 50 finds out immediately, rather than after their
- *      phone has pushed eight megabytes over a hotel wifi.
+ *      who is already at their limit finds out immediately, rather than after
+ *      their phone has pushed eight megabytes over a hotel wifi.
  *   2. `plan_photos` is the index of what exists in the bucket, and it is what
  *      the account purge reads to find someone's files. An object written
  *      before its row and then orphaned by a crash would be invisible,
@@ -142,17 +126,18 @@ export interface UploadOutcome {
 export async function uploadPhotos(
   planId: string,
   userId: string,
-  photos: PickedPhoto[],
+  photos: PickedImage[],
   onProgress?: (done: number, total: number) => void,
 ): Promise<UploadOutcome> {
   let added = 0;
   let failed = 0;
-  let capReached = false;
 
   for (const [index, picked] of photos.entries()) {
     let insertedId: string | null = null;
+    let scratch: string | null = null;
     try {
-      const prepared = await preparePhoto(picked);
+      const { photo: prepared, temp } = await preparePhoto(picked);
+      scratch = temp ? prepared.uri : null;
       const path = `${planId}/${userId}/${photoKey()}.jpg`;
 
       const { data: row, error: insertError } = await supabase
@@ -168,23 +153,14 @@ export async function uploadPhotos(
         .single();
 
       if (insertError) {
-        // The trigger raises these two by name. Everything else is a genuine
-        // failure worth counting separately, because a full album is not an
-        // error the person can do anything about by retrying.
-        if (/photo_cap_reached/.test(insertError.message)) {
-          capReached = true;
-          break;
-        }
+        // The trigger raises these two by name. A full album is not something
+        // the person can fix by retrying, so stop rather than fail 19 more.
+        if (/photo_cap_reached/.test(insertError.message)) break;
         throw insertError;
       }
       insertedId = row.id;
 
-      const base64 = await FileSystem.readAsStringAsync(prepared.uri, { encoding: 'base64' });
-      const { error: uploadError } = await supabase.storage
-        .from(PHOTO_BUCKET)
-        .upload(path, decode(base64), { contentType: 'image/jpeg', upsert: false });
-
-      if (uploadError) throw uploadError;
+      await uploadJpeg(PHOTO_BUCKET, path, prepared.uri);
 
       added += 1;
       insertedId = null;
@@ -198,21 +174,18 @@ export async function uploadPhotos(
         await supabase.from('plan_photos').delete().eq('id', insertedId);
       }
     } finally {
+      // The manipulator writes every resize into the cache directory and
+      // nothing else ever collects them, so a 20-photo batch leaves 10MB
+      // behind. Only ours to delete: an untouched photo's uri is the user's
+      // own file in the photo library.
+      if (scratch) {
+        await FileSystem.deleteAsync(scratch, { idempotent: true }).catch(() => {});
+      }
       onProgress?.(index + 1, photos.length);
     }
   }
 
-  return { added, failed, capReached };
-}
-
-export interface SignedPhoto extends PlanPhoto {
-  url: string;
-}
-
-interface SignedBatch {
-  photos: SignedPhoto[];
-  /** When these URLs should be treated as stale. */
-  expiresAt: number;
+  return { added, failed };
 }
 
 /**
@@ -226,8 +199,8 @@ interface SignedBatch {
  * broken tile: the signer reports per-path errors, and a photo we cannot show
  * is better absent than grey.
  */
-export async function signPhotos(photos: PlanPhoto[]): Promise<SignedBatch> {
-  if (!photos.length) return { photos: [], expiresAt: Date.now() + SIGNED_URL_TTL_SECONDS * 1000 };
+export async function signPhotos(photos: PhotoRow[]): Promise<SignedPhoto[]> {
+  if (!photos.length) return [];
 
   const { data, error } = await supabase.storage
     .from(PHOTO_BUCKET)
@@ -244,18 +217,10 @@ export async function signPhotos(photos: PlanPhoto[]): Promise<SignedBatch> {
     }
   }
 
-  return {
-    photos: photos.flatMap((p) => {
-      const url = urlByPath.get(p.storage_path);
-      return url ? [{ ...p, url }] : [];
-    }),
-    expiresAt: Date.now() + SIGNED_URL_TTL_SECONDS * 1000 - RESIGN_MARGIN_MS,
-  };
-}
-
-/** Whether a batch signed at some point in the past is due for re-signing. */
-export function isBatchStale(expiresAt: number, now: number = Date.now()): boolean {
-  return now >= expiresAt;
+  return photos.flatMap((p) => {
+    const url = urlByPath.get(p.storage_path);
+    return url ? [{ ...p, url }] : [];
+  });
 }
 
 /**
@@ -281,10 +246,10 @@ export async function deletePhoto(photo: PlanPhoto): Promise<void> {
  * Every object this person has put in an album, by exact path.
  *
  * `purgeOwnedFiles` in lib/storage.ts works by listing `<userId>/` in buckets
- * that are keyed by owner. This bucket is keyed by *plan*, because that is
- * what the storage policies need to read to decide who may look, so there is
- * no folder to list. The rows are the index instead, which is the other half
- * of why uploads write them first.
+ * keyed by owner. This bucket is keyed by *plan*, because that is what the
+ * storage policies read to decide who may look, so there is no folder to
+ * list. The rows are the index instead, which is the other half of why
+ * uploads write them first.
  */
 export async function listOwnedPhotoPaths(userId: string): Promise<string[]> {
   const { data, error } = await supabase
@@ -293,4 +258,24 @@ export async function listOwnedPhotoPaths(userId: string): Promise<string[]> {
     .eq('uploaded_by', userId);
   if (error) throw error;
   return (data ?? []).map((row) => row.storage_path);
+}
+
+/**
+ * How an album describes itself: "One photo, from Lucía", "12 photos from
+ * Alex", "35 photos from five people".
+ *
+ * One function because the card and the album screen say the same sentence,
+ * and when they each had their own the screen ended up rendering
+ * "1 photos from Lucía".
+ */
+export function albumSummary(rows: Pick<PhotoRow, 'uploaded_by' | 'uploader'>[]): string {
+  const total = rows.length;
+  if (!total) return '';
+
+  const uploaders = new Set(rows.map((r) => r.uploaded_by)).size;
+  const name = rows[0]?.uploader?.display_name;
+
+  if (total === 1) return name ? `One photo, from ${name}` : 'One photo';
+  if (uploaders === 1) return name ? `${total} photos from ${name}` : `${total} photos`;
+  return `${total} photos from ${spellCount(uploaders)} people`;
 }

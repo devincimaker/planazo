@@ -5,12 +5,19 @@ import { decode } from 'base64-arraybuffer';
 import { GROUP_PHOTO_BUCKET, groupPhotoPath } from '@planazo/shared';
 import { supabase } from './supabase';
 
-export async function pickFromLibrary(opts: { square?: boolean } = {}): Promise<string | null> {
+/**
+ * Ask once, phrase the refusal once. Every picker in the app goes through
+ * here, so there is one place that decides what "no" looks like.
+ */
+async function libraryPermitted(): Promise<boolean> {
   const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!perm.granted) {
-    Alert.alert('Photos access needed', 'Allow photo access in Settings to pick an image.');
-    return null;
-  }
+  if (perm.granted) return true;
+  Alert.alert('Photos access needed', 'Allow photo access in Settings to pick an image.');
+  return false;
+}
+
+export async function pickFromLibrary(opts: { square?: boolean } = {}): Promise<string | null> {
+  if (!(await libraryPermitted())) return null;
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],
     allowsEditing: !!opts.square,
@@ -18,6 +25,31 @@ export async function pickFromLibrary(opts: { square?: boolean } = {}): Promise<
     quality: 0.7,
   });
   return result.canceled ? null : (result.assets[0]?.uri ?? null);
+}
+
+export interface PickedImage {
+  uri: string;
+  width: number;
+  height: number;
+}
+
+/**
+ * Several at once, with their dimensions, for the album (PLA-32).
+ *
+ * Full quality on the way out: the album downscales itself before upload, and
+ * compressing twice only costs detail. Returns [] for both a cancel and a
+ * refusal, because neither is an error and callers treat them the same.
+ */
+export async function pickManyFromLibrary(limit: number): Promise<PickedImage[]> {
+  if (!(await libraryPermitted())) return [];
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images'],
+    allowsMultipleSelection: true,
+    selectionLimit: limit,
+    quality: 1,
+  });
+  if (result.canceled) return [];
+  return result.assets.map((a) => ({ uri: a.uri, width: a.width ?? 0, height: a.height ?? 0 }));
 }
 
 export async function takePhoto(): Promise<string | null> {

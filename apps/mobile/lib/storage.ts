@@ -1,12 +1,37 @@
 import { supabase } from './supabase';
+import { PHOTO_BUCKET, listOwnedPhotoPaths } from './photos';
 
 /**
- * Buckets that key their objects on an owner-id folder. Both hold something
- * personal: a face, and screenshots of whatever screen someone was looking at.
+ * Every bucket holding something that belongs to one person, and how to find
+ * their files in it.
+ *
+ * `avatars` and `feedback-screenshots` key objects on an owner-id folder, so
+ * listing that folder is the answer. `plan-photos` cannot: it is keyed by
+ * *plan*, because that is what the storage policies read to decide who may
+ * look, so there is no folder to list and the `plan_photos` rows are the
+ * index instead. A per-bucket lister is what lets one purge cover both
+ * shapes rather than growing a special case per bucket.
  */
-const OWNED_BUCKETS = ['avatars', 'feedback-screenshots'] as const;
+interface PurgeTarget {
+  bucket: string;
+  /** This user's objects still present in the bucket. */
+  remaining: (userId: string) => Promise<string[]>;
+}
 
-type OwnedBucket = (typeof OWNED_BUCKETS)[number];
+const PURGE_TARGETS: PurgeTarget[] = [
+  { bucket: 'avatars', remaining: (userId) => listAll('avatars', userId) },
+  {
+    bucket: 'feedback-screenshots',
+    remaining: (userId) => listAll('feedback-screenshots', userId),
+  },
+  {
+    bucket: PHOTO_BUCKET,
+    // The rows name every path; signing says which of them is still an
+    // object. Re-reading the rows alone would report failure forever, since
+    // removing an object leaves its row untouched until the account cascade.
+    remaining: async (userId) => stillPresent(PHOTO_BUCKET, await listOwnedPhotoPaths(userId)),
+  },
+];
 
 /**
  * `list()` defaults to 100 rows and silently stops there. Somebody who has
@@ -17,11 +42,25 @@ const PAGE_SIZE = 100;
 
 export interface PurgeResult {
   /** Buckets still holding files afterwards. Empty means the purge is clean. */
-  failed: OwnedBucket[];
+  failed: string[];
+}
+
+/**
+ * Which of these paths still exist. `createSignedUrls` reports per path, and
+ * it signs only what is there, so a path that comes back signed is a file
+ * that survived the remove.
+ */
+async function stillPresent(bucket: string, paths: string[]): Promise<string[]> {
+  if (!paths.length) return [];
+  const { data, error } = await supabase.storage.from(bucket).createSignedUrls(paths, 60);
+  if (error) throw error;
+  return (data ?? [])
+    .filter((entry) => entry.signedUrl && !entry.error && entry.path)
+    .map((entry) => entry.path as string);
 }
 
 /** Every object under `<userId>/` in a bucket, following pagination to the end. */
-async function listAll(bucket: OwnedBucket, userId: string): Promise<string[]> {
+async function listAll(bucket: string, userId: string): Promise<string[]> {
   const paths: string[] = [];
 
   for (let offset = 0; ; offset += PAGE_SIZE) {
@@ -60,9 +99,9 @@ async function listAll(bucket: OwnedBucket, userId: string): Promise<string[]> {
  */
 export async function purgeOwnedFiles(userId: string): Promise<PurgeResult> {
   const outcomes = await Promise.all(
-    OWNED_BUCKETS.map(async (bucket) => {
+    PURGE_TARGETS.map(async ({ bucket, remaining }) => {
       try {
-        const paths = await listAll(bucket, userId);
+        const paths = await remaining(userId);
 
         for (let i = 0; i < paths.length; i += PAGE_SIZE) {
           const { error } = await supabase.storage
@@ -71,7 +110,7 @@ export async function purgeOwnedFiles(userId: string): Promise<PurgeResult> {
           if (error) throw error;
         }
 
-        const left = await listAll(bucket, userId);
+        const left = await remaining(userId);
         if (left.length) {
           console.error(`Purge left ${left.length} file(s) in ${bucket} for ${userId}`);
           return bucket;
@@ -84,5 +123,5 @@ export async function purgeOwnedFiles(userId: string): Promise<PurgeResult> {
     }),
   );
 
-  return { failed: outcomes.filter((bucket): bucket is OwnedBucket => bucket !== null) };
+  return { failed: outcomes.filter((bucket): bucket is string => bucket !== null) };
 }

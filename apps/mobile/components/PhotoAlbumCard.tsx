@@ -1,105 +1,58 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ThemedText } from './ui/ThemedText';
 import { Button } from './ui/Button';
-import { supabase } from '../lib/supabase';
+import { PhotoTile } from './ui/PhotoTile';
+import { usePlanPhotos, planPhotosKey } from '../lib/usePlanPhotos';
 import {
   MAX_PHOTOS_PER_PERSON,
   MAX_PHOTOS_PER_PLAN,
+  albumSummary,
   pickPhotos,
-  signPhotos,
   uploadPhotos,
-  type PlanPhoto,
-  type SignedPhoto,
+  type UploadOutcome,
 } from '../lib/photos';
-import { spellCount } from '../lib/words';
-import { colors, radii, spacing, type } from '../theme/tokens';
+import { errorCopy } from '../lib/queryErrors';
+import { colors, radii, spacing } from '../theme/tokens';
 
 /** Tiles the strip shows before it stops and lets the count do the talking. */
 const STRIP_MAX = 4;
-
-export const planPhotosKey = (planId: string) => ['plan-photos', planId] as const;
-
-interface PhotoRow extends PlanPhoto {
-  uploader: { display_name: string } | null;
-}
 
 interface Props {
   planId: string;
   userId: string;
   /** The night has started. Before that there is no album at all. */
   albumOpen: boolean;
-  /** Said yes, or hosts it. Everyone else looks without adding. */
+  /** Was in the plan, so may add to it. Everyone else looks. */
   canAdd: boolean;
-}
-
-interface BatchResult {
-  added: number;
-  failed: number;
-  capReached: boolean;
 }
 
 export function PhotoAlbumCard({ planId, userId, albumOpen, canAdd }: Props) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
-  const [batch, setBatch] = useState<BatchResult | null>(null);
+  const [batch, setBatch] = useState<UploadOutcome | null>(null);
 
-  const { data: rows, isLoading } = useQuery({
-    queryKey: planPhotosKey(planId),
-    enabled: albumOpen,
-    queryFn: async (): Promise<PhotoRow[]> => {
-      const { data, error } = await supabase
-        .from('plan_photos')
-        .select(
-          'id, plan_id, uploaded_by, storage_path, width, height, created_at, uploader:profiles!plan_photos_uploaded_by_fkey(display_name)',
-        )
-        .eq('plan_id', planId)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as unknown as PhotoRow[];
-    },
-  });
-
-  // Signing is a second request that cannot start until the rows land, which
-  // is why the count is known before any image is. The strip below uses that
-  // to reserve its exact shape rather than popping into place.
-  const { data: signed } = useQuery({
-    queryKey: [...planPhotosKey(planId), 'signed', rows?.length ?? 0, rows?.[0]?.id ?? null],
-    enabled: !!rows?.length,
-    // A signature outlives this comfortably; refetching on focus covers the
-    // phone that sat on this screen through lunch.
-    staleTime: 30 * 60 * 1000,
-    queryFn: async () => (await signPhotos(rows ?? [])).photos,
-  });
+  const { rows, signed, error } = usePlanPhotos(planId, { enabled: albumOpen });
 
   const total = rows?.length ?? 0;
   const mine = useMemo(
     () => (rows ?? []).filter((r) => r.uploaded_by === userId).length,
     [rows, userId],
   );
-  const uploaders = useMemo(
-    () => new Set((rows ?? []).map((r) => r.uploaded_by)).size,
-    [rows],
-  );
 
   const upload = useMutation({
     mutationFn: async () => {
       // Ask for no more than the database will accept, so the picker never
       // offers thirty when there is room for six.
-      const room = Math.min(
-        MAX_PHOTOS_PER_PERSON - mine,
-        MAX_PHOTOS_PER_PLAN - total,
-      );
+      const room = Math.min(MAX_PHOTOS_PER_PERSON - mine, MAX_PHOTOS_PER_PLAN - total);
       const picked = await pickPhotos(Math.max(room, 0));
       if (!picked.length) return null;
 
       setProgress({ done: 0, total: picked.length });
-      return uploadPhotos(planId, userId, picked, (done, total) =>
-        setProgress({ done, total }),
-      );
+      return uploadPhotos(planId, userId, picked, (done, of) => setProgress({ done, total: of }));
     },
     onSuccess: (result) => {
       setProgress(null);
@@ -109,10 +62,7 @@ export function PhotoAlbumCard({ planId, userId, albumOpen, canAdd }: Props) {
     onError: () => setProgress(null),
   });
 
-  const openAlbum = useCallback(
-    () => router.push(`/plan/${planId}/album`),
-    [router, planId],
-  );
+  const openAlbum = useCallback(() => router.push(`/plan/${planId}/album`), [router, planId]);
 
   const planFull = total >= MAX_PHOTOS_PER_PLAN;
   const youFull = mine >= MAX_PHOTOS_PER_PERSON;
@@ -120,16 +70,31 @@ export function PhotoAlbumCard({ planId, userId, albumOpen, canAdd }: Props) {
   // An empty album you are not allowed to fill is a locked door. It appears
   // for a bystander only once somebody has actually put something in it.
   if (!albumOpen) return null;
-  if (!total && !canAdd) return null;
+  if (!total && !canAdd && !error) return null;
 
   const strip = (signed ?? []).slice(0, STRIP_MAX);
   const uploading = !!progress;
 
+  // A failed read is not an empty album. Saying "nothing here yet" when the
+  // query never answered tells someone their night was not recorded.
+  if (error) {
+    return (
+      <View style={styles.section}>
+        <ThemedText variant="sectionLabel">Photos</ThemedText>
+        <View style={styles.card}>
+          <View style={styles.summary}>
+            <ThemedText variant="body" color={colors.textSecondary}>
+              {errorCopy(error).title}
+            </ThemedText>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.section}>
-      <ThemedText variant="sectionLabel" color={colors.textMuted}>
-        Photos
-      </ThemedText>
+      <ThemedText variant="sectionLabel">Photos</ThemedText>
 
       <Pressable
         onPress={total ? openAlbum : undefined}
@@ -155,15 +120,21 @@ export function PhotoAlbumCard({ planId, userId, albumOpen, canAdd }: Props) {
           </View>
         ) : total === 1 && !uploading ? (
           <View style={styles.pad}>
-            <Hero photo={signed?.[0]} />
+            <View style={styles.hero}>
+              {signed?.[0] ? (
+                <Image source={{ uri: signed[0].url }} style={styles.fill} resizeMode="cover" />
+              ) : null}
+            </View>
           </View>
         ) : (
           <View style={[styles.pad, styles.strip]}>
-            {(strip.length ? strip : placeholders(Math.min(total, STRIP_MAX))).map(
-              (photo, index) => (
-                <Tile key={typeof photo === 'string' ? photo : photo.id} photo={photo} index={index} />
-              ),
-            )}
+            {strip.length
+              ? strip.map((photo, index) => (
+                  <PhotoTile key={photo.id} url={photo.url} index={index} />
+                ))
+              : Array.from({ length: Math.min(total, STRIP_MAX) }, (_, index) => (
+                  <PhotoTile key={index} index={index} />
+                ))}
           </View>
         )}
 
@@ -171,7 +142,11 @@ export function PhotoAlbumCard({ planId, userId, albumOpen, canAdd }: Props) {
         {total > 0 || uploading || batch ? (
           <View style={styles.summary}>
             <ThemedText variant="body" style={styles.summaryText}>
-              {summaryLine({ total, uploaders, progress, batch, rows: rows ?? [] })}
+              {progress
+                ? `Adding ${progress.done} of ${progress.total}`
+                : batch?.failed
+                  ? `${batch.added} added. ${batch.failed} didn't upload.`
+                  : albumSummary(rows ?? [])}
             </ThemedText>
             {total > 1 && !uploading ? (
               <ThemedText variant="body" color={colors.textFaint}>
@@ -207,70 +182,13 @@ export function PhotoAlbumCard({ planId, userId, albumOpen, canAdd }: Props) {
   );
 }
 
-/** Placeholder keys for tiles whose signature has not arrived yet. */
-function placeholders(count: number): string[] {
-  return Array.from({ length: count }, (_, i) => `pending-${i}`);
-}
-
-function Hero({ photo }: { photo?: SignedPhoto }) {
-  return (
-    <View style={styles.hero}>
-      {photo ? <Image source={{ uri: photo.url }} style={styles.fill} resizeMode="cover" /> : null}
-    </View>
-  );
-}
-
-function Tile({ photo, index }: { photo: SignedPhoto | string; index: number }) {
-  const pending = typeof photo === 'string';
-  return (
-    <View
-      style={[
-        styles.tile,
-        // Alternating fills so a row of tiles still waiting reads as a row
-        // rather than one flat block.
-        { backgroundColor: index % 2 ? colors.photoPlaceholderAlt : colors.photoPlaceholder },
-      ]}
-    >
-      {pending ? null : <Image source={{ uri: photo.url }} style={styles.fill} resizeMode="cover" />}
-    </View>
-  );
-}
-
-function summaryLine({
-  total,
-  uploaders,
-  progress,
-  batch,
-  rows,
-}: {
-  total: number;
-  uploaders: number;
-  progress: { done: number; total: number } | null;
-  batch: BatchResult | null;
-  rows: PhotoRow[];
-}): string {
-  if (progress) return `Adding ${progress.done} of ${progress.total}`;
-  if (batch?.failed) {
-    return `${batch.added} added. ${batch.failed} didn't upload.`;
-  }
-  if (total === 1) {
-    const name = rows[0]?.uploader?.display_name;
-    return name ? `One photo, from ${name}` : 'One photo';
-  }
-  if (uploaders === 1) {
-    const name = rows[0]?.uploader?.display_name;
-    return name ? `${total} photos from ${name}` : `${total} photos`;
-  }
-  return `${total} photos from ${spellCount(uploaders)} people`;
-}
-
 function actionLabel({
   batch,
   planFull,
   youFull,
   uploading,
 }: {
-  batch: BatchResult | null;
+  batch: UploadOutcome | null;
   planFull: boolean;
   youFull: boolean;
   uploading: boolean;
@@ -317,26 +235,20 @@ const styles = StyleSheet.create({
     backgroundColor: colors.photoPlaceholder,
     overflow: 'hidden',
   },
-  strip: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-  },
-  tile: {
-    flex: 1,
-    aspectRatio: 1,
-    borderRadius: radii.photoTile,
-    overflow: 'hidden',
-  },
   fill: {
     width: '100%',
     height: '100%',
+  },
+  strip: {
+    flexDirection: 'row',
+    gap: spacing.xs,
   },
   summary: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.md,
-    paddingVertical: 14,
+    paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     borderTopWidth: 1,
     borderTopColor: colors.divider,

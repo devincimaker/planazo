@@ -98,6 +98,9 @@ export const colors = {
   // it sits beside in a strip.
   photoPlaceholder: palette.clay,
   photoPlaceholderAlt: palette.clay2,
+  // Behind a photo filling the screen. Ink rather than black, so the viewer
+  // belongs to the same warm palette as everything it opened from.
+  photoBackdrop: 'rgba(23,18,21,0.94)',
 } as const;
 
 // Group identity colors (design: circle swatches + avatar backgrounds)

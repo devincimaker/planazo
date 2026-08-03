@@ -174,17 +174,17 @@ DECLARE
   v_plan_total INTEGER;
   v_mine INTEGER;
 BEGIN
-  SELECT COUNT(*) INTO v_plan_total
-  FROM public.plan_photos WHERE plan_id = NEW.plan_id;
+  -- One pass for both ceilings. Two COUNT(*)s over the same predicate meant
+  -- two index scans on every single insert.
+  SELECT COUNT(*), COUNT(*) FILTER (WHERE uploaded_by = NEW.uploaded_by)
+    INTO v_plan_total, v_mine
+    FROM public.plan_photos
+    WHERE plan_id = NEW.plan_id;
 
   IF v_plan_total >= 200 THEN
     RAISE EXCEPTION 'plan_photo_cap_reached'
       USING HINT = 'This album is full at 200 photos.';
   END IF;
-
-  SELECT COUNT(*) INTO v_mine
-  FROM public.plan_photos
-  WHERE plan_id = NEW.plan_id AND uploaded_by = NEW.uploaded_by;
 
   IF v_mine >= 20 THEN
     RAISE EXCEPTION 'user_photo_cap_reached'
@@ -210,17 +210,19 @@ ON CONFLICT (id) DO NOTHING;
 -- raises on `notauuid/x.jpg` is an error where a refusal was wanted, and the
 -- difference is visible to whoever sent it. NULL flows through the predicates
 -- below as false, which is the refusal.
+-- `pg_input_is_valid` rather than an EXCEPTION block: catching the cast would
+-- open a subtransaction on every call, and this is called once per object row
+-- in two storage policies.
 CREATE OR REPLACE FUNCTION public.plan_photo_plan_id(p_name TEXT)
 RETURNS UUID
-LANGUAGE plpgsql
+LANGUAGE sql
 STABLE
 SET search_path = public, storage
 AS $$
-BEGIN
-  RETURN (storage.foldername(p_name))[1]::UUID;
-EXCEPTION WHEN OTHERS THEN
-  RETURN NULL;
-END;
+  SELECT CASE
+    WHEN pg_input_is_valid((storage.foldername(p_name))[1], 'uuid')
+    THEN ((storage.foldername(p_name))[1])::UUID
+  END;
 $$;
 
 REVOKE ALL ON FUNCTION public.plan_photo_plan_id(TEXT) FROM public;

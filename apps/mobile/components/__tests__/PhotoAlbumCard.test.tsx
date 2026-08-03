@@ -1,16 +1,19 @@
 import { render, screen, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PhotoAlbumCard } from '../PhotoAlbumCard';
-import { supabase } from '../../lib/supabase';
-import { signPhotos } from '../../lib/photos';
+import { usePlanPhotos } from '../../lib/usePlanPhotos';
 
-jest.mock('../../lib/supabase', () => ({
-  supabase: { from: jest.fn() },
+// photos.ts reaches the supabase client through lib/images, which reads env
+// at import time. The card never touches it in these tests.
+jest.mock('../../lib/supabase', () => ({ supabase: { from: jest.fn(), storage: {} } }));
+
+jest.mock('../../lib/usePlanPhotos', () => ({
+  usePlanPhotos: jest.fn(),
+  planPhotosKey: (planId: string) => ['plan-photos', planId],
 }));
 
 jest.mock('../../lib/photos', () => ({
   ...jest.requireActual('../../lib/photos'),
-  signPhotos: jest.fn(),
   pickPhotos: jest.fn(),
   uploadPhotos: jest.fn(),
 }));
@@ -19,17 +22,7 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn() }),
 }));
 
-const mockFrom = supabase.from as jest.Mock;
-const mockSign = signPhotos as jest.Mock;
-
-function chain(result: unknown) {
-  const c: any = {};
-  ['select', 'eq', 'order'].forEach((m) => {
-    c[m] = jest.fn(() => c);
-  });
-  c.then = (resolve: (v: unknown) => void) => Promise.resolve(result).then(resolve);
-  return c;
-}
+const mockUsePlanPhotos = usePlanPhotos as jest.Mock;
 
 function photo(id: string, uploader: string, name: string) {
   return {
@@ -44,11 +37,12 @@ function photo(id: string, uploader: string, name: string) {
   };
 }
 
-function prime(rows: unknown[]) {
-  mockFrom.mockImplementation(() => chain({ data: rows, error: null }));
-  mockSign.mockResolvedValue({
-    photos: (rows as any[]).map((r) => ({ ...r, url: `https://signed/${r.id}` })),
-    expiresAt: Date.now() + 3_600_000,
+function prime(rows: ReturnType<typeof photo>[], error: unknown = null) {
+  mockUsePlanPhotos.mockReturnValue({
+    rows,
+    signed: rows.map((r) => ({ ...r, url: `https://signed/${r.id}` })),
+    isLoading: false,
+    error,
   });
 }
 
@@ -56,13 +50,7 @@ function renderCard(props: Partial<Parameters<typeof PhotoAlbumCard>[0]> = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   return render(
     <QueryClientProvider client={client}>
-      <PhotoAlbumCard
-        planId="plan-1"
-        userId="me"
-        albumOpen
-        canAdd
-        {...props}
-      />
+      <PhotoAlbumCard planId="plan-1" userId="me" albumOpen canAdd {...props} />
     </QueryClientProvider>,
   );
 }
@@ -136,5 +124,14 @@ describe('PhotoAlbumCard', () => {
       expect(screen.getByText("You've added your 20 photos to this plan.")).toBeTruthy(),
     );
     expect(screen.queryByText('This album is full')).toBeNull();
+  });
+
+  // A failed read is not an empty album. Claiming emptiness it cannot verify
+  // tells someone their night was never recorded.
+  it('says the album could not be read rather than that it is empty', async () => {
+    prime([], new Error('network'));
+    renderCard();
+    await waitFor(() => expect(screen.queryByText('Nothing here yet.')).toBeNull());
+    expect(screen.getByText('Photos')).toBeTruthy();
   });
 });
