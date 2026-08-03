@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import EditGroupScreen from '../edit';
 import { supabase } from '../../../../../lib/supabase';
 import { pickFromLibrary, uploadGroupPhoto, removeGroupPhoto } from '../../../../../lib/images';
+import { colorForName } from '../../../../../components/ui';
 
 const mockBack = jest.fn();
 
@@ -36,13 +37,15 @@ const mockRemove = removeGroupPhoto as jest.Mock;
 interface GroupRow {
   id: string;
   name: string;
-  color: string;
+  color: string | null;
   image_url: string | null;
 }
 
 const PHOTO_URL = 'https://cdn.example/group-images/g1/cover.jpg?t=1';
 const NO_PHOTO: GroupRow = { id: 'g1', name: 'Padel Dilluns', color: '#F6C453', image_url: null };
 const WITH_PHOTO: GroupRow = { ...NO_PHOTO, image_url: 'https://cdn.example/old.jpg' };
+/** Never picked a colour, so every screen derives one from the name. */
+const NO_COLOUR: GroupRow = { ...NO_PHOTO, color: null };
 
 let groupUpdate: jest.Mock;
 
@@ -175,6 +178,37 @@ describe('Group profile', () => {
     await fireEvent.press(screen.getByTestId('save'));
 
     await waitFor(() => expect(mockBack).toHaveBeenCalled());
+  });
+
+  // create_group assigns color_for_name() so production rows always have one,
+  // but legacy rows and anything inserted straight through the service role
+  // (seed-demo-data.mjs) do not. The editor used to fall back to a fixed
+  // swatch for those, so saving anything at all repainted the group — and once
+  // a photo hides the swatches, invisibly.
+  describe('a group that never picked a colour', () => {
+    it('keeps the colour every other screen already shows for it', async () => {
+      mockPick.mockResolvedValue('file:///picked.jpg');
+      await renderEdit(NO_COLOUR);
+
+      await fireEvent.press(screen.getByTestId('add-photo'));
+      await chooseFromSheet(1);
+      await fireEvent.press(screen.getByTestId('save'));
+
+      await waitFor(() => {
+        expect(groupUpdate).toHaveBeenCalledWith(
+          expect.objectContaining({ color: colorForName('Padel Dilluns') })
+        );
+      });
+    });
+
+    // The dirty check reads the same fallback, so a mismatch would light Save
+    // up on open and offer to save a change nobody made.
+    it('does not open already dirty', async () => {
+      await renderEdit(NO_COLOUR);
+
+      await fireEvent.press(screen.getByTestId('save'));
+      expect(groupUpdate).not.toHaveBeenCalled();
+    });
   });
 
   it('renaming alone leaves the photo untouched', async () => {

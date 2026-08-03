@@ -8,7 +8,7 @@ import { contentViolation } from '../../../../lib/moderation';
 import { removeGroupPhoto, uploadGroupPhoto } from '../../../../lib/images';
 import { captureError } from '../../../../lib/sentry';
 import { MIN_TOUCH_TARGET } from '../../../../lib/a11y';
-import { ThemedText, GroupTile, GroupPhotoField } from '../../../../components/ui';
+import { ThemedText, GroupTile, GroupPhotoField, colorForName } from '../../../../components/ui';
 import { colors, fonts, groupColors, spacing } from '../../../../theme/tokens';
 
 type PhotoDraft = { kind: 'keep' } | { kind: 'remove' } | { kind: 'new'; uri: string };
@@ -37,16 +37,21 @@ export default function EditGroupScreen() {
   });
 
   const draftName = name ?? group?.name ?? '';
-  const draftColor = color ?? group?.color ?? groupColors[0];
+  // The colour this group already has everywhere else. `color` is null for any
+  // group that never picked one, and every other surface derives it from the
+  // name instead — GroupTile, and color_for_name() in the database
+  // (20260729000000). Falling back to a fixed swatch here would repaint the
+  // group on the next save of anything at all, and once a photo hides the
+  // swatches nobody would see it happen. Derived from the *saved* name, so
+  // renaming does not shuffle the colour under you while you type.
+  const savedColor = group?.color ?? colorForName(group?.name ?? '');
+  const draftColor = color ?? savedColor;
   const draftImage =
     photo.kind === 'new' ? photo.uri : photo.kind === 'remove' ? null : group?.image_url ?? null;
   const photoChanged =
     photo.kind === 'new' || (photo.kind === 'remove' && !!group?.image_url);
   const dirty =
-    !!group &&
-    (draftName.trim() !== group.name ||
-      draftColor !== (group.color ?? groupColors[0]) ||
-      photoChanged);
+    !!group && (draftName.trim() !== group.name || draftColor !== savedColor || photoChanged);
   const valid = draftName.trim().length > 0;
 
   const save = useMutation({
