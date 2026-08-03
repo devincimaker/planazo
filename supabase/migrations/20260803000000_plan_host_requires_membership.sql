@@ -477,14 +477,24 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 -- 20260729000002 widened exactly that kind of policy once already, so invitees
 -- could preview a group they had not joined.
 --
--- Scope, so the next reader is not misled about what this bought: only these
--- two policies name created_by, and only these two are changed. The write
--- policies on rsvps (20260731000000) and date_availability (20241229000000)
--- derive membership through the same plans-subquery accident, and they are NOT
--- hardened here — they authorise on `user_id = auth.uid()`, so the worst a
--- removed member could do is edit their own already-deleted rows. They are
--- listed because "which policies are load-bearing" should not have to be
--- rediscovered.
+-- Scope, by criterion rather than by census, so it stays true as policies are
+-- added: these are the policies where created_by confers power over a row
+-- somebody else owns — retitle the plan, add dates to it. That is what has to
+-- carry a membership test. It is why the plans INSERT policy needs nothing
+-- (there `created_by = auth.uid()` asserts authorship of the row you are
+-- writing, which is a different claim), and why the DELETE privilege is gone
+-- entirely in section 4 rather than guarded.
+--
+-- What is NOT hardened here, said plainly because it is the next thing to do
+-- and not because it is harmless: the write policies on rsvps (20260731000000)
+-- and date_availability (20241229000000) reach membership through the same
+-- plans-subquery accident. They authorise on `user_id = auth.uid()`, which
+-- sounds self-limiting and is not — both sets include an INSERT. Widen the
+-- plans SELECT policy and a removed member can put rows back: a 'yes' counts
+-- toward min_people and takes a capped seat, an availability row is what
+-- lock_plan's `ranked` CTE seats from (it tests availability, prior yes and
+-- blocks — never membership), and either one returns them to the plan_locked
+-- and plan_cancelled notification lists.
 DROP POLICY IF EXISTS "Host can edit a live plan" ON public.plans;
 
 CREATE POLICY "Host can edit a live plan"

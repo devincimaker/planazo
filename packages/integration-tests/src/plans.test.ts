@@ -307,7 +307,6 @@ describe('host powers end with membership', () => {
   let fixedPlan: string;
   let flexPlan: string;
   let cancelledPlan: string;
-  let deletablePlan: string;
 
   const statusOf = async (id: string) =>
     ok(await admin.client.from('plans').select('status').eq('id', id).single()).status;
@@ -322,35 +321,28 @@ describe('host powers end with membership', () => {
     // the group's admin, so it satisfies the admin half of every guard and
     // would hide this bug completely.
     gid = (await bed.createGroup(admin)).id;
-    await Promise.all([bed.join(gid, creator), bed.join(gid, bystander)]);
+    await bed.join(gid, creator);
+    await bed.join(gid, bystander);
 
-    [fixedPlan, deletablePlan, cancelledPlan, flexPlan] = await Promise.all([
-      createPlanAs(creator, gid, 'fixed', 'Exile fixed'),
-      createPlanAs(creator, gid, 'fixed', 'Exile deletable'),
-      createPlanAs(creator, gid, 'fixed', 'Exile cancelled'),
-      createPlanAs(creator, gid, 'flexible', 'Exile flexible'),
-    ]);
+    fixedPlan = await createPlanAs(creator, gid, 'fixed', 'Exile fixed');
+    cancelledPlan = await createPlanAs(creator, gid, 'fixed', 'Exile cancelled');
+    flexPlan = await createPlanAs(creator, gid, 'flexible', 'Exile flexible');
 
     // Two yes-RSVPs from people who stay, so lock_plan would genuinely lock if
     // the guard let it through. RSVPs from the creator would not survive the
     // removal — the on_group_member_delete trigger clears them — and the call
     // would stall on below_minimum for the wrong reason.
-    await Promise.all(
-      [admin, bystander].map(async (u) =>
-        ok(await u.client.from('rsvps').insert({ plan_id: fixedPlan, user_id: u.id, response: 'yes' })),
-      ),
-    );
+    for (const u of [admin, bystander]) {
+      ok(
+        await u.client.from('rsvps').insert({ plan_id: fixedPlan, user_id: u.id, response: 'yes' }),
+      );
+    }
 
-    // Availability is written one at a time on purpose. lock_plan seats people
-    // in created_at order, and cap.test.ts leans on that ordering — parallelise
-    // it here and the next capped fixture copied from this one is flaky.
     const option = await addOption(flexPlan, daysFromNow(6), creator);
     await markAvailable(admin, flexPlan, option);
     await markAvailable(bystander, flexPlan, option);
-    await Promise.all([
-      admin.client.rpc('lock_plan', { p_plan_id: flexPlan }).then(ok),
-      admin.client.rpc('cancel_plan', { p_plan_id: cancelledPlan }).then(ok),
-    ]);
+    ok(await admin.client.rpc('lock_plan', { p_plan_id: flexPlan }));
+    ok(await admin.client.rpc('cancel_plan', { p_plan_id: cancelledPlan }));
 
     // The removal itself, exactly as group/[id]/manage.tsx does it.
     ok(
@@ -381,11 +373,15 @@ describe('host powers end with membership', () => {
     });
   });
 
-  it('refuses the direct writes too: rename, delete, extra dates', async () => {
+  it('refuses the direct writes too: rename, extra dates', async () => {
     // No .select() on the writes. PostgREST only adds RETURNING when you ask
     // for the row back, and without RETURNING the SELECT policy never runs —
-    // so "they cannot read the plan" is not the protection here. The UPDATE
-    // and DELETE policies have to stop this on their own.
+    // so "they cannot read the plan" is not the protection here. The two write
+    // policies have to stop this on their own.
+    //
+    // Deleting the plan is not tested from here: the privilege is revoked for
+    // everyone, so a removed member's DELETE and a sitting admin's are the same
+    // refusal. The last case in this block pins it, with the error code.
     await creator.client
       .from('plans')
       .update({ title: 'Renamed from outside' })
@@ -393,9 +389,6 @@ describe('host powers end with membership', () => {
     expect(ok(await admin.client.from('plans').select('title').eq('id', fixedPlan).single()).title).toBe(
       'Exile fixed',
     );
-
-    await creator.client.from('plans').delete().eq('id', deletablePlan);
-    expect(ok(await admin.client.from('plans').select('id').eq('id', deletablePlan))).toHaveLength(1);
 
     await creator.client.from('plan_date_options').insert({ plan_id: flexPlan, date: daysFromNow(9) });
     expect(ok(await admin.client.from('plan_date_options').select('id').eq('plan_id', flexPlan))).toHaveLength(1);
