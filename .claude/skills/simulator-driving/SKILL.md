@@ -19,7 +19,14 @@ cat .env.worktree            # PLANAZO_SIM_UDID, PLANAZO_SIM_NAME, PLANAZO_METRO
 pnpm wt:list                 # every worktree's slot
 ```
 
-`sim.py` resolves the UDID from `.env.worktree` (or `apps/mobile/.env`) on its own.
+`sim.py` resolves the simulator on its own, in this order: `PLANAZO_SIM_UDID`
+in the environment, then `.env.worktree`, then `IOS_SIMULATOR_UDID` in
+`apps/mobile/.env`, and finally the simulator **name** in `IOS_SIMULATOR`,
+looked up through `simctl` (preferring a booted one, and never matching
+`iPhone 16 Pro` to `iPhone 16 Pro Max`). That last step is what makes the
+helper work in the **main checkout**, whose `.env` records only a name — before
+it existed, every `sim.py` call from main died on "No simulator UDID found".
+
 Never hardcode a UDID from a previous session — they change per worktree.
 
 ## The helper
@@ -28,6 +35,9 @@ Never hardcode a UDID from a previous session — they change per worktree.
 python3 .claude/skills/simulator-driving/sim.py ls              # labelled elements + y positions
 python3 .claude/skills/simulator-driving/sim.py tap "Change"    # substring match
 python3 .claude/skills/simulator-driving/sim.py tap "Open" --exact
+python3 .claude/skills/simulator-driving/sim.py unblock         # clear a system alert
+python3 .claude/skills/simulator-driving/sim.py reboot          # reboot + wait until drivable
+python3 .claude/skills/simulator-driving/sim.py ready           # wait after someone else's boot
 python3 .claude/skills/simulator-driving/sim.py shot before.png
 ```
 
@@ -36,6 +46,21 @@ screenshots as evidence for the user. Labels are composed by React Native from
 the whole subtree, so a card reads as
 `'Weekend Crew, Confirmed, Board games and snacks, …'` — match a distinctive
 fragment.
+
+**`tap` tells you whether the tap did anything.** It prints `screen changed` or
+`screen did NOT change`, and on no-change it lists the other elements your
+needle matched. Believe that line: a tap that reports a label but changes
+nothing landed on something inert.
+
+Two things `tap` will not do, both of which used to look like "taps are broken":
+
+- **It never taps the root `Application` element**, whose frame is the whole
+  screen and whose label is the app's name. `tap "Planazo"` used to tap the
+  dead centre of whatever was showing. That is a blind tap, and on the profile
+  sheet it lands on *Sign out*.
+- **It prefers a tappable type over tree order.** A `StaticText` containing
+  your needle no longer wins over a `Button` further down the tree. This is the
+  whole story behind blocker 2 below.
 
 **If a tap "succeeds" but nothing changes**, the tap probably landed on the
 element's centre, which on a tall card can be a nested view that swallows it.
@@ -84,24 +109,111 @@ simulators from before then — or the main checkout's, if it predates a manual
 sequence that used to raise the alert (deep link over the dev-client UI)
 connects silently.
 
-**If the alert is already up**, it is owned by SpringBoard, not the app, and
-that is why agents get stuck. All of these **fail silently** (they report
-success and change nothing):
-
-- `idb ui tap` on the Open button — reports the tap, alert stays
-- `idb ui key 40` (Return) — no effect
-- AppleScript `click at {x,y}` on the Simulator window — lands on the layer *under* the alert
-- `xcrun simctl terminate` + relaunch — the alert outlives the app
-
-The only known dismissal is a device reboot — write the approvals first so it
-is also the last:
+**If the alert is already up, first move:**
 
 ```bash
-xcrun simctl shutdown "$UDID" && xcrun simctl boot "$UDID"
-until xcrun simctl list devices | grep -q "$UDID) (Booted)"; do sleep 2; done
+python3 .claude/skills/simulator-driving/sim.py unblock
 ```
 
-Do not keep retrying taps — that is the loop that eats a session.
+It taps the confirm *button*, checks the alert actually went, clears any alert
+queued behind it, and reboots the device by itself if tapping genuinely fails.
+It is safe to run when nothing is stuck (it says so and exits).
+
+### Why this looked unkillable
+
+The alert is owned by SpringBoard rather than the app, and that led to the
+conclusion that taps cannot reach it. **idb's taps do reach SpringBoard**:
+tapping a home-screen icon by frame through `idb ui tap` launches the app, so
+HID events reach SpringBoard's own UI perfectly well.
+
+At least part of the "taps do nothing" reports were the helper aiming at the
+wrong element, because the alert lists its **title before its buttons**:
+
+```
+StaticText  'Open in "Planazo"?'     <- substring match for "Open" hit this
+Button      'Cancel'
+Button      'Open'                   <- the thing you meant
+```
+
+`sim.py tap "Open"` matched by substring in tree order, so it tapped the
+*title*, which is inert. It then printed `tapped 'Open in "Planazo"?'` and
+exited 0. A tap that reports success and changes nothing reads as "SpringBoard
+is refusing taps", so the next step was a reboot, and the tool's own error text
+recommended exactly that. `sim.py` now ranks tappable types above tree order
+and reports whether the screen changed, so this specific trap is gone.
+
+**Still unverified:** whether a correctly aimed tap on the `Open` *button*
+dismisses this particular alert. It has not been observed working, because the
+alert could not be reproduced on a simulator whose scheme approval was already
+recorded, which is every simulator once it has been approved even once. These
+were all seen to fail and are not worth retrying: `idb ui key 40` (Return),
+AppleScript `click at {x,y}` on the Simulator window (it lands on the layer
+*under* the alert), and `simctl terminate` plus relaunch (the alert outlives
+the app). `unblock` tries the button, verifies, and reboots if it did not work,
+so it lands somewhere sane either way.
+
+A second reason it looks immortal: **every queued `simctl openurl` raises its
+own alert.** Clear one and the next appears, identical. `unblock` loops.
+
+### Do not restart SpringBoard
+
+`launchctl kickstart -k user/foreground/com.apple.SpringBoard` is the obvious
+shortcut and it is a trap. Measured on iPhone 16 Pro / iOS 18.5: the home
+screen comes back in under a second and looks perfectly healthy, but
+**accessibility never returns** — `idb ui describe-all` answers with a single
+unlabelled element from then on. Killing and reconnecting `idb_companion` does
+not fix it. Only a full device reboot does. You lose more time than you saved.
+
+### Rebooting, and the wait everybody gets wrong
+
+```bash
+python3 .claude/skills/simulator-driving/sim.py reboot
+```
+
+The old snippet waited for `(Booted)` in `simctl list devices`. That state
+arrives in **~1.3s**, while taps and `describe-all` do not work for about
+**16s** more. Anything run in that window fails in a way that looks like a
+brand new problem. `sim.py reboot` and `sim.py ready` wait for the accessibility
+tree instead of the device state, which is the only honest signal.
+
+### When it fires, so you can avoid it
+
+Once a scheme is approved on a simulator, the prompt is spent. Deep links do
+**not** raise it against an app that has been opened through that scheme
+before: app foregrounded, app backgrounded on the home screen, and app fully
+terminated were all tested on an approved simulator and went straight through.
+
+So it fires on a **simulator that has never approved the scheme**, which in
+practice means a newly created one, or one where `npx expo run:ios` has just
+installed a fresh binary, right before an agent fires its first deep link.
+Expect it after a build, not during ordinary driving. Write the approvals above
+and it stops being possible at all. Failing that, launch the app once (tap its
+icon, or `xcrun simctl launch`) before deep linking, and keep `unblock` in the
+loop:
+
+```bash
+xcrun simctl openurl "$UDID" "com.planazo.app://expo-development-client/?url=..."
+python3 .claude/skills/simulator-driving/sim.py unblock
+```
+
+### Retry an `openurl` only when it *says* it failed
+
+The first deep link after a reboot usually dies like this, even though
+accessibility is already answering:
+
+```
+An error was encountered processing the command (domain=NSPOSIXErrorDomain, code=60)
+Simulator device failed to open com.planazo.app://…
+Operation timed out
+```
+
+That one is safe to repeat: it never reached SpringBoard, so it queued nothing.
+A second attempt a few seconds later succeeds.
+
+The opposite case is the dangerous one. **Never retry an `openurl` that
+reported success but did not visibly connect** — each of those queues another
+"Open in Planazo?" alert behind the one already on screen, which is how a
+single stuck alert turns into four. Run `unblock` instead, then deep link once.
 
 ## Signing in
 
