@@ -145,6 +145,58 @@ itself.
   honest verdict there even when no local database can give one. Local suite
   runs are a convenience, not the safety net.
 
+## Every PR ends with "See it working"
+
+A green CI run says the code does what its tests say. It does not say the
+feature is worth having, and the person who has to decide that is reviewing on
+a phone-sized screen with limited time. So **every PR that changes anything a
+user can see ends with a `## See it working` section**: the shortest path from
+a fresh checkout to the change happening in front of them.
+
+Write it for someone who has not read the diff. Name the accounts, name the
+taps, say what should appear. If setup is needed, give the exact command, and
+prefer one that is already committed over a snippet to paste. Two accounts and
+a login are fine; a hand-written SQL console session is not.
+
+```markdown
+## See it working
+
+    pnpm wt:new feat/pla-37-waiting-list --db   # if you don't have it
+    cd ../planazo-worktrees/feat-pla-37-waiting-list
+    pnpm wt:start --login
+    pnpm demo:waitlist                          # seeds the scenario
+
+1. **Full plan.** Top of the feed, "Padel, two courts" caps at 2 and both
+   places are gone. The primary reads **"Take the next spot"**, an outline
+   button, not the dead "Full" it used to be.
+2. **Join.** Tap it. The footer becomes **"You're 2nd in line"** (Lucia is
+   already waiting). Open the plan to see "If a spot opens, it's yours."
+3. **Watch a place open.** Profile → sign out → sign in as
+   `alex.rivera@example.com` / `Planazo123!`, open the same plan, tap
+   **Change** to withdraw.
+4. **Back to your account.** The plan now reads **"You're in"**, and the
+   people row shows you instead of Alex.
+
+Not covered by this walkthrough: promotion by push (the simulator has no
+APNs), and the re-lock ordering, which only integration tests reach.
+```
+
+That last paragraph matters as much as the steps. **Say what the walkthrough
+cannot show**, so nobody reads "verified on device" as broader than it is.
+
+Rules of thumb:
+
+- **A path a real user can take beats a script.** Withdrawing as another
+  account proves the trigger fires on the path production uses; deleting the
+  row with the service role only proves the trigger exists.
+- **Seed with a committed script**, added in the same PR, not a throwaway.
+  Anything worth stepping through twice is worth `pnpm demo:<thing>`.
+- **Screenshots go in the PR body**, especially before/after for anything
+  visual. A reviewer who can see it may not need to run it at all.
+- **Say when there is nothing to see.** A refactor, a CI change or a migration
+  with no UI writes `## See it working` → "Nothing user-visible; the proof is
+  the N tests in `<file>`." Silence reads like an oversight.
+
 ## iOS Simulator
 
 **Inside a worktree, `pnpm wt:start` does all of this for you** — it boots the

@@ -199,8 +199,8 @@ describe('lock_plan honours the cap', () => {
     ).map((r) => r.user_id);
     expect(seated).toHaveLength(2);
     expect(seated.sort()).toEqual([host.id, memberA.id].sort());
-    // The two who missed out get no row at all — the waiting list that gives
-    // them somewhere to land is the next change, not this one.
+    // The two who missed out are not seated. Where they DO land — the waiting
+    // list, in this same first-come order — is waitlist.test.ts (PLA-37).
     expect(seated).not.toContain(memberB.id);
     expect(seated).not.toContain(memberC.id);
   });

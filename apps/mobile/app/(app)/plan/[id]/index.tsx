@@ -22,10 +22,11 @@ import {
   isPlanFull,
   isPlanPast,
   planLastDate,
+  waitlistPosition,
   type DateCount,
 } from '@planazo/shared';
 import { supabase } from '../../../../lib/supabase';
-import { deleteOwnRsvp } from '../../../../lib/rsvp';
+import { deleteOwnRsvp, offerWaitingList, waitingLabel } from '../../../../lib/rsvp';
 import { actionErrorCopy, errorCopy, isNotFoundError } from '../../../../lib/queryErrors';
 import { MIN_TOUCH_TARGET } from '../../../../lib/a11y';
 import { useAuthStore } from '../../../../stores/authStore';
@@ -191,7 +192,7 @@ export default function PlanDetailScreen() {
   };
 
   const answerRsvp = useMutation({
-    mutationFn: async (response: 'yes' | 'no') => {
+    mutationFn: async (response: 'yes' | 'no' | 'pending') => {
       const { error } = await supabase.from('rsvps').upsert(
         { plan_id: id, user_id: user?.id, response },
         { onConflict: 'plan_id,user_id' }
@@ -199,7 +200,9 @@ export default function PlanDetailScreen() {
       if (error) throw error;
     },
     onSuccess: invalidateAll,
-    onError: alertActionError,
+    // The plan can fill between the render and the tap. Rather than a dead end,
+    // offer the thing that now exists (PLA-37).
+    onError: (error) => offerWaitingList(error, () => answerRsvp.mutate('pending')),
   });
 
   const clearRsvp = useMutation({
@@ -405,7 +408,12 @@ export default function PlanDetailScreen() {
     // seats aren't handed out until the lock.
     const isFull = !isOpenFlexible && isPlanFull({ max_people: plan.max_people, rsvps });
 
+    // Only you see your own place in the queue (PLA-37). Counted from the rows
+    // already fetched, so it costs nothing.
+    const waitPosition = waitlistPosition(rsvps, user?.id);
+
     return {
+      waitPosition,
       isFlexible,
       isLocked,
       isCancelled,
@@ -606,6 +614,20 @@ export default function PlanDetailScreen() {
 
     if (!d.isOpenFlexible) {
       // Fixed plans and locked flexible plans: a plain yes/no
+      if (d.userRsvp?.response === 'pending') {
+        return (
+          <View style={styles.footerWaiting}>
+            <AnswerFooter
+              answered="pending"
+              answerLabel={waitingLabel(d.waitPosition)}
+              onChange={() => clearRsvp.mutate()}
+            />
+            <ThemedText variant="caption" color={colors.textMuted} style={styles.footerNote}>
+              If a spot opens, it's yours. We'll tell you.
+            </ThemedText>
+          </View>
+        );
+      }
       if (d.userRsvp?.response === 'yes' || d.userRsvp?.response === 'no') {
         return (
           <AnswerFooter answered={d.userRsvp.response} onChange={() => clearRsvp.mutate()} />
@@ -616,6 +638,7 @@ export default function PlanDetailScreen() {
           full={d.isFull}
           onYes={() => answerRsvp.mutate('yes')}
           onNo={() => answerRsvp.mutate('no')}
+          onWait={() => answerRsvp.mutate('pending')}
         />
       );
     }
@@ -1183,6 +1206,9 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   footerEnded: {
+    gap: spacing.sm + 1,
+  },
+  footerWaiting: {
     gap: spacing.sm + 1,
   },
   footerNote: {

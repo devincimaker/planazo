@@ -211,17 +211,70 @@ describe('PlanDetailScreen — fixed plans', () => {
       profile: { display_name: `Person ${i}` },
     }));
 
-    it('offers "Full" instead of "I\'m in" when every place is taken', async () => {
+    it('offers the waiting list instead of "I\'m in" when every place is taken', async () => {
       prime({
         plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(7) },
         rsvps: sixOthers,
       });
       await renderDetail();
 
-      await waitFor(() => expect(screen.getByText('Full')).toBeTruthy());
+      // PLA-37: this was a dead "Full" button, which was honest and useless.
+      await waitFor(() => expect(screen.getByText('Take the next spot')).toBeTruthy());
       expect(screen.queryByText("I'm in")).toBeNull();
+      expect(screen.queryByText('Full')).toBeNull();
       // Saying no is still worth doing — it takes you off what it's waiting on.
       expect(screen.getByText("Can't make it")).toBeTruthy();
+    });
+
+    it('takes a place in the queue rather than a seat', async () => {
+      prime({
+        plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(7) },
+        rsvps: sixOthers,
+      });
+      await renderDetail();
+
+      await waitFor(() => expect(screen.getByText('Take the next spot')).toBeTruthy());
+      await fireEvent.press(screen.getByText('Take the next spot'));
+
+      await waitFor(() =>
+        expect(rsvpsChain.upsert).toHaveBeenCalledWith(
+          { plan_id: 'plan-1', user_id: 'me', response: 'pending' },
+          { onConflict: 'plan_id,user_id' }
+        )
+      );
+    });
+
+    it('shows where you stand once you are on the list', async () => {
+      prime({
+        plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(7) },
+        rsvps: [
+          ...sixOthers,
+          { user_id: 'w-1', response: 'pending', waitlist_seq: 1, profile: { display_name: 'A' } },
+          { user_id: 'me', response: 'pending', waitlist_seq: 2, profile: { display_name: 'Me' } },
+        ],
+      });
+      await renderDetail();
+
+      await waitFor(() => expect(screen.getByText("You're 2nd in line")).toBeTruthy());
+      // Not the join button any more, and not "You're in" either.
+      expect(screen.queryByText('Take the next spot')).toBeNull();
+      expect(screen.queryByText("You're in")).toBeNull();
+      expect(screen.getByText("If a spot opens, it's yours. We'll tell you.")).toBeTruthy();
+    });
+
+    it('lets you leave the queue the same way you leave a plan', async () => {
+      prime({
+        plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(7) },
+        rsvps: [
+          ...sixOthers,
+          { user_id: 'me', response: 'pending', waitlist_seq: 1, profile: { display_name: 'Me' } },
+        ],
+      });
+      await renderDetail();
+
+      await waitFor(() => expect(screen.getByText("You're next in line")).toBeTruthy());
+      await fireEvent.press(screen.getByText('Change'));
+      await waitFor(() => expect(rsvpsChain.delete).toHaveBeenCalled());
     });
 
     it('says "that\'s everyone" rather than "room for 0 more"', async () => {

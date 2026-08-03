@@ -128,6 +128,10 @@ export default function DesignGallery() {
         <AnswerFooter answered="yes" />
         <AnswerFooter answered="yes" answerLabel="You sent 2 dates" />
         <AnswerFooter answered="no" />
+        <AnswerFooter full onWait={() => {}} />
+        <AnswerFooter answered="pending" answerLabel="You're next in line" />
+        <AnswerFooter answered="pending" answerLabel="You're 3rd in line" />
+        <AnswerFooter full />
       </Section>
 
       <Section title="Card with stripe + rows">

@@ -299,7 +299,9 @@ describe('isPlanFullError / actionErrorCopy', () => {
   it('says the plan is full rather than that something broke', () => {
     const copy = actionErrorCopy(planFull);
     expect(copy.title).toBe("This one's full");
-    expect(copy.body).toMatch(/drops out/i);
+    // Since PLA-37 this points at the waiting list, which is the thing the
+    // person can actually do about it.
+    expect(copy.body).toMatch(/take the next spot/i);
   });
 
   it('never tells someone a write "didn\'t load"', () => {
