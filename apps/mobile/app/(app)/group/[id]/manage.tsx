@@ -535,7 +535,7 @@ export default function ManageGroupScreen() {
                 accessibilityRole="button"
                 testID="edit-group"
               >
-                <ThemedText variant="bodyStrong">Group profile</ThemedText>
+                <ThemedText variant="bodyStrong">Edit group profile</ThemedText>
                 <ThemedText variant="body" color={colors.textFaint}>
                   ›
                 </ThemedText>
