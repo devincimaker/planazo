@@ -2,6 +2,14 @@ import { Stack } from 'expo-router';
 import { colors, sheetDetents } from '../../theme/tokens';
 import { ToastHost } from '../../components/ui';
 import { ScreenshotFeedback } from '../../components/ScreenshotFeedback';
+import { useRealtimeCacheSync } from '../../lib/realtime';
+
+// A component rather than a call in AppLayout: the hook subscribes to auth
+// state, and nothing visual here should re-render with it.
+function RealtimeCacheSync() {
+  useRealtimeCacheSync();
+  return null;
+}
 
 export default function AppLayout() {
   return (
@@ -59,6 +67,7 @@ export default function AppLayout() {
         />
         <Stack.Screen name="plan/[id]" options={{ headerShown: false }} />
       </Stack>
+      <RealtimeCacheSync />
       <ScreenshotFeedback />
       <ToastHost />
     </>

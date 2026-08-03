@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { Session, User } from '@supabase/supabase-js';
 import type { Profile } from '@planazo/shared';
+import { setSentryUser } from '../lib/sentry';
 
 interface AuthState {
   session: Session | null;
@@ -22,10 +23,18 @@ export const useAuthStore = create<AuthState>((set) => ({
   profile: null,
   isLoading: true,
   isInitialized: false,
-  setSession: (session) => set({ session, user: session?.user ?? null }),
+  setSession: (session) => {
+    // Every session change flows through here, so this is the one place the
+    // Sentry identity (Supabase id only) tracks who events belong to.
+    setSentryUser(session?.user?.id ?? null);
+    set({ session, user: session?.user ?? null });
+  },
   setUser: (user) => set({ user }),
   setProfile: (profile) => set({ profile }),
   setIsLoading: (isLoading) => set({ isLoading }),
   setIsInitialized: (isInitialized) => set({ isInitialized }),
-  logout: () => set({ session: null, user: null, profile: null }),
+  logout: () => {
+    setSentryUser(null);
+    set({ session: null, user: null, profile: null });
+  },
 }));

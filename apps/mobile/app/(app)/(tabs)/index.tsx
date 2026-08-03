@@ -431,9 +431,9 @@ export default function FeedScreen() {
 
       <View style={styles.filters}>
         <Chip label="All" active={filter === 'all'} onPress={() => setFilter('all')} />
-        <Chip label="Needs you" active={filter === 'needs'} onPress={() => setFilter('needs')} />
+        <Chip label="Unanswered" active={filter === 'needs'} onPress={() => setFilter('needs')} />
         <Chip
-          label="Confirmed"
+          label="Happening"
           active={filter === 'happening'}
           onPress={() => setFilter('happening')}
         />
@@ -528,8 +528,15 @@ export default function FeedScreen() {
                           {groupName}
                         </ThemedText>
                       </View>
+                      {/*
+                        Two independent facts share one slot, so the label has
+                        to pick. "Unanswered" is the one that is always true
+                        when it shows: a plan with its numbers can still be
+                        waiting on your reply, and the old "Needs you" claimed
+                        the plan was short of people when often it was not.
+                      */}
                       <Badge
-                        label={d.needs ? 'Needs you' : d.confirmed ? 'Confirmed' : 'Open'}
+                        label={d.needs ? 'Unanswered' : d.confirmed ? 'Confirmed' : 'Open'}
                         tone={d.needs ? 'open' : d.confirmed ? 'confirmed' : 'muted'}
                       />
                     </View>

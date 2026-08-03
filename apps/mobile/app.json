@@ -44,6 +44,14 @@
           "photosPermission": "Planazo uses your photo library for your profile photo and for screenshots you attach to feedback.",
           "cameraPermission": "Planazo uses the camera to take a profile photo."
         }
+      ],
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://de.sentry.io/",
+          "organization": "thrive-aq",
+          "project": "planazo"
+        }
       ]
     ],
     "extra": {
