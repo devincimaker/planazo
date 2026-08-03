@@ -181,7 +181,7 @@ describe('FeedScreen', () => {
     expect(screen.getByText('Escape room revenge')).toBeTruthy();
     expect(screen.getByText('Domingueros')).toBeTruthy();
     expect(screen.getByText('2 dates on the table')).toBeTruthy();
-    expect(screen.getAllByText('Needs you').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Unanswered').length).toBeGreaterThan(0);
   });
 
   it('picks dates inline and sends them (2a)', async () => {
@@ -258,10 +258,12 @@ describe('FeedScreen', () => {
     await renderFeed();
     await waitFor(() => expect(screen.getByText('Sunday roast')).toBeTruthy());
 
-    // fixedAnswered has 3 yes ≥ min 3 → Confirmed badge
-    expect(screen.getAllByText('Confirmed').length).toBeGreaterThan(0);
+    // fixedAnswered has 3 yes ≥ min 3 → Confirmed badge. Exactly one match:
+    // the filter chip is "Happening", so "Confirmed" now only ever names the
+    // badge (PLA-43).
+    expect(screen.getByText('Confirmed')).toBeTruthy();
 
-    await fireEvent.press(screen.getByRole('button', { name: 'Needs you' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Unanswered' }));
     expect(screen.queryByText('Sunday roast')).toBeNull();
     expect(screen.getByText('Padel + pizza')).toBeTruthy();
   });
