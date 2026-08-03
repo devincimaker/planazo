@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ProfileEdit from '../edit';
 import { useAuthStore } from '../../../../stores/authStore';
 import { supabase } from '../../../../lib/supabase';
-import { pickFromLibrary, uploadJpeg } from '../../../../lib/images';
+import { pickFromLibrary, uploadAvatar } from '../../../../lib/images';
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
@@ -19,7 +19,7 @@ jest.mock('../../../../lib/supabase', () => ({
 jest.mock('../../../../lib/images', () => ({
   pickFromLibrary: jest.fn(),
   takePhoto: jest.fn(),
-  uploadJpeg: jest.fn(() => Promise.resolve()),
+  uploadAvatar: jest.fn(() => Promise.resolve('https://cdn.example/me/avatar.jpg?t=1')),
 }));
 
 jest.mock('expo-router', () => ({
@@ -39,7 +39,7 @@ jest.mock('react-native-reanimated', () => {
 const mockFrom = supabase.from as jest.Mock;
 const mockStorageFrom = supabase.storage.from as jest.Mock;
 const mockPick = pickFromLibrary as jest.Mock;
-const mockUpload = uploadJpeg as jest.Mock;
+const mockUpload = uploadAvatar as jest.Mock;
 
 const ME = {
   id: 'me',
@@ -155,7 +155,7 @@ describe('ProfileEdit', () => {
 
     await fireEvent.press(screen.getByTestId('save'));
     await waitFor(() => {
-      expect(mockUpload).toHaveBeenCalledWith('avatars', 'me/avatar.jpg', 'file:///picked.jpg', true);
+      expect(mockUpload).toHaveBeenCalledWith('me', 'file:///picked.jpg');
       expect(profileUpdate).toHaveBeenCalledWith({
         avatar_url: expect.stringContaining('https://cdn.example/me/avatar.jpg?t='),
       });

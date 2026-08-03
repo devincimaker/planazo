@@ -40,6 +40,7 @@ interface GroupRow {
   role: string;
   name: string;
   color: string | null;
+  imageUrl: string | null;
   members: number;
   needsYou: number;
 }
@@ -57,7 +58,7 @@ export default function GroupsScreen() {
     queryFn: async (): Promise<GroupRow[]> => {
       const { data: memberships, error } = await supabase
         .from('group_members')
-        .select('group_id, role, groups:group_id(id, name, color, created_at)')
+        .select('group_id, role, groups:group_id(id, name, color, image_url, created_at)')
         .eq('user_id', user!.id);
       if (error) throw error;
 
@@ -105,6 +106,7 @@ export default function GroupsScreen() {
           role: m.role,
           name: m.groups?.name ?? 'Group',
           color: m.groups?.color ?? null,
+          imageUrl: m.groups?.image_url ?? null,
           createdAt: m.groups?.created_at ?? '',
           members: memberCount[m.group_id] ?? 0,
           needsYou: needsCount[m.group_id] ?? 0,
@@ -300,7 +302,7 @@ export default function GroupsScreen() {
                 ]}
                 testID={`group-row-${g.id}`}
               >
-                <GroupTile name={g.name} color={g.color} size={42} />
+                <GroupTile name={g.name} color={g.color} imageUrl={g.imageUrl} size={42} />
                 <View style={styles.rowBody}>
                   <ThemedText variant="bodyStrong" style={styles.rowName} numberOfLines={1}>
                     {g.name}

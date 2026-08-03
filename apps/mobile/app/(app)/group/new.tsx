@@ -15,8 +15,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../../lib/supabase';
 import { contentViolation } from '../../../lib/moderation';
 import { useFriends } from '../../../lib/useFriends';
+import { uploadGroupPhoto } from '../../../lib/images';
+import { captureError } from '../../../lib/sentry';
 import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
-import { ThemedText, Card, Button, Avatar, GroupTile } from '../../../components/ui';
+import {
+  ThemedText,
+  Card,
+  Button,
+  Avatar,
+  GroupTile,
+  GroupPhotoField,
+  showToast,
+} from '../../../components/ui';
 import { colors, fonts, groupColors, radii, spacing, type } from '../../../theme/tokens';
 
 export default function NewGroupScreen() {
@@ -38,6 +48,7 @@ export default function NewGroupScreen() {
     Math.min(groupColors.length - 1, Math.max(0, Number(params.color) || 0))
   );
   const [picks, setPicks] = useState<string[]>([]);
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
 
   // 17c "Your people": accepted friendships, either direction.
   const { friends } = useFriends();
@@ -62,6 +73,26 @@ export default function NewGroupScreen() {
         p_color: groupColors[colorIdx],
       });
       if (groupError) throw groupError;
+
+      // PLA-30: the storage policy keys on being an admin of the group, and
+      // that membership only exists once create_group has returned, so the
+      // photo cannot go up any earlier than this.
+      if (photoUri) {
+        try {
+          const imageUrl = await uploadGroupPhoto(group.id, photoUri);
+          const { error: photoError } = await supabase
+            .from('groups')
+            .update({ image_url: imageUrl })
+            .eq('id', group.id);
+          if (photoError) throw photoError;
+        } catch (e) {
+          // The group exists by now. Failing the whole create would read as
+          // "nothing happened" while leaving one behind, so the group wins and
+          // the photo is something they can add again.
+          captureError(e, 'group photo upload');
+          showToast("Group created, but the photo didn't upload. Try again from Group profile.");
+        }
+      }
 
       await Promise.all(
         picks.map((invitee) =>
@@ -116,7 +147,12 @@ export default function NewGroupScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.nameRow}>
-            <GroupTile name={named ? name : '?'} color={groupColors[colorIdx]} size={52} />
+            <GroupTile
+              name={named ? name : '?'}
+              color={groupColors[colorIdx]}
+              imageUrl={photoUri}
+              size={52}
+            />
             <View style={styles.nameBlock}>
               <TextInput
                 style={styles.nameInput}
@@ -130,25 +166,41 @@ export default function NewGroupScreen() {
             </View>
           </View>
 
-          <View style={styles.section}>
-            <ThemedText variant="sectionLabel">Colour</ThemedText>
-            <View style={styles.swatches}>
-              {groupColors.map((swatch, i) => (
-                <Pressable
-                  key={swatch}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: i === colorIdx }}
-                  onPress={() => setColorIdx(i)}
-                  style={[
-                    styles.swatch,
-                    { backgroundColor: swatch },
-                    i === colorIdx && styles.swatchSelected,
-                  ]}
-                  testID={`swatch-${i}`}
-                />
-              ))}
+          <GroupPhotoField
+            uri={photoUri}
+            uploading={createGroup.isPending && !!photoUri}
+            caption="The photo is the group's tile everywhere."
+            onPick={setPhotoUri}
+            onRemove={() => setPhotoUri(null)}
+          />
+
+          {photoUri ? (
+            // Group profile says the same thing when a photo hides the
+            // swatches. Saying nothing here made them look like a glitch.
+            <ThemedText variant="sub">
+              Colour is hidden while a photo is set. It comes back the moment the photo goes.
+            </ThemedText>
+          ) : (
+            <View style={styles.section}>
+              <ThemedText variant="sectionLabel">Colour</ThemedText>
+              <View style={styles.swatches}>
+                {groupColors.map((swatch, i) => (
+                  <Pressable
+                    key={swatch}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: i === colorIdx }}
+                    onPress={() => setColorIdx(i)}
+                    style={[
+                      styles.swatch,
+                      { backgroundColor: swatch },
+                      i === colorIdx && styles.swatchSelected,
+                    ]}
+                    testID={`swatch-${i}`}
+                  />
+                ))}
+              </View>
             </View>
-          </View>
+          )}
 
           <View style={styles.section}>
             <ThemedText variant="sectionLabel">What's it for</ThemedText>

@@ -15,7 +15,7 @@ import { useMutation } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
 import { contentViolation } from '../../../lib/moderation';
 import { useAuthStore } from '../../../stores/authStore';
-import { pickFromLibrary, takePhoto, uploadJpeg } from '../../../lib/images';
+import { pickFromLibrary, takePhoto, uploadAvatar } from '../../../lib/images';
 import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
 import { Avatar, ThemedText } from '../../../components/ui';
 import { colors, fonts, spacing } from '../../../theme/tokens';
@@ -49,10 +49,7 @@ export default function ProfileEdit() {
       const updates: { display_name?: string; avatar_url?: string | null } = {};
       if (nameChanged) updates.display_name = trimmed;
       if (photo.kind === 'new') {
-        const path = `${profile!.id}/avatar.jpg`;
-        await uploadJpeg('avatars', path, photo.uri, true);
-        const { data } = supabase.storage.from('avatars').getPublicUrl(path);
-        updates.avatar_url = `${data.publicUrl}?t=${Date.now()}`;
+        updates.avatar_url = await uploadAvatar(profile!.id, photo.uri);
       } else if (photo.kind === 'remove') {
         updates.avatar_url = null;
       }

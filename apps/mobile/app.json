@@ -41,8 +41,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Planazo uses your photo library for your profile photo and for screenshots you attach to feedback.",
-          "cameraPermission": "Planazo uses the camera to take a profile photo."
+          "photosPermission": "Planazo uses your photo library for your profile photo, your group photos, and screenshots you attach to feedback.",
+          "cameraPermission": "Planazo uses the camera to take a profile photo or a group photo."
         }
       ],
       [

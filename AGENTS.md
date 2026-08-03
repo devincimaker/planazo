@@ -164,7 +164,6 @@ a login are fine; a hand-written SQL console session is not.
     pnpm wt:new feat/pla-37-waiting-list --db   # if you don't have it
     cd ../planazo-worktrees/feat-pla-37-waiting-list
     pnpm wt:start --login
-    pnpm demo:waitlist                          # seeds the scenario
 
 1. **Full plan.** Top of the feed, "Padel, two courts" caps at 2 and both
    places are gone. The primary reads **"Take the next spot"**, an outline
@@ -188,9 +187,10 @@ Rules of thumb:
 
 - **A path a real user can take beats a script.** Withdrawing as another
   account proves the trigger fires on the path production uses; deleting the
-  row with the service role only proves the trigger exists.
-- **Seed with a committed script**, added in the same PR, not a throwaway.
-  Anything worth stepping through twice is worth `pnpm demo:<thing>`.
+  row with the service role only proves the trigger exists. Do **not** write a
+  per-feature seeding script: `pnpm db:seed:demo` plus taps in the app is the
+  walkthrough. If the state you need is genuinely unreachable that way, say so
+  in the PR and give the steps to reach it by hand.
 - **Screenshots go in the PR body**, especially before/after for anything
   visual. A reviewer who can see it may not need to run it at all.
 - **Say when there is nothing to see.** A refactor, a CI change or a migration

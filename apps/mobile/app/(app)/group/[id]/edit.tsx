@@ -5,24 +5,29 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../../../lib/supabase';
 import { contentViolation } from '../../../../lib/moderation';
+import { removeGroupPhoto, uploadGroupPhoto } from '../../../../lib/images';
+import { captureError } from '../../../../lib/sentry';
 import { MIN_TOUCH_TARGET } from '../../../../lib/a11y';
-import { ThemedText, GroupTile } from '../../../../components/ui';
+import { ThemedText, GroupTile, GroupPhotoField, colorForName } from '../../../../components/ui';
 import { colors, fonts, groupColors, spacing } from '../../../../theme/tokens';
 
-/** 6e "Rename or recolour" — same language as the create sheet, nothing else. */
+type PhotoDraft = { kind: 'keep' } | { kind: 'remove' } | { kind: 'new'; uri: string };
+
+/** 6e "Group profile" — the photo, the name and the colour, nothing else. */
 export default function EditGroupScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [name, setName] = useState<string | null>(null);
   const [color, setColor] = useState<string | null>(null);
+  const [photo, setPhoto] = useState<PhotoDraft>({ kind: 'keep' });
 
   const { data: group } = useQuery({
     queryKey: ['group-edit', id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('groups')
-        .select('id, name, color')
+        .select('id, name, color, image_url')
         .eq('id', id)
         .single();
       if (error) throw error;
@@ -32,9 +37,21 @@ export default function EditGroupScreen() {
   });
 
   const draftName = name ?? group?.name ?? '';
-  const draftColor = color ?? group?.color ?? groupColors[0];
+  // The colour this group already has everywhere else. `color` is null for any
+  // group that never picked one, and every other surface derives it from the
+  // name instead — GroupTile, and color_for_name() in the database
+  // (20260729000000). Falling back to a fixed swatch here would repaint the
+  // group on the next save of anything at all, and once a photo hides the
+  // swatches nobody would see it happen. Derived from the *saved* name, so
+  // renaming does not shuffle the colour under you while you type.
+  const savedColor = group?.color ?? colorForName(group?.name ?? '');
+  const draftColor = color ?? savedColor;
+  const draftImage =
+    photo.kind === 'new' ? photo.uri : photo.kind === 'remove' ? null : group?.image_url ?? null;
+  const photoChanged =
+    photo.kind === 'new' || (photo.kind === 'remove' && !!group?.image_url);
   const dirty =
-    !!group && (draftName.trim() !== group.name || draftColor !== (group.color ?? groupColors[0]));
+    !!group && (draftName.trim() !== group.name || draftColor !== savedColor || photoChanged);
   const valid = draftName.trim().length > 0;
 
   const save = useMutation({
@@ -42,11 +59,27 @@ export default function EditGroupScreen() {
       // Guideline 1.2: objectionable language stops here, not in review.
       const violation = contentViolation({ 'group name': draftName });
       if (violation) throw new Error(violation);
-      const { error } = await supabase
-        .from('groups')
-        .update({ name: draftName.trim(), color: draftColor })
-        .eq('id', id);
+      const updates: { name: string; color: string; image_url?: string | null } = {
+        name: draftName.trim(),
+        color: draftColor,
+      };
+      if (photo.kind === 'new') {
+        updates.image_url = await uploadGroupPhoto(id, photo.uri);
+      } else if (photo.kind === 'remove') {
+        updates.image_url = null;
+      }
+      const { error } = await supabase.from('groups').update(updates).eq('id', id);
       if (error) throw error;
+
+      // Only once the row has stopped pointing at it. An orphaned object is
+      // untidy; a row pointing at a deleted one is a broken tile.
+      if (photo.kind === 'remove') {
+        try {
+          await removeGroupPhoto(id);
+        } catch (e) {
+          captureError(e, 'group photo delete');
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['group', id] });
@@ -72,7 +105,7 @@ export default function EditGroupScreen() {
             Cancel
           </ThemedText>
         </Pressable>
-        <ThemedText style={styles.headerTitle}>Rename or recolour</ThemedText>
+        <ThemedText style={styles.headerTitle}>Group profile</ThemedText>
         <Pressable
           onPress={() => save.mutate()}
           disabled={!dirty || !valid || save.isPending}
@@ -91,7 +124,12 @@ export default function EditGroupScreen() {
 
       <View style={styles.content}>
         <View style={styles.nameRow}>
-          <GroupTile name={valid ? draftName : '?'} color={draftColor} size={52} />
+          <GroupTile
+            name={valid ? draftName : '?'}
+            color={draftColor}
+            imageUrl={draftImage}
+            size={52}
+          />
           <View style={styles.nameBlock}>
             <TextInput
               style={styles.nameInput}
@@ -105,24 +143,41 @@ export default function EditGroupScreen() {
           </View>
         </View>
 
-        <View style={styles.section}>
-          <ThemedText variant="sectionLabel">Colour</ThemedText>
-          <View style={styles.swatches}>
-            {groupColors.map((swatch) => (
-              <Pressable
-                key={swatch}
-                accessibilityRole="button"
-                accessibilityState={{ selected: swatch === draftColor }}
-                onPress={() => setColor(swatch)}
-                style={[
-                  styles.swatch,
-                  { backgroundColor: swatch },
-                  swatch === draftColor && styles.swatchSelected,
-                ]}
-              />
-            ))}
+        <GroupPhotoField
+          uri={draftImage}
+          uploading={save.isPending && photo.kind === 'new'}
+          caption="Remove it and the letter comes back, on the colour you had."
+          onPick={(uri) => setPhoto({ kind: 'new', uri })}
+          onRemove={() => setPhoto({ kind: 'remove' })}
+        />
+
+        {draftImage ? (
+          // The colour is still stored, and still what the feed's card stripe
+          // and the group dots use. It just has nothing to do on a tile the
+          // photo has taken over, so picking one here would be a lie.
+          <ThemedText variant="sub">
+            Colour is hidden while a photo is set. It comes back the moment the photo goes.
+          </ThemedText>
+        ) : (
+          <View style={styles.section}>
+            <ThemedText variant="sectionLabel">Colour</ThemedText>
+            <View style={styles.swatches}>
+              {groupColors.map((swatch) => (
+                <Pressable
+                  key={swatch}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: swatch === draftColor }}
+                  onPress={() => setColor(swatch)}
+                  style={[
+                    styles.swatch,
+                    { backgroundColor: swatch },
+                    swatch === draftColor && styles.swatchSelected,
+                  ]}
+                />
+              ))}
+            </View>
           </View>
-        </View>
+        )}
       </View>
     </SafeAreaView>
   );

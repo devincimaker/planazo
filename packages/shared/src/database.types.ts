@@ -308,6 +308,7 @@ export type Database = {
           created_by: string | null
           description: string | null
           id: string
+          image_url: string | null
           invite_code: string
           name: string
           updated_at: string | null
@@ -319,6 +320,7 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           id?: string
+          image_url?: string | null
           invite_code: string
           name: string
           updated_at?: string | null
@@ -330,6 +332,7 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           id?: string
+          image_url?: string | null
           invite_code?: string
           name?: string
           updated_at?: string | null
@@ -608,6 +611,7 @@ export type Database = {
           created_by: string | null
           description: string | null
           id: string
+          image_url: string | null
           invite_code: string
           name: string
           updated_at: string | null
@@ -645,6 +649,7 @@ export type Database = {
         Returns: Json
       }
       is_group_admin: { Args: { check_group_id: string }; Returns: boolean }
+      is_group_image_admin: { Args: { object_name: string }; Returns: boolean }
       is_group_member: { Args: { check_group_id: string }; Returns: boolean }
       is_plan_host: {
         Args: { p_created_by: string; p_group_id: string }

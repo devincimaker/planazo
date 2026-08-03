@@ -8,6 +8,7 @@ export interface PendingGroupInvite {
   groupId: string;
   groupName: string;
   groupColor: string | null;
+  groupImageUrl: string | null;
   inviterName: string;
   memberNames: string[];
 }
@@ -37,7 +38,7 @@ export function usePendingInvites() {
           .from('group_invites')
           .select(
             `id, created_at, group_id,
-            groups:group_id(id, name, color, group_members(profile:profiles(display_name))),
+            groups:group_id(id, name, color, image_url, group_members(profile:profiles(display_name))),
             inviter:invited_by(display_name)`
           )
           .eq('invitee_id', user!.id)
@@ -77,6 +78,7 @@ export function usePendingInvites() {
         groupId: i.group_id,
         groupName: i.groups?.name ?? 'Group',
         groupColor: i.groups?.color ?? null,
+        groupImageUrl: i.groups?.image_url ?? null,
         inviterName: i.inviter?.display_name ?? 'Someone',
         memberNames: (i.groups?.group_members ?? [])
           .map((m: any) => m.profile?.display_name)

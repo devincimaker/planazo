@@ -229,6 +229,19 @@ export interface UpdateAvailabilityRequest {
 // Plan domain logic (single source of truth for confirmation math)
 export * from './plan-logic';
 
+/**
+ * PLA-30 group photos. One folder per group, because that folder name is what
+ * the storage policies in 20260803000001_group_images.sql cast to a UUID and
+ * check admin membership against. It lives here so the app writes and the
+ * integration suite asserts against the same string: a test that restates the
+ * convention it is guarding cannot catch a change to it.
+ */
+export const GROUP_PHOTO_BUCKET = 'group-images';
+
+export function groupPhotoPath(groupId: string): string {
+  return `${groupId}/cover.jpg`;
+}
+
 // Generated from the Supabase schema — regenerate with `pnpm db:gen:types`
 // after adding a migration. Do not edit by hand.
 export type {

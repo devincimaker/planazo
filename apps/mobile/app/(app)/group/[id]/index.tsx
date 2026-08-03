@@ -50,7 +50,7 @@ export default function GroupDetailScreen() {
       const { data, error } = await supabase
         .from('groups')
         .select(
-          `id, name, description, color, invite_code,
+          `id, name, description, color, image_url, invite_code,
           group_members(user_id, role, profile:profiles(id, display_name, avatar_url)),
           plans(id, title, plan_type, status, event_date, locked_date, min_people, created_at,
             cancelled_at, cancelled_by, cancel_reason,
@@ -279,7 +279,12 @@ export default function GroupDetailScreen() {
       >
         <View style={styles.headerBlock}>
           <View style={styles.identityRow}>
-            <GroupTile name={group.name} color={group.color} size={52} />
+            <GroupTile
+              name={group.name}
+              color={group.color}
+              imageUrl={group.image_url}
+              size={52}
+            />
             <View style={styles.identityText}>
               <ThemedText variant="headerTitle">{group.name}</ThemedText>
               <ThemedText variant="caption">
