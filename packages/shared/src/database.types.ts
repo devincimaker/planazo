@@ -554,55 +554,32 @@ export type Database = {
       }
       plan_polls: {
         Row: {
-          closed_at: string | null
-          closed_by: string | null
           created_at: string
           id: string
           plan_id: string
           question: string
           suggestions_open: boolean
-          winner_option_id: string | null
         }
         Insert: {
-          closed_at?: string | null
-          closed_by?: string | null
           created_at?: string
           id?: string
           plan_id: string
           question: string
           suggestions_open?: boolean
-          winner_option_id?: string | null
         }
         Update: {
-          closed_at?: string | null
-          closed_by?: string | null
           created_at?: string
           id?: string
           plan_id?: string
           question?: string
           suggestions_open?: boolean
-          winner_option_id?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "plan_polls_closed_by_fkey"
-            columns: ["closed_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "plan_polls_plan_id_fkey"
             columns: ["plan_id"]
-            isOneToOne: true
-            referencedRelation: "plans"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "plan_polls_winner_option_id_fkey"
-            columns: ["winner_option_id"]
             isOneToOne: false
-            referencedRelation: "plan_poll_options"
+            referencedRelation: "plans"
             referencedColumns: ["id"]
           },
         ]
@@ -790,10 +767,6 @@ export type Database = {
       can_vote_plan_poll: { Args: { p_poll_id: string }; Returns: boolean }
       cancel_plan: {
         Args: { p_plan_id: string; p_reason?: string }
-        Returns: Json
-      }
-      close_plan_poll: {
-        Args: { p_option_id?: string; p_plan_id: string }
         Returns: Json
       }
       color_for_name: { Args: { p_name: string }; Returns: string }

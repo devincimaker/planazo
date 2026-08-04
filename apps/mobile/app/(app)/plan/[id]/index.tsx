@@ -29,8 +29,7 @@ import {
   type DateCount,
 } from '@planazo/shared';
 import { PhotoAlbumCard } from '../../../../components/PhotoAlbumCard';
-import { PlanPollCard } from '../../../../components/PlanPollCard';
-import { usePlanPoll } from '../../../../lib/usePlanPoll';
+import { PlanPolls } from '../../../../components/PlanPolls';
 import { spellCount } from '../../../../lib/words';
 import { supabase } from '../../../../lib/supabase';
 import { deleteOwnRsvp, offerWaitingList, waitingLabel } from '../../../../lib/rsvp';
@@ -192,11 +191,6 @@ export default function PlanDetailScreen() {
     },
     enabled: !!plan?.group_id,
   });
-
-  // Shares its cache with PlanPollCard through planPollKey — this read is
-  // only for the host menu's "Ask the group something" row, which must not
-  // appear once a question exists (one open question per plan, PLA-47).
-  const { data: poll } = usePlanPoll(id);
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['plan', id] });
@@ -574,12 +568,6 @@ export default function PlanDetailScreen() {
       });
     }
     if (d.isHost && !d.isCancelled && !d.isPast) {
-      if (!poll) {
-        rows.push({
-          label: 'Ask the group something',
-          action: () => router.push(`/plan/${id}/poll`),
-        });
-      }
       rows.push({
         label: 'Edit the details',
         action: () => router.push(`/plan/${id}/edit`),
@@ -943,15 +931,22 @@ export default function PlanDetailScreen() {
           </Animated.View>
         ) : null}
 
-        {/* The one open question (PLA-47). Below the date vote on purpose:
-            when is still the primary decision, what is a detail of it. The
-            component renders nothing when the plan has no poll. */}
+        {/* The plan's polls (PLA-47). Below the date vote on purpose: when is
+            still the primary decision, what is a detail of it. Voting is for
+            the people who are in — the denominator and the pick gate both
+            come from participation, not membership — and the section renders
+            the host's add-a-poll invitation when there are none. */}
         {user ? (
-          <PlanPollCard
+          <PlanPolls
             planId={String(id)}
             userId={user.id}
             isHost={d.isHost}
-            memberCount={(memberIds ?? []).length}
+            peopleIn={
+              d.isOpenFlexible
+                ? new Set((availabilities ?? []).map((a) => a.user_id)).size
+                : d.yesCount
+            }
+            canVote={d.youIn || d.isHost}
             planEnded={d.isCancelled || d.isPast}
           />
         ) : null}

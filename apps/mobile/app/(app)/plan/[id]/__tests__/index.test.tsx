@@ -79,7 +79,7 @@ function prime({
   avail = [],
   role = 'member',
   members = [],
-  poll = null,
+  polls = [],
 }: {
   plan: Record<string, unknown>;
   rsvps?: unknown[];
@@ -88,8 +88,8 @@ function prime({
   role?: string;
   /** user_ids in the group — drives the nudge count and "never answered" */
   members?: string[];
-  /** The plan's one question, or null. Drives the host menu row (PLA-47). */
-  poll?: Record<string, unknown> | null;
+  /** The plan's polls (PLA-47), oldest first. */
+  polls?: Record<string, unknown>[];
 }) {
   rsvpsChain = chain({ error: null });
   availChain = chain({ error: null });
@@ -102,7 +102,7 @@ function prime({
       return c;
     }
     if (table === 'plan_date_options') return chain({ data: options, error: null });
-    if (table === 'plan_polls') return chain({ data: poll, error: null });
+    if (table === 'plan_polls') return chain({ data: polls, error: null });
     if (table === 'date_availability') {
       const c = chain({ data: avail, error: null });
       c.upsert = availChain.upsert;
@@ -641,23 +641,19 @@ describe('PlanDetailScreen — the 20a menu', () => {
     expect(options).toEqual([
       'Copy invite link',
       "Nudge the 3 who haven't answered",
-      'Ask the group something',
       'Edit the details',
       'Call it off',
       'Cancel',
     ]);
 
     pick(2);
-    expect(mockPush).toHaveBeenCalledWith('/plan/plan-1/poll');
-
-    pick(3);
     expect(mockPush).toHaveBeenCalledWith('/plan/plan-1/edit');
 
-    pick(4);
+    pick(3);
     expect(mockPush).toHaveBeenCalledWith('/plan/plan-1/cancel');
   });
 
-  it('one question per plan: the ask row disappears once a poll exists', async () => {
+  it('PLA-47: the host sees the add-a-poll invitation in the plan body, guests do not', async () => {
     prime({
       plan: {
         ...basePlan,
@@ -667,23 +663,21 @@ describe('PlanDetailScreen — the 20a menu', () => {
         created_by: 'me',
       },
       rsvps: [{ user_id: 'me', response: 'yes', profile: { display_name: 'Me' } }],
-      poll: {
-        id: 'q1',
-        question: 'Which film?',
-        suggestions_open: false,
-        closed_at: null,
-        winner_option_id: null,
-        closer: null,
-        plan_poll_options: [],
-        plan_poll_votes: [],
-      },
+    });
+    await renderDetail();
+    await waitFor(() => expect(screen.getByTestId('poll-add')).toBeTruthy());
+    expect(screen.getByText('+ Add a poll')).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('poll-add'));
+    expect(mockPush).toHaveBeenCalledWith('/plan/plan-1/poll');
+
+    prime({
+      plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(8) },
+      rsvps: [{ user_id: 'me', response: 'yes', profile: { display_name: 'Me' } }],
     });
     await renderDetail();
     await waitFor(() => expect(screen.getByTestId('plan-menu')).toBeTruthy());
-
-    const { options } = await openMenu();
-    expect(options).not.toContain('Ask the group something');
-    expect(options).toContain('Edit the details');
+    expect(screen.queryByTestId('poll-add')).toBeNull();
   });
 
   it('back falls back to the group screen after a deep link', async () => {
@@ -709,7 +703,6 @@ describe('PlanDetailScreen — the 20a menu', () => {
     const { options } = await openMenu();
     expect(options).not.toContain('Call it off');
     expect(options).not.toContain('Edit the details');
-    expect(options).not.toContain('Ask the group something');
     expect(options).toContain('Copy invite link');
   });
 

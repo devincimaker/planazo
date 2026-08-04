@@ -349,9 +349,9 @@ export function countPollVotes(
 
 /**
  * The option(s) holding the most votes, ties returned rather than resolved.
- * Auto-resolving by option order is arbitrary in a way people notice, so a
- * tie is the host's to break — close_plan_poll refuses it the same way.
- * Zero votes everywhere means no leader at all, not "everything leads".
+ * The UI badges leaders[0]; a caller that cares about the tie itself can see
+ * it in the length. Zero votes everywhere means no leader at all, not
+ * "everything leads".
  */
 export function pollLeaders(
   options: PollOption[],

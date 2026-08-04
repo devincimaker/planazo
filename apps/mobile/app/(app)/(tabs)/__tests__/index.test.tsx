@@ -119,6 +119,7 @@ const lockedFlexible = {
 };
 
 let plansChain: ReturnType<typeof chain>;
+let pollVotesChain: ReturnType<typeof chain>;
 let rsvpsChain: ReturnType<typeof chain>;
 let availChain: ReturnType<typeof chain>;
 
@@ -132,6 +133,7 @@ function primeSupabase(
   }: { notices?: unknown[]; cancelledPlans?: unknown[] } = {}
 ) {
   plansChain = chain({ data: plans, error: null });
+  pollVotesChain = chain({ error: null });
   // Deletes ask for the cleared rows back (PLA-16), so the stub has to hand
   // one over or every withdrawal reads as the silent no-op it used to be.
   rsvpsChain = chain({ data: [{ plan_id: 'p' }], error: null });
@@ -148,6 +150,7 @@ function primeSupabase(
     }
     if (table === 'notifications') return noticesChain;
     if (table === 'rsvps') return rsvpsChain;
+    if (table === 'plan_poll_votes') return pollVotesChain;
     if (table === 'date_availability') return availChain;
     return chain({ data: null, error: null });
   });
@@ -184,29 +187,61 @@ describe('FeedScreen', () => {
     expect(screen.getAllByText('Unanswered').length).toBeGreaterThan(0);
   });
 
-  it("PLA-47: the plan's question shows on the card, nudging open and naming decided", async () => {
-    const pollOptions = [
-      { id: 'opt-dune', label: 'Dune Part Two' },
-      { id: 'opt-anora', label: 'Anora' },
-    ];
-    primeSupabase([
-      {
-        ...fixedOpen,
-        plan_polls: [
-          { id: 'q1', question: 'Which film?', closed_at: null, winner_option_id: null, plan_poll_options: pollOptions },
-        ],
-      },
-      {
-        ...fixedAnswered,
-        plan_polls: [
-          { id: 'q2', question: 'Which film?', closed_at: '2026-08-04T12:00:00Z', winner_option_id: 'opt-dune', plan_poll_options: pollOptions },
-        ],
-      },
-    ]);
+  it('PLA-47: someone in the plan votes on the card, one pick, changeable', async () => {
+    const poll = {
+      id: 'q1',
+      question: 'Which film',
+      created_at: '2026-08-04T10:00:00Z',
+      plan_poll_options: [
+        { id: 'opt-dune', label: 'Dune Part Two', position: 0 },
+        { id: 'opt-anora', label: 'Anora', position: 1 },
+      ],
+      plan_poll_votes: [
+        { option_id: 'opt-dune', user_id: 'u-marta' },
+        { option_id: 'opt-anora', user_id: 'me' },
+      ],
+    };
+    // fixedAnswered has my yes, so the poll is live for me.
+    primeSupabase([{ ...fixedAnswered, plan_polls: [poll] }]);
     await renderFeed();
 
-    await waitFor(() => expect(screen.getByText('Still deciding: Which film?')).toBeTruthy());
-    expect(screen.getByText('Dune Part Two it is')).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId('poll-feed-p2')).toBeTruthy());
+    expect(screen.getByText('Which film')).toBeTruthy();
+    expect(screen.getByText('You picked Anora · tap to change')).toBeTruthy();
+    expect(screen.getAllByText('1 vote')).toHaveLength(2);
+
+    // Another option moves the vote...
+    await fireEvent.press(screen.getByTestId('poll-feed-option-opt-dune'));
+    await waitFor(() =>
+      expect(pollVotesChain.upsert).toHaveBeenCalledWith(
+        { poll_id: 'q1', plan_id: 'p2', user_id: 'me', option_id: 'opt-dune' },
+        { onConflict: 'poll_id,user_id' }
+      )
+    );
+
+    // ...your own withdraws it.
+    await fireEvent.press(screen.getByTestId('poll-feed-option-opt-anora'));
+    await waitFor(() => expect(pollVotesChain.delete).toHaveBeenCalled());
+  });
+
+  it("PLA-47: a bystander sees the tally but the rows don't take a tap", async () => {
+    const poll = {
+      id: 'q1',
+      question: 'Which film',
+      created_at: '2026-08-04T10:00:00Z',
+      plan_poll_options: [{ id: 'opt-dune', label: 'Dune Part Two', position: 0 }],
+      plan_poll_votes: [{ option_id: 'opt-dune', user_id: 'u-marta' }],
+    };
+    // fixedOpen carries no rsvp of mine, so no pick.
+    primeSupabase([{ ...fixedOpen, plan_polls: [poll] }]);
+    await renderFeed();
+
+    await waitFor(() => expect(screen.getByTestId('poll-feed-p1')).toBeTruthy());
+    expect(screen.getByText('1 of 2 voted')).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('poll-feed-option-opt-dune'));
+    expect(pollVotesChain.upsert).not.toHaveBeenCalled();
+    expect(pollVotesChain.delete).not.toHaveBeenCalled();
   });
 
   it('picks dates inline and sends them (2a)', async () => {
