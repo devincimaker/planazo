@@ -15,6 +15,7 @@ import { isPlanPast, planLastDate } from '@planazo/shared';
 import { supabase } from '../../../../lib/supabase';
 import { useAuthStore } from '../../../../stores/authStore';
 import { errorCopy, isNotFoundError } from '../../../../lib/queryErrors';
+import { usePullToRefresh } from '../../../../lib/usePullToRefresh';
 import { MIN_TOUCH_TARGET } from '../../../../lib/a11y';
 import {
   ThemedText,
@@ -44,7 +45,7 @@ export default function GroupDetailScreen() {
   // 19d: Past is closed by default — it costs one line until you want it
   const [showPast, setShowPast] = useState(false);
 
-  const { data: group, isLoading, isError, error, refetch, isRefetching } = useQuery({
+  const { data: group, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['group', id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -65,6 +66,7 @@ export default function GroupDetailScreen() {
     },
     enabled: !!id,
   });
+  const { refreshing, onRefresh } = usePullToRefresh(refetch);
 
   const members = group?.group_members ?? [];
   const myRole = members.find((m: any) => m.user_id === user?.id)?.role;
@@ -275,7 +277,7 @@ export default function GroupDetailScreen() {
       <ScrollView
         style={styles.flex}
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <View style={styles.headerBlock}>
           <View style={styles.identityRow}>

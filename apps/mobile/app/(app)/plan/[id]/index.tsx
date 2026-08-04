@@ -28,6 +28,7 @@ import {
 import { supabase } from '../../../../lib/supabase';
 import { deleteOwnRsvp, offerWaitingList, waitingLabel } from '../../../../lib/rsvp';
 import { actionErrorCopy, errorCopy, isNotFoundError } from '../../../../lib/queryErrors';
+import { usePullToRefresh } from '../../../../lib/usePullToRefresh';
 import { MIN_TOUCH_TARGET } from '../../../../lib/a11y';
 import { useAuthStore } from '../../../../stores/authStore';
 import {
@@ -96,7 +97,7 @@ export default function PlanDetailScreen() {
   // actually is.
   const [footerHeight, setFooterHeight] = useState(0);
 
-  const { data: plan, isLoading, isError, error, refetch, isRefetching } = useQuery({
+  const { data: plan, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['plan', id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -111,6 +112,7 @@ export default function PlanDetailScreen() {
     },
     enabled: !!id,
   });
+  const { refreshing, onRefresh } = usePullToRefresh(refetch);
 
   const { data: rsvps } = useQuery({
     queryKey: ['plan-rsvps', id],
@@ -744,7 +746,7 @@ export default function PlanDetailScreen() {
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[styles.content, { paddingBottom: footerHeight + spacing.xxl }]}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <View style={styles.titleBlock}>
           <View style={styles.chipRow}>
