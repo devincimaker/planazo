@@ -1,6 +1,3 @@
-/* eslint-disable max-lines -- 422 lines of code against a 400 cap.
-   Splitting this screen is tracked in PLA-59; the cap binds on everything
-   else from the day it went in (PLA-57). Remove this line with the split. */
 import { useState } from 'react';
 import {
   View,
@@ -17,20 +14,18 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../../lib/supabase';
 import { contentViolation } from '../../../lib/moderation';
-import { useFriends } from '../../../lib/useFriends';
 import { uploadGroupPhoto } from '../../../lib/images';
 import { captureError } from '../../../lib/sentry';
 import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
+import { FriendPicker } from '../../../components/group/FriendPicker';
 import {
   ThemedText,
-  Card,
   Button,
-  Avatar,
   GroupTile,
   GroupPhotoField,
   showToast,
 } from '../../../components/ui';
-import { colors, fonts, groupColors, radii, spacing, type } from '../../../theme/tokens';
+import { colors, fonts, groupColors, spacing, type } from '../../../theme/tokens';
 
 export default function NewGroupScreen() {
   const router = useRouter();
@@ -52,9 +47,6 @@ export default function NewGroupScreen() {
   );
   const [picks, setPicks] = useState<string[]>([]);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
-
-  // 17c "Your people": accepted friendships, either direction.
-  const { friends } = useFriends();
 
   const togglePick = (id: string) =>
     setPicks((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
@@ -113,7 +105,6 @@ export default function NewGroupScreen() {
   });
 
   const named = name.trim().length > 0;
-  const selectedFriends = (friends ?? []).filter((f) => picks.includes(f.id));
   const ctaLabel = !named
     ? 'Name it first'
     : createGroup.isPending
@@ -218,82 +209,7 @@ export default function NewGroupScreen() {
             />
           </View>
 
-          <View style={styles.section}>
-            <View style={styles.pickerHeader}>
-              <ThemedText variant="sectionLabel">Who's in</ThemedText>
-              {picks.length > 0 ? (
-                <ThemedText variant="caption" color={colors.textPrimary}>
-                  {picks.length} selected
-                </ThemedText>
-              ) : null}
-            </View>
-
-            {selectedFriends.length > 0 ? (
-              <View style={styles.chipWrap}>
-                {selectedFriends.map((f) => (
-                  <Pressable
-                    key={f.id}
-                    accessibilityRole="button"
-                    onPress={() => togglePick(f.id)}
-                    style={styles.selectedChip}
-                    testID={`chip-${f.id}`}
-                  >
-                    <Avatar name={f.name} size={22} imageUrl={f.avatarUrl} />
-                    <ThemedText variant="caption" color={colors.background}>
-                      {f.name.split(' ')[0]}
-                    </ThemedText>
-                    <ThemedText variant="caption" color={colors.textMuted}>
-                      ×
-                    </ThemedText>
-                  </Pressable>
-                ))}
-              </View>
-            ) : null}
-
-            {(friends ?? []).length === 0 ? (
-              <ThemedText variant="sub">
-                Friends you add on Planazo show up here. You can also invite people once the
-                group exists.
-              </ThemedText>
-            ) : (
-              <Card padded={false}>
-                {(friends ?? []).map((f, i) => {
-                  const picked = picks.includes(f.id);
-                  return (
-                    <Pressable
-                      key={f.id}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: picked }}
-                      onPress={() => togglePick(f.id)}
-                      style={({ pressed }) => [
-                        styles.personRow,
-                        i > 0 && styles.personDivider,
-                        pressed && styles.personPressed,
-                      ]}
-                      testID={`person-${f.id}`}
-                    >
-                      <Avatar name={f.name} size={40} imageUrl={f.avatarUrl} />
-                      <View style={styles.personBody}>
-                        <ThemedText variant="bodyStrong" numberOfLines={1}>
-                          {f.name}
-                        </ThemedText>
-                        {f.handle ? (
-                          <ThemedText variant="caption">@{f.handle}</ThemedText>
-                        ) : null}
-                      </View>
-                      <View style={[styles.check, picked && styles.checkOn]}>
-                        {picked ? (
-                          <ThemedText variant="tag" color={colors.textOnAccent}>
-                            ✓
-                          </ThemedText>
-                        ) : null}
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </Card>
-            )}
-          </View>
+          <FriendPicker picks={picks} onToggle={togglePick} />
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -392,61 +308,6 @@ const styles = StyleSheet.create({
     borderColor: colors.borderStrong,
     borderRadius: 18,
     padding: 15,
-  },
-  pickerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  chipWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 7,
-  },
-  // 34 (6 + 22 avatar + 6) with a "×" on it — removing someone you added by
-  // mistake should not need aim (PLA-40).
-  selectedChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: MIN_TOUCH_TARGET,
-    gap: 7,
-    backgroundColor: colors.ink,
-    borderRadius: radii.pill,
-    paddingVertical: 6,
-    paddingLeft: 6,
-    paddingRight: 11,
-  },
-  personRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: 13,
-    paddingHorizontal: 15,
-  },
-  personDivider: {
-    borderTopWidth: 1,
-    borderTopColor: colors.divider,
-  },
-  personPressed: {
-    backgroundColor: colors.surfaceSunken,
-  },
-  personBody: {
-    flex: 1,
-    gap: 1,
-  },
-  check: {
-    width: 24,
-    height: 24,
-    borderRadius: radii.pill,
-    borderWidth: 1.5,
-    borderColor: colors.borderStrong,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkOn: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
   },
   footer: {
     position: 'absolute',
