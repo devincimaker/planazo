@@ -11,9 +11,7 @@ are discussing what to build, the issue is In Progress, the worktree exists with
 right database, and this session is inside it.
 
 **This skill ends at an agreed plan.** You then implement in normal conversation, with
-the user reviewing as you go. If they want the issue handled end to end without them —
-dev subagent, Sol review loop, auto-merge — that is `/pipeline`, a different skill.
-Do not blend the two.
+the user reviewing as you go.
 
 ## Ground rules
 
