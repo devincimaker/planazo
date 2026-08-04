@@ -17,7 +17,7 @@ import { PhotoTile } from '../../../../components/ui/PhotoTile';
 import { ErrorState } from '../../../../components/ui/ErrorState';
 import { usePlanPhotos, planPhotosKey } from '../../../../lib/usePlanPhotos';
 import {
-  albumSummary,
+  albumSummaryFromRows,
   deletePhoto,
   type PhotoRow,
   type SignedPhoto,
@@ -98,7 +98,7 @@ export default function PlanAlbumScreen() {
         <ThemedText variant="headerTitle">Photos</ThemedText>
         {rows?.length ? (
           <ThemedText variant="sub" color={colors.textSecondary}>
-            {albumSummary(rows)}
+            {albumSummaryFromRows(rows)}
           </ThemedText>
         ) : null}
       </View>
@@ -130,7 +130,7 @@ export default function PlanAlbumScreen() {
               style={styles.cell}
               testID={`album-tile-${index}`}
             >
-              <PhotoTile url={'url' in item ? item.url : undefined} index={index} />
+              <PhotoTile url={'url' in item ? item.thumbUrl : undefined} index={index} />
             </Pressable>
           )}
         />
