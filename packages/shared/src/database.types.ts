@@ -468,6 +468,145 @@ export type Database = {
           },
         ]
       }
+      plan_poll_options: {
+        Row: {
+          created_at: string
+          id: string
+          label: string
+          plan_id: string
+          poll_id: string
+          position: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          label: string
+          plan_id: string
+          poll_id: string
+          position: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string
+          plan_id?: string
+          poll_id?: string
+          position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_poll_options_poll_id_plan_id_fkey"
+            columns: ["poll_id", "plan_id"]
+            isOneToOne: false
+            referencedRelation: "plan_polls"
+            referencedColumns: ["id", "plan_id"]
+          },
+        ]
+      }
+      plan_poll_votes: {
+        Row: {
+          created_at: string
+          id: string
+          option_id: string
+          plan_id: string
+          poll_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          option_id: string
+          plan_id: string
+          poll_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          option_id?: string
+          plan_id?: string
+          poll_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_poll_votes_option_id_poll_id_fkey"
+            columns: ["option_id", "poll_id"]
+            isOneToOne: false
+            referencedRelation: "plan_poll_options"
+            referencedColumns: ["id", "poll_id"]
+          },
+          {
+            foreignKeyName: "plan_poll_votes_poll_id_plan_id_fkey"
+            columns: ["poll_id", "plan_id"]
+            isOneToOne: false
+            referencedRelation: "plan_polls"
+            referencedColumns: ["id", "plan_id"]
+          },
+          {
+            foreignKeyName: "plan_poll_votes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plan_polls: {
+        Row: {
+          closed_at: string | null
+          closed_by: string | null
+          created_at: string
+          id: string
+          plan_id: string
+          question: string
+          suggestions_open: boolean
+          winner_option_id: string | null
+        }
+        Insert: {
+          closed_at?: string | null
+          closed_by?: string | null
+          created_at?: string
+          id?: string
+          plan_id: string
+          question: string
+          suggestions_open?: boolean
+          winner_option_id?: string | null
+        }
+        Update: {
+          closed_at?: string | null
+          closed_by?: string | null
+          created_at?: string
+          id?: string
+          plan_id?: string
+          question?: string
+          suggestions_open?: boolean
+          winner_option_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_polls_closed_by_fkey"
+            columns: ["closed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plan_polls_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: true
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plan_polls_winner_option_id_fkey"
+            columns: ["winner_option_id"]
+            isOneToOne: false
+            referencedRelation: "plan_poll_options"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plans: {
         Row: {
           cancel_reason: string | null
@@ -646,9 +785,15 @@ export type Database = {
     }
     Functions: {
       can_add_plan_photo: { Args: { p_plan_id: string }; Returns: boolean }
+      can_manage_plan_poll: { Args: { p_plan_id: string }; Returns: boolean }
       can_view_plan_photos: { Args: { p_plan_id: string }; Returns: boolean }
+      can_vote_plan_poll: { Args: { p_poll_id: string }; Returns: boolean }
       cancel_plan: {
         Args: { p_plan_id: string; p_reason?: string }
+        Returns: Json
+      }
+      close_plan_poll: {
+        Args: { p_option_id?: string; p_plan_id: string }
         Returns: Json
       }
       color_for_name: { Args: { p_name: string }; Returns: string }
@@ -714,10 +859,10 @@ export type Database = {
       plan_album_card: {
         Args: { p_plan_id: string }
         Returns: {
-          total: number
           mine: number
-          uploaders: number
           recent: Json
+          total: number
+          uploaders: number
         }[]
       }
       plan_photo_plan_id: { Args: { p_name: string }; Returns: string }

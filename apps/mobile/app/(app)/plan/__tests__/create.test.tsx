@@ -65,18 +65,24 @@ let plansChain: ReturnType<typeof chain>;
 let optionsChain: ReturnType<typeof chain>;
 let rsvpsChain: ReturnType<typeof chain>;
 let availChain: ReturnType<typeof chain>;
+let pollsChain: ReturnType<typeof chain>;
+let pollOptionsChain: ReturnType<typeof chain>;
 
 function primeSupabase() {
   plansChain = chain({ data: { id: 'new-plan' }, error: null });
   optionsChain = chain({ data: [{ id: 'd1' }, { id: 'd2' }], error: null });
   rsvpsChain = chain({ error: null });
   availChain = chain({ error: null });
+  pollsChain = chain({ data: { id: 'new-poll' }, error: null });
+  pollOptionsChain = chain({ error: null });
   mockFrom.mockImplementation((table: string) => {
     if (table === 'group_members') return chain({ data: MEMBERSHIPS, error: null });
     if (table === 'plans') return plansChain;
     if (table === 'plan_date_options') return optionsChain;
     if (table === 'rsvps') return rsvpsChain;
     if (table === 'date_availability') return availChain;
+    if (table === 'plan_polls') return pollsChain;
+    if (table === 'plan_poll_options') return pollOptionsChain;
     return chain({ data: null, error: null });
   });
 }
@@ -328,6 +334,53 @@ describe('CreatePlanScreen', () => {
       user_id: 'me',
       response: 'yes',
     });
+    expect(pollsChain.insert).not.toHaveBeenCalled();
+  });
+
+  it('the question section starts collapsed and does not block a plain plan', async () => {
+    await renderCreate();
+    await screen.findByTestId('group-g1');
+
+    expect(screen.queryByTestId('poll-question-input')).toBeNull();
+    expect(screen.getByText('Add a question to vote on')).toBeTruthy();
+  });
+
+  it('a half-typed question blocks the post instead of being dropped', async () => {
+    await renderCreate();
+    await screen.findByTestId('group-g1');
+
+    await fireEvent.changeText(screen.getByTestId('title-input'), 'Cinema night');
+    await fireEvent.press(screen.getByTestId('cal-day-2026-08-07'));
+    await fireEvent.press(screen.getByTestId('poll-toggle'));
+    await fireEvent.changeText(screen.getByTestId('poll-question-input'), 'Which film?');
+    await fireEvent.changeText(screen.getByTestId('poll-option-input-0'), 'Dune Part Two');
+    // Only one option: not a question anyone can answer
+
+    await fireEvent.press(screen.getByTestId('post-cta'));
+    expect(plansChain.insert).not.toHaveBeenCalled();
+  });
+
+  it('posts the question and its options along with the plan', async () => {
+    await renderCreate();
+    await screen.findByTestId('group-g1');
+
+    await fireEvent.changeText(screen.getByTestId('title-input'), 'Cinema night');
+    await fireEvent.press(screen.getByTestId('cal-day-2026-08-07'));
+    await fireEvent.press(screen.getByTestId('poll-toggle'));
+    await fireEvent.changeText(screen.getByTestId('poll-question-input'), 'Which film?');
+    await fireEvent.changeText(screen.getByTestId('poll-option-input-0'), 'Dune Part Two');
+    await fireEvent.changeText(screen.getByTestId('poll-option-input-1'), 'Anora');
+    await fireEvent.press(screen.getByTestId('post-cta'));
+
+    await waitFor(() => expect(mockBack).toHaveBeenCalled());
+    expect(pollsChain.insert).toHaveBeenCalledWith({
+      plan_id: 'new-plan',
+      question: 'Which film?',
+    });
+    expect(pollOptionsChain.insert).toHaveBeenCalledWith([
+      { poll_id: 'new-poll', plan_id: 'new-plan', label: 'Dune Part Two', position: 0 },
+      { poll_id: 'new-poll', plan_id: 'new-plan', label: 'Anora', position: 1 },
+    ]);
   });
 
   it('posts a flexible plan with one option row per date', async () => {

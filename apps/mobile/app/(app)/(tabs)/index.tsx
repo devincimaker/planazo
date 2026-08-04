@@ -86,7 +86,8 @@ export default function FeedScreen() {
           `*,
           groups(id, name, color),
           rsvps(user_id, response, waitlist_seq, profile:profiles(display_name)),
-          plan_date_options(id, date, date_availability(user_id, profile:profiles(display_name)))`
+          plan_date_options(id, date, date_availability(user_id, profile:profiles(display_name))),
+          plan_polls(id, question, closed_at, winner_option_id, plan_poll_options!plan_poll_options_poll_id_plan_id_fkey(id, label))`
         )
         .in('group_id', groupIds)
         .neq('status', 'cancelled')
@@ -281,7 +282,26 @@ export default function FeedScreen() {
       // Only you see your own place in the queue (PLA-37).
       const waitPosition = waitlistPosition(plan.rsvps, user?.id);
 
+      // The plan's one question (PLA-47), as a single line: the answer once
+      // it's decided, a nudge while it isn't. plan_polls.plan_id is UNIQUE,
+      // but PostgREST may hand the embed back as either a one-row array or an
+      // object depending on how it reads the constraint, so accept both.
+      const pollRow = Array.isArray(plan.plan_polls) ? plan.plan_polls[0] : plan.plan_polls;
+      let pollLine: string | null = null;
+      if (pollRow) {
+        if (pollRow.closed_at) {
+          const winner = (pollRow.plan_poll_options ?? []).find(
+            (o: any) => o.id === pollRow.winner_option_id
+          );
+          pollLine = winner ? `${winner.label} it is` : null;
+        } else {
+          pollLine = `Still deciding: ${pollRow.question}`;
+        }
+      }
+
       return {
+        pollLine,
+        pollOpen: !!pollRow && !pollRow.closed_at,
         plan,
         isPast,
         confirmed,
@@ -550,6 +570,17 @@ export default function FeedScreen() {
                       {d.plan.title}
                     </ThemedText>
                     <ThemedText variant="bodyStrong">{d.when}</ThemedText>
+                    {d.pollLine ? (
+                      <ThemedText
+                        variant="sub"
+                        numberOfLines={1}
+                        color={d.pollOpen ? colors.accent : colors.textSecondary}
+                        style={styles.sub}
+                        testID={`poll-line-${d.plan.id}`}
+                      >
+                        {d.pollLine}
+                      </ThemedText>
+                    ) : null}
                     {d.plan.location || d.plan.description ? (
                       <ThemedText variant="sub" numberOfLines={1} style={styles.sub}>
                         {d.plan.location ?? d.plan.description}

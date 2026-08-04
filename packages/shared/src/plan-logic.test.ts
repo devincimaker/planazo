@@ -17,6 +17,8 @@ import {
   planLastDate,
   endOfLocalDay,
   isPlanPast,
+  countPollVotes,
+  pollLeaders,
   DateOption,
   Availability,
 } from './plan-logic';
@@ -596,5 +598,71 @@ describe('endings — planLastDate / endOfLocalDay / isPlanPast', () => {
     expect(isPlanPast(plan, opts, new Date(2026, 7, 15, 0, 1))).toBe(true);
     // Undated plans never expire
     expect(isPlanPast(plan, [], new Date(2030, 0, 1))).toBe(false);
+  });
+});
+
+describe('polls (PLA-47)', () => {
+  const options = [
+    { id: 'opt-dune', label: 'Dune Part Two', position: 0 },
+    { id: 'opt-sub', label: 'The Substance', position: 1 },
+    { id: 'opt-anora', label: 'Anora', position: 2 },
+  ];
+
+  it('counts votes per option, zero-filled', () => {
+    const votes = [
+      { option_id: 'opt-dune', user_id: 'u1' },
+      { option_id: 'opt-dune', user_id: 'u2' },
+      { option_id: 'opt-anora', user_id: 'u3' },
+    ];
+    expect(countPollVotes(options, votes)).toEqual({
+      'opt-dune': 2,
+      'opt-sub': 0,
+      'opt-anora': 1,
+    });
+  });
+
+  it('ignores votes for options it was not given', () => {
+    const votes = [{ option_id: 'opt-gone', user_id: 'u1' }];
+    expect(countPollVotes(options, votes)).toEqual({
+      'opt-dune': 0,
+      'opt-sub': 0,
+      'opt-anora': 0,
+    });
+  });
+
+  it('names a single leader', () => {
+    const votes = [
+      { option_id: 'opt-sub', user_id: 'u1' },
+      { option_id: 'opt-sub', user_id: 'u2' },
+      { option_id: 'opt-dune', user_id: 'u3' },
+    ];
+    const { leaders, maxVotes } = pollLeaders(options, votes);
+    expect(maxVotes).toBe(2);
+    expect(leaders.map((o) => o.id)).toEqual(['opt-sub']);
+  });
+
+  it('returns a tie rather than resolving one', () => {
+    const votes = [
+      { option_id: 'opt-anora', user_id: 'u1' },
+      { option_id: 'opt-dune', user_id: 'u2' },
+    ];
+    const { leaders, maxVotes } = pollLeaders(options, votes);
+    expect(maxVotes).toBe(1);
+    // In option order, not vote order
+    expect(leaders.map((o) => o.id)).toEqual(['opt-dune', 'opt-anora']);
+  });
+
+  it('zero votes means no leader, not "everything leads"', () => {
+    expect(pollLeaders(options, [])).toEqual({ leaders: [], maxVotes: 0 });
+  });
+
+  it('confirmation knows nothing about polls', () => {
+    // The contract from the issue: a date option winning IS the plan, a film
+    // winning is a detail of a plan already happening. If poll data ever
+    // becomes an input to confirmation, this directive stops compiling.
+    expect(
+      // @ts-expect-error — poll state is deliberately not confirmation data
+      isPlanConfirmed({ plan_type: 'fixed', status: 'open', min_people: 2, poll: { closed_at: null } })
+    ).toBe(false);
   });
 });

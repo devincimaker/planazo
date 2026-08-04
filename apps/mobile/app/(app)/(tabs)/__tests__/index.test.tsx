@@ -184,6 +184,31 @@ describe('FeedScreen', () => {
     expect(screen.getAllByText('Unanswered').length).toBeGreaterThan(0);
   });
 
+  it("PLA-47: the plan's question shows on the card, nudging open and naming decided", async () => {
+    const pollOptions = [
+      { id: 'opt-dune', label: 'Dune Part Two' },
+      { id: 'opt-anora', label: 'Anora' },
+    ];
+    primeSupabase([
+      {
+        ...fixedOpen,
+        plan_polls: [
+          { id: 'q1', question: 'Which film?', closed_at: null, winner_option_id: null, plan_poll_options: pollOptions },
+        ],
+      },
+      {
+        ...fixedAnswered,
+        plan_polls: [
+          { id: 'q2', question: 'Which film?', closed_at: '2026-08-04T12:00:00Z', winner_option_id: 'opt-dune', plan_poll_options: pollOptions },
+        ],
+      },
+    ]);
+    await renderFeed();
+
+    await waitFor(() => expect(screen.getByText('Still deciding: Which film?')).toBeTruthy());
+    expect(screen.getByText('Dune Part Two it is')).toBeTruthy();
+  });
+
   it('picks dates inline and sends them (2a)', async () => {
     primeSupabase([flexibleOpen]);
     await renderFeed();

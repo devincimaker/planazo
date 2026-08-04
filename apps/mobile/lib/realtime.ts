@@ -17,6 +17,9 @@ export const SUBSCRIBED_TABLES = [
   'plans',
   'group_members',
   'plan_photos',
+  'plan_polls',
+  'plan_poll_options',
+  'plan_poll_votes',
 ] as const;
 
 export type SubscribedTable = (typeof SUBSCRIBED_TABLES)[number];
@@ -66,6 +69,16 @@ export function keysForChange(
       // the album is the whole point of this table being here. A delete
       // carries only its id, so it falls back to the bare prefix.
       return [planId ? ['plan-photos', planId] : ['plan-photos']];
+    case 'plan_polls':
+    case 'plan_poll_options':
+    case 'plan_poll_votes':
+      // One case for all three: the detail screen reads the poll, its options
+      // and its votes as a single nested ['plan-poll', id] query, and all
+      // three tables denormalise plan_id so every insert/update names its
+      // plan. Votes moving under you while you look at the tally is the most
+      // valuable live update the poll has (PLA-47). home-plans re-renders the
+      // feed card's open-question / answer line.
+      return [planId ? ['plan-poll', planId] : ['plan-poll'], ['home-plans']];
     case 'plans': {
       // A plan's own id is its primary key, so even deletes can name it.
       const id = typeof record.id === 'string' ? record.id : null;

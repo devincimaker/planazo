@@ -29,6 +29,8 @@ import {
   type DateCount,
 } from '@planazo/shared';
 import { PhotoAlbumCard } from '../../../../components/PhotoAlbumCard';
+import { PlanPollCard } from '../../../../components/PlanPollCard';
+import { usePlanPoll } from '../../../../lib/usePlanPoll';
 import { spellCount } from '../../../../lib/words';
 import { supabase } from '../../../../lib/supabase';
 import { deleteOwnRsvp, offerWaitingList, waitingLabel } from '../../../../lib/rsvp';
@@ -190,6 +192,11 @@ export default function PlanDetailScreen() {
     },
     enabled: !!plan?.group_id,
   });
+
+  // Shares its cache with PlanPollCard through planPollKey — this read is
+  // only for the host menu's "Ask the group something" row, which must not
+  // appear once a question exists (one open question per plan, PLA-47).
+  const { data: poll } = usePlanPoll(id);
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['plan', id] });
@@ -567,6 +574,12 @@ export default function PlanDetailScreen() {
       });
     }
     if (d.isHost && !d.isCancelled && !d.isPast) {
+      if (!poll) {
+        rows.push({
+          label: 'Ask the group something',
+          action: () => router.push(`/plan/${id}/poll`),
+        });
+      }
       rows.push({
         label: 'Edit the details',
         action: () => router.push(`/plan/${id}/edit`),
@@ -928,6 +941,19 @@ export default function PlanDetailScreen() {
               );
             })}
           </Animated.View>
+        ) : null}
+
+        {/* The one open question (PLA-47). Below the date vote on purpose:
+            when is still the primary decision, what is a detail of it. The
+            component renders nothing when the plan has no poll. */}
+        {user ? (
+          <PlanPollCard
+            planId={String(id)}
+            userId={user.id}
+            isHost={d.isHost}
+            memberCount={(memberIds ?? []).length}
+            planEnded={d.isCancelled || d.isPast}
+          />
         ) : null}
 
         <Animated.View layout={LinearTransition}>

@@ -313,3 +313,57 @@ export function isPlanPast(
   if (!last) return false;
   return now.getTime() >= endOfLocalDay(last).getTime();
 }
+
+// ---------------------------------------------------------------- polls
+//
+// The open question a plan can carry (PLA-47). Deliberately not part of
+// PlanConfirmationData or isPlanConfirmed: a date option winning IS the plan,
+// a film winning is a detail of a plan already happening, and a plan must
+// never hang unconfirmed because nobody picked a bar.
+
+export interface PollOption {
+  id: string;
+  label: string;
+  position: number;
+}
+
+export interface PollVote {
+  option_id: string;
+  user_id: string;
+}
+
+/** Votes per option id, zero-filled so every option renders a count. */
+export function countPollVotes(
+  options: PollOption[],
+  votes: PollVote[]
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  options.forEach((o) => {
+    counts[o.id] = 0;
+  });
+  votes.forEach((v) => {
+    if (v.option_id in counts) counts[v.option_id]++;
+  });
+  return counts;
+}
+
+/**
+ * The option(s) holding the most votes, ties returned rather than resolved.
+ * Auto-resolving by option order is arbitrary in a way people notice, so a
+ * tie is the host's to break — close_plan_poll refuses it the same way.
+ * Zero votes everywhere means no leader at all, not "everything leads".
+ */
+export function pollLeaders(
+  options: PollOption[],
+  votes: PollVote[]
+): { leaders: PollOption[]; maxVotes: number } {
+  const counts = countPollVotes(options, votes);
+  const maxVotes = Math.max(0, ...Object.values(counts));
+  if (maxVotes === 0) return { leaders: [], maxVotes: 0 };
+  return {
+    leaders: options
+      .filter((o) => counts[o.id] === maxVotes)
+      .sort((a, b) => a.position - b.position),
+    maxVotes,
+  };
+}
