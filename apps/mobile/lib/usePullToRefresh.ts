@@ -1,12 +1,10 @@
 import { useCallback, useState } from 'react';
 
 /**
- * Drives a RefreshControl from the user's pull and nothing else. Wiring
- * `refreshing` to react-query's `isRefetching` lets any invalidation-driven
- * background refetch raise the spinner, and one that lands mid navigation
- * transition latches the native control visible even after `isRefetching`
- * returns to false (PLA-52). Background refetches stay silent; the content
- * simply updates.
+ * Drives a RefreshControl from the user's pull and nothing else. Wired to
+ * react-query's `isRefetching` instead, a background refetch landing mid
+ * navigation transition latches the native control visible even after the
+ * query settles (PLA-52).
  */
 export function usePullToRefresh(refetch: () => Promise<unknown>) {
   const [refreshing, setRefreshing] = useState(false);

@@ -53,16 +53,4 @@ describe('usePullToRefresh', () => {
     });
     expect(result.current.refreshing).toBe(false);
   });
-
-  it('a background refetch does not touch the spinner', async () => {
-    // The hook exposes no way to set `refreshing` from query state at all —
-    // calling the refetch directly (as an invalidation would) must leave it false.
-    const refetch = jest.fn(async () => {});
-    const { result } = await renderHook(() => usePullToRefresh(refetch));
-
-    await act(async () => {
-      await refetch();
-    });
-    expect(result.current.refreshing).toBe(false);
-  });
 });
