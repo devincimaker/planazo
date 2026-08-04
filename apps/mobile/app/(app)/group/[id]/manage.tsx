@@ -105,8 +105,9 @@ export default function ManageGroupScreen() {
     queryClient.invalidateQueries({ queryKey: ['groups'] });
   };
 
-  // Whose plans this user has chosen not to see. Only ever their own list —
-  // RLS on blocked_users makes any other answer impossible.
+  // Who this user has shut out (the shield rule: those people no longer see
+  // this user's plans). Only ever their own list — RLS on blocked_users makes
+  // any other answer impossible.
   const { data: blockedIds } = useQuery({
     queryKey: BLOCKED_QUERY_KEY,
     queryFn: fetchBlockedIds,
@@ -124,8 +125,10 @@ export default function ManageGroupScreen() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: BLOCKED_QUERY_KEY });
-      // Their plans appear or disappear from every list that shows them.
+      // The block dissolves ties server-side (friendship, their place in this
+      // user's upcoming plans), so anything derived from those refetches.
       queryClient.invalidateQueries({ queryKey: ['home-plans'] });
+      queryClient.invalidateQueries({ queryKey: ['friends'] });
       invalidate();
     },
     onError: (error: Error) => Alert.alert('Error', error.message),
@@ -329,7 +332,7 @@ export default function ManageGroupScreen() {
         }
       : {
           title: `Block ${confirm?.name}?`,
-          body: 'Their plans stop showing up for you. They are not told, and they stay in the group unless an admin removes them.',
+          body: 'Your plans stop showing up for them and you are no longer friends. They are not told, and they stay in the group unless an admin removes them. You still see their plans as usual.',
           action: 'Block',
         };
 

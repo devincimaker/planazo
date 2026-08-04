@@ -24,6 +24,7 @@ let acceptedFriendships: any[] = [];
 let pendingFriendships: any[] = [];
 let sharedGroups: any[] = [];
 let searchResults: any[] = [];
+let sendRequestStatus = 'requested';
 
 function primeSupabase() {
   mockFrom.mockImplementation((table: string) => {
@@ -42,13 +43,21 @@ function primeSupabase() {
           ? { data: status === 'accepted' ? acceptedFriendships : pendingFriendships, error: null }
           : table === 'group_members'
             ? { data: sharedGroups, error: null }
-            : table === 'profiles'
-              ? { data: searchResults, error: null }
-              : { data: [], error: null };
+            : { data: [], error: null };
       return Promise.resolve(result).then(resolve);
     };
     return c;
   });
+  // Search goes through the search_people RPC (PLA-44): the exclusion of
+  // people who blocked this user happens server-side, so the mock only has
+  // to hand back rows.
+  mockRpc.mockImplementation((fn: string) =>
+    Promise.resolve(
+      fn === 'search_people'
+        ? { data: searchResults, error: null }
+        : { data: { status: sendRequestStatus }, error: null },
+    ),
+  );
 }
 
 async function renderFind() {
@@ -66,8 +75,8 @@ beforeEach(() => {
   pendingFriendships = [];
   sharedGroups = [];
   searchResults = [];
+  sendRequestStatus = 'requested';
   primeSupabase();
-  mockRpc.mockResolvedValue({ data: { status: 'requested' }, error: null });
   useAuthStore.setState({
     user: { id: 'me' } as any,
     profile: { id: 'me', display_name: 'Rocío', avatar_url: null } as any,
@@ -141,6 +150,23 @@ describe('FindPeopleScreen', () => {
     expect(await screen.findByText('Ainhoa Vidal')).toBeTruthy();
     expect(screen.getByText('Friends')).toBeTruthy();
     expect(screen.getByTestId('add-p2')).toBeTruthy();
+    expect(mockRpc).toHaveBeenCalledWith('search_people', { p_query: 'ain' });
+  });
+
+  it('adding someone you blocked explains instead of lying with Requested', async () => {
+    const alertSpy = jest.spyOn(require('react-native').Alert, 'alert').mockImplementation();
+    sendRequestStatus = 'you_blocked_them';
+    searchResults = [{ id: 'p9', display_name: 'Pau Serra', handle: 'pauserra', avatar_url: null }];
+
+    await renderFind();
+
+    await fireEvent.changeText(screen.getByTestId('search-input'), 'pau');
+    await fireEvent.press(await screen.findByTestId('add-p9'));
+
+    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('You blocked them', expect.any(String)));
+    // The pill must not flip: nothing was sent.
+    expect(screen.queryByTestId('requested-p9')).toBeNull();
+    alertSpy.mockRestore();
   });
 
   it('incoming requesters get Accept instead of Add', async () => {

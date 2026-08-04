@@ -208,16 +208,24 @@ contact details — and all four exist, plus the terms that back them:
 | Published contact details | `planazo.me/support` and `hola@planazo.me` |
 | Published terms with no tolerance for objectionable content | `planazo.me/terms`, "What you agree not to post" |
 
-Blocking is enforced in the database, not in the client: `has_blocked()` is
-part of the plans SELECT policy, so a blocked person's plans stop existing for
-you in the feed, in the group and by direct link alike. Every plan
-notification honours the block too — new plan, plan confirmed, called off,
-back on — because each fan-out skips recipients who have blocked the plan's
-creator; otherwise you would get a push about a plan the database then
-refuses to show you. Locking a flexible plan also never converts a blocker's
-old availability into an RSVP on a plan they can no longer see. It is
-one-way and silent — the blocked party is never told, and cannot read the
-block row.
+Blocking is enforced in the database, not in the client, and it points at the
+blocked person: block someone and your plans and photos stop existing for
+them — in the feed, in the group and by direct link alike, because
+`is_blocked_by()` is part of the SELECT policies and it is the row that
+disappears, not a filter a client could forget. They can no longer find you
+in people search (a server-side RPC, so their device never learns who blocked
+them), a friend request or group invite from them dies silently with a
+success-shaped answer, blocking dissolves any friendship and pulls them out
+of your upcoming plans (freed seats promote the next person on the waiting
+list through the normal machinery), and every plan notification honours the
+same direction — new plan, plan confirmed, called off, back on, promoted —
+because a push about a plan the database refuses to show would announce the
+block. You keep seeing them exactly as before, so blocking never costs the
+blocker their own group life. It is one-way and silent — the blocked party is
+never told, cannot read the block row, and the member list stays intact, which
+is precisely what keeps the Block button reachable if they want to block back.
+Unblocking restores sight but never what the block dissolved. The block list
+lives at Profile → Blocked people.
 Reports are insert-only for the reporter, so nobody can discover who reported
 them. Triage happens off the service role.
 

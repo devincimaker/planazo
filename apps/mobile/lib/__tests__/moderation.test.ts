@@ -23,7 +23,9 @@ beforeEach(() => {
     chain = {
       insert: jest.fn(() => Promise.resolve({ error: null })),
       upsert: jest.fn(() => Promise.resolve({ error: null })),
-      select: jest.fn(() => Promise.resolve({ data: [{ blocked_id: 'a' }], error: null })),
+      select: jest.fn(() => ({
+        order: jest.fn(() => Promise.resolve({ data: [{ blocked_id: 'a' }], error: null })),
+      })),
       delete: jest.fn(() => chain),
       eq: jest.fn(() => chain),
       then: (resolve: (v: unknown) => void) => Promise.resolve({ error: null }).then(resolve),

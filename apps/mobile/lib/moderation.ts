@@ -5,10 +5,13 @@ import { supabase } from './supabase';
  *
  * Kept in one module because they are one idea: somebody is posting something
  * they should not, and the app needs a way to stop the worst of it at the
- * door, a way for the person looking at it to tell us, and a way for them to
- * stop seeing the poster. The report goes to a queue only we can read; the
- * block takes effect in the database, not in a filter here — see
- * `has_blocked()` and the plans SELECT policy in the moderation migration.
+ * door, a way for the person looking at it to tell us, and a way to shut the
+ * poster out. The report goes to a queue only we can read; the block takes
+ * effect in the database, not in a filter here — the shield rule (PLA-44):
+ * the person you block stops seeing what you create, cannot find or contact
+ * you, and no longer attends your plans, while you keep seeing them exactly
+ * as before. See `is_blocked_by()` and `dissolve_block_ties()` in the
+ * block_shield migration.
  */
 
 // 'photo' (PLA-32) is not a nicety. A word list cannot read a photograph, so
@@ -79,9 +82,16 @@ export async function unblockUser(blockerId: string, blockedId: string): Promise
   if (error) throw error;
 }
 
-/** Ids this user has blocked. RLS means it can only ever be their own list. */
+/**
+ * Ids this user has blocked, most recent block first. RLS means it can only
+ * ever be their own list. The order matters to the Blocked people screen;
+ * manage.tsx builds a Set from it and never notices.
+ */
 export async function fetchBlockedIds(): Promise<string[]> {
-  const { data, error } = await supabase.from('blocked_users').select('blocked_id');
+  const { data, error } = await supabase
+    .from('blocked_users')
+    .select('blocked_id')
+    .order('created_at', { ascending: false });
   if (error) throw error;
   return (data ?? []).map((row) => row.blocked_id);
 }
