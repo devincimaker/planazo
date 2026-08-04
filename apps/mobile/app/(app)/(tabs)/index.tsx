@@ -26,6 +26,7 @@ import {
 } from '@planazo/shared';
 import { supabase } from '../../../lib/supabase';
 import { deleteOwnRsvp, offerWaitingList, waitingLabel } from '../../../lib/rsvp';
+import { voteErrorCopy } from '../../../lib/usePlanPoll';
 import { actionErrorCopy, errorCopy } from '../../../lib/queryErrors';
 import { usePullToRefresh } from '../../../lib/usePullToRefresh';
 import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
@@ -233,7 +234,12 @@ export default function FeedScreen() {
       invalidate();
       queryClient.invalidateQueries({ queryKey: ['plan-poll', vars.planId] });
     },
-    onError: alertActionError,
+    // A vote can be refused by a stale gate (you withdrew your yes on another
+    // device); the generic forbidden copy would claim you're not in the group.
+    onError: (error: unknown) => {
+      const { title, body } = voteErrorCopy(error);
+      Alert.alert(title, body);
+    },
   });
 
   const declineFlexible = useMutation({

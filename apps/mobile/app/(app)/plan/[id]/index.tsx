@@ -933,9 +933,10 @@ export default function PlanDetailScreen() {
 
         {/* The plan's polls (PLA-47). Below the date vote on purpose: when is
             still the primary decision, what is a detail of it. Voting is for
-            the people who are in — the denominator and the pick gate both
-            come from participation, not membership — and the section renders
-            the host's add-a-poll invitation when there are none. */}
+            the people who are in, plus the plan's creator — NOT d.isHost,
+            which also covers group admins: an admin manages polls (isHost)
+            but holds no pick until they answer, matching the server's
+            can_vote_plan_poll and the feed card's gate. */}
         {user ? (
           <PlanPolls
             planId={String(id)}
@@ -946,7 +947,7 @@ export default function PlanDetailScreen() {
                 ? new Set((availabilities ?? []).map((a) => a.user_id)).size
                 : d.yesCount
             }
-            canVote={d.youIn || d.isHost}
+            canVote={d.youIn || plan.created_by === user.id}
             planEnded={d.isCancelled || d.isPast}
           />
         ) : null}

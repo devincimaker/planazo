@@ -114,7 +114,7 @@ export default function NewPollScreen() {
           <View style={styles.titleBlock}>
             <TextInput
               style={styles.titleInput}
-              placeholder="Which film?"
+              placeholder="What's your question?"
               placeholderTextColor={colors.textFaint}
               value={draft.question}
               onChangeText={(question) => setDraft((d) => ({ ...d, question }))}

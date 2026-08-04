@@ -1,3 +1,4 @@
+import { Alert } from 'react-native';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PlanPolls } from '../PlanPolls';
@@ -153,6 +154,25 @@ describe('PlanPolls — who gets a pick', () => {
 
     await fireEvent.press(screen.getByTestId('poll-option-opt-whiplash'));
     expect(votesChain.upsert).not.toHaveBeenCalled();
+  });
+
+  it('a refused vote says what is true, not "you are not in the group"', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    prime([filmPoll]);
+    // The stale-gate race: the UI thinks you can vote, RLS knows you cannot.
+    votesChain.then = (resolve: (v: unknown) => void) =>
+      Promise.resolve({ error: { code: '42501', message: 'permission denied' } }).then(resolve);
+    renderPolls();
+    await waitFor(() => expect(screen.getByTestId('poll-option-opt-perfect')).toBeTruthy());
+
+    await fireEvent.press(screen.getByTestId('poll-option-opt-perfect'));
+    await waitFor(() =>
+      expect(alertSpy).toHaveBeenCalledWith(
+        "Say you're in first",
+        'Voting is for people who are in this plan. Answer yes and you get a pick.'
+      )
+    );
+    alertSpy.mockRestore();
   });
 
   it('an ended plan keeps the tally but takes no votes and no new polls', async () => {

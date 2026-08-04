@@ -1,5 +1,23 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from './supabase';
+import { actionErrorCopy, isForbiddenError } from './queryErrors';
+
+/**
+ * Copy for a refused vote. The generic forbidden copy reads "you're not in
+ * the group", which is flatly wrong for someone looking at the plan — a vote
+ * is refused because they are not in the *plan*. Reachable after the client
+ * gates correctly, because the gate can go stale: withdraw your yes on
+ * another device and the rows you are looking at still take a tap.
+ */
+export function voteErrorCopy(error: unknown): { title: string; body: string } {
+  if (isForbiddenError(error)) {
+    return {
+      title: "Say you're in first",
+      body: 'Voting is for people who are in this plan. Answer yes and you get a pick.',
+    };
+  }
+  return actionErrorCopy(error);
+}
 
 /**
  * The invalidation contract for everything poll-shaped: realtime.ts, the

@@ -6,9 +6,8 @@ import { countPollVotes, pollLeaders } from '@planazo/shared';
 import { ThemedText } from './ui/ThemedText';
 import { Badge } from './ui/Badge';
 import { AvatarStack } from './ui/AvatarStack';
-import { usePlanPolls, planPollKey, type PlanPollRow } from '../lib/usePlanPoll';
+import { usePlanPolls, planPollKey, voteErrorCopy, type PlanPollRow } from '../lib/usePlanPoll';
 import { supabase } from '../lib/supabase';
-import { actionErrorCopy } from '../lib/queryErrors';
 import { colors, spacing } from '../theme/tokens';
 
 interface Props {
@@ -55,8 +54,8 @@ export function PlanPolls({ planId, userId, isHost, peopleIn, canVote, planEnded
     queryClient.invalidateQueries({ queryKey: ['home-plans'] });
   };
 
-  const alertActionError = (error: unknown) => {
-    const { title, body } = actionErrorCopy(error);
+  const alertVoteError = (error: unknown) => {
+    const { title, body } = voteErrorCopy(error);
     Alert.alert(title, body);
   };
 
@@ -69,7 +68,7 @@ export function PlanPolls({ planId, userId, isHost, peopleIn, canVote, planEnded
       if (error) throw error;
     },
     onSuccess: invalidate,
-    onError: alertActionError,
+    onError: alertVoteError,
   });
 
   const withdrawVote = useMutation({
@@ -82,7 +81,7 @@ export function PlanPolls({ planId, userId, isHost, peopleIn, canVote, planEnded
       if (error) throw error;
     },
     onSuccess: invalidate,
-    onError: alertActionError,
+    onError: alertVoteError,
   });
 
   if (isLoading) return null;

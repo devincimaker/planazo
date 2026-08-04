@@ -680,6 +680,33 @@ describe('PlanDetailScreen — the 20a menu', () => {
     expect(screen.queryByTestId('poll-add')).toBeNull();
   });
 
+  it('PLA-47: a group admin who is not in manages polls but holds no pick', async () => {
+    prime({
+      // Someone else's plan; I am a Weekend Crew admin who never answered.
+      plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(8) },
+      rsvps: [{ user_id: 'u-marta', response: 'yes', profile: { display_name: 'Marta' } }],
+      role: 'admin',
+      polls: [
+        {
+          id: 'q1',
+          question: 'Which bar first?',
+          suggestions_open: false,
+          created_at: '2026-08-04T10:00:00Z',
+          plan_poll_options: [{ id: 'o1', label: 'Bar Colombo', position: 0 }],
+          plan_poll_votes: [
+            { option_id: 'o1', user_id: 'u-marta', profile: { display_name: 'Marta' } },
+          ],
+        },
+      ],
+    });
+    await renderDetail();
+
+    // Management yes: the dashed add card is there.
+    await waitFor(() => expect(screen.getByTestId('poll-add')).toBeTruthy());
+    // A pick no: the quiet caption shows and the row swallows the tap.
+    expect(screen.getByText("Say you're in and you get a pick.")).toBeTruthy();
+  });
+
   it('back falls back to the group screen after a deep link', async () => {
     prime({
       plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(8) },
