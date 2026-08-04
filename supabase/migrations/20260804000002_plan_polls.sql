@@ -113,10 +113,11 @@ CREATE INDEX idx_plan_poll_votes_option ON public.plan_poll_votes(option_id);
 -- reason is_group_member and the photo-album predicates are: called from
 -- another table's policy, they must not re-enter the RLS of what they read.
 
--- Who may write questions and options: the plan's host or a group admin, the
--- same pair lock_plan and cancel_plan answer to, and the same pair the plan
--- screen calls isHost. The cancelled check lives here because every
--- management action dies with the plan.
+-- Who may write questions and options: is_plan_host, the single host-or-admin
+-- predicate PLA-42 created after four RPCs drifted — writing the pair out
+-- again by hand is how the fifth drift starts (an early draft here did, and
+-- lost PLA-42's membership requirement on the creator branch). The cancelled
+-- check lives here because every management action dies with the plan.
 CREATE OR REPLACE FUNCTION public.can_manage_plan_poll(p_plan_id UUID)
 RETURNS BOOLEAN
 LANGUAGE sql
@@ -128,15 +129,7 @@ AS $$
     SELECT 1 FROM public.plans p
     WHERE p.id = p_plan_id
       AND p.status <> 'cancelled'
-      AND (
-        p.created_by = auth.uid()
-        OR EXISTS (
-          SELECT 1 FROM public.group_members gm
-          WHERE gm.group_id = p.group_id
-            AND gm.user_id = auth.uid()
-            AND gm.role = 'admin'
-        )
-      )
+      AND public.is_plan_host(p.group_id, p.created_by)
   );
 $$;
 

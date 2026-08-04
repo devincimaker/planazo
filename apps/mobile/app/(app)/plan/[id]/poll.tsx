@@ -10,17 +10,11 @@ import {
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { supabase } from '../../../../lib/supabase';
-import { contentViolation } from '../../../../lib/moderation';
-import { insertPlanPoll, planPollKey } from '../../../../lib/usePlanPoll';
-import {
-  PollOptionsEditor,
-  cleanPollDraft,
-  emptyPollDraft,
-  pollDraftValid,
-} from '../../../../components/PollComposer';
+import { submitPollDraft, planPollKey } from '../../../../lib/usePlanPoll';
+import { emptyPollDraft, pollDraftValid } from '../../../../lib/pollDraft';
+import { PollOptionsEditor } from '../../../../components/PollComposer';
 import { ThemedText, Button } from '../../../../components/ui';
 import { colors, fonts, spacing, type } from '../../../../theme/tokens';
 
@@ -35,50 +29,20 @@ import { colors, fonts, spacing, type } from '../../../../theme/tokens';
  * rides the plan_created push instead.
  */
 export default function NewPollScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // peopleIn rides in from the add-a-poll card, the sheet's only entry
+  // point: the plan screen already holds the number, so fetching it again
+  // here would be a round-trip for one word of copy.
+  const { id, peopleIn: peopleInParam } = useLocalSearchParams<{
+    id: string;
+    peopleIn?: string;
+  }>();
+  const peopleIn = Number(peopleInParam) || 0;
   const router = useRouter();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState(emptyPollDraft());
 
-  // "The 5 who are in": the same population the vote predicate accepts —
-  // yes-RSVPs on a fixed or locked plan, availability voters while the date
-  // vote runs. Its own key, so it cannot clobber the detail screen's caches.
-  const { data: peopleIn } = useQuery({
-    queryKey: ['poll-people-in', id],
-    queryFn: async (): Promise<number> => {
-      const { data, error } = await supabase
-        .from('plans')
-        .select('plan_type, status, rsvps(user_id, response), date_availability(user_id, available)')
-        .eq('id', id)
-        .single();
-      if (error) throw error;
-      const plan = data as unknown as {
-        plan_type: string;
-        status: string;
-        rsvps: { user_id: string; response: string | null }[];
-        date_availability: { user_id: string; available: boolean }[];
-      };
-      if (plan.plan_type === 'flexible' && plan.status === 'open') {
-        return new Set(plan.date_availability.filter((a) => a.available).map((a) => a.user_id))
-          .size;
-      }
-      return plan.rsvps.filter((r) => r.response === 'yes').length;
-    },
-    enabled: !!id,
-  });
-
   const add = useMutation({
-    mutationFn: async () => {
-      const { question, options } = cleanPollDraft(draft);
-      // Guideline 1.2: objectionable language stops here, not in review.
-      const violation = contentViolation({
-        question,
-        option: options.join(' '),
-      });
-      if (violation) throw new Error(violation);
-
-      await insertPlanPoll(String(id), question, options);
-    },
+    mutationFn: () => submitPollDraft(String(id), draft),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: planPollKey(String(id)) });
       queryClient.invalidateQueries({ queryKey: ['home-plans'] });

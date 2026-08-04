@@ -1,13 +1,11 @@
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { countPollVotes, pollLeaders } from '@planazo/shared';
+import { countPollVotes, pollLeaders, pollVotedPhrase } from '@planazo/shared';
 import { ThemedText } from './ui/ThemedText';
 import { Badge } from './ui/Badge';
 import { AvatarStack } from './ui/AvatarStack';
-import { usePlanPolls, planPollKey, voteErrorCopy, type PlanPollRow } from '../lib/usePlanPoll';
-import { supabase } from '../lib/supabase';
+import { usePlanPolls, useVotePlanPoll, type PlanPollRow } from '../lib/usePlanPoll';
 import { colors, spacing } from '../theme/tokens';
 
 interface Props {
@@ -43,46 +41,11 @@ interface Props {
  */
 export function PlanPolls({ planId, userId, isHost, peopleIn, canVote, planEnded }: Props) {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const { data: polls, isLoading } = usePlanPolls(planId);
+  const vote = useVotePlanPoll();
   // Which sections are unfolded. Unvisited polls fall back to "first one
   // open, the rest folded", the reading order the design settles on.
   const [open, setOpen] = useState<Record<string, boolean>>({});
-
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: planPollKey(planId) });
-    queryClient.invalidateQueries({ queryKey: ['home-plans'] });
-  };
-
-  const alertVoteError = (error: unknown) => {
-    const { title, body } = voteErrorCopy(error);
-    Alert.alert(title, body);
-  };
-
-  const vote = useMutation({
-    mutationFn: async ({ pollId, optionId }: { pollId: string; optionId: string }) => {
-      const { error } = await supabase.from('plan_poll_votes').upsert(
-        { poll_id: pollId, plan_id: planId, user_id: userId, option_id: optionId },
-        { onConflict: 'poll_id,user_id' }
-      );
-      if (error) throw error;
-    },
-    onSuccess: invalidate,
-    onError: alertVoteError,
-  });
-
-  const withdrawVote = useMutation({
-    mutationFn: async (pollId: string) => {
-      const { error } = await supabase
-        .from('plan_poll_votes')
-        .delete()
-        .eq('poll_id', pollId)
-        .eq('user_id', userId);
-      if (error) throw error;
-    },
-    onSuccess: invalidate,
-    onError: alertVoteError,
-  });
 
   if (isLoading) return null;
   const list = polls ?? [];
@@ -93,24 +56,29 @@ export function PlanPolls({ planId, userId, isHost, peopleIn, canVote, planEnded
 
   return (
     <View style={styles.sections}>
-      {list.map((poll, index) => (
-        <PollSection
-          key={poll.id}
-          poll={poll}
-          userId={userId}
-          peopleIn={peopleIn}
-          live={live}
-          expanded={open[poll.id] ?? index === 0}
-          onToggle={() => setOpen((o) => ({ ...o, [poll.id]: !(o[poll.id] ?? index === 0) }))}
-          onPick={(optionId, mine) =>
-            mine ? withdrawVote.mutate(poll.id) : vote.mutate({ pollId: poll.id, optionId })
-          }
-        />
-      ))}
+      {list.map((poll, index) => {
+        const expanded = open[poll.id] ?? index === 0;
+        return (
+          <PollSection
+            key={poll.id}
+            poll={poll}
+            userId={userId}
+            peopleIn={peopleIn}
+            live={live}
+            expanded={expanded}
+            onToggle={() => setOpen((o) => ({ ...o, [poll.id]: !expanded }))}
+            onPick={(optionId, mine) =>
+              vote.mutate({ planId, pollId: poll.id, userId, optionId: mine ? null : optionId })
+            }
+          />
+        );
+      })}
 
       {showAdd ? (
         <Pressable
-          onPress={() => router.push(`/plan/${planId}/poll`)}
+          // peopleIn rides along so the sheet's "The 5 who are in" row costs
+          // no second fetch — this card is the sheet's only entry point.
+          onPress={() => router.push(`/plan/${planId}/poll?peopleIn=${peopleIn}`)}
           accessibilityRole="button"
           testID="poll-add"
           style={styles.addCard}
@@ -155,12 +123,7 @@ function PollSection({
   const myOptionId = votes.find((v) => v.user_id === userId)?.option_id ?? null;
   const myPick = options.find((o) => o.id === myOptionId) ?? null;
 
-  const caption =
-    votedCount === 0
-      ? "Nobody's voted"
-      : votedCount >= peopleIn
-        ? "Everyone's voted"
-        : `${votedCount} of ${peopleIn} voted`;
+  const caption = pollVotedPhrase(votedCount, peopleIn);
 
   const namesFor = (optionId: string) =>
     votes

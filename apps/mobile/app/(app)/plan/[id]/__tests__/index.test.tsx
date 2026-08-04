@@ -669,7 +669,7 @@ describe('PlanDetailScreen — the 20a menu', () => {
     expect(screen.getByText('+ Add a poll')).toBeTruthy();
 
     await fireEvent.press(screen.getByTestId('poll-add'));
-    expect(mockPush).toHaveBeenCalledWith('/plan/plan-1/poll');
+    expect(mockPush).toHaveBeenCalledWith(expect.stringMatching(/^\/plan\/plan-1\/poll/));
 
     prime({
       plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(8) },
@@ -690,7 +690,6 @@ describe('PlanDetailScreen — the 20a menu', () => {
         {
           id: 'q1',
           question: 'Which bar first?',
-          suggestions_open: false,
           created_at: '2026-08-04T10:00:00Z',
           plan_poll_options: [{ id: 'o1', label: 'Bar Colombo', position: 0 }],
           plan_poll_votes: [

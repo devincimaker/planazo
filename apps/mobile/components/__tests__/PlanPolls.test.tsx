@@ -27,7 +27,6 @@ function chain(result: unknown) {
 const filmPoll = {
   id: 'q-film',
   question: 'Which film',
-  suggestions_open: false,
   created_at: '2026-08-04T10:00:00Z',
   plan_poll_options: [
     { id: 'opt-whiplash', label: 'Whiplash', position: 0 },
@@ -44,7 +43,6 @@ const filmPoll = {
 const foodPoll = {
   id: 'q-food',
   question: 'Who brings what',
-  suggestions_open: false,
   created_at: '2026-08-04T11:00:00Z',
   plan_poll_options: [
     { id: 'opt-asado', label: 'Asado', position: 0 },
@@ -196,7 +194,7 @@ describe('PlanPolls — the host invitation', () => {
     expect(screen.getByText('Let them pick the film, the place, who brings what')).toBeTruthy();
 
     await fireEvent.press(screen.getByTestId('poll-add'));
-    expect(mockPush).toHaveBeenCalledWith('/plan/plan-1/poll');
+    expect(mockPush).toHaveBeenCalledWith('/plan/plan-1/poll?peopleIn=5');
   });
 
   it('with polls the invitation reads add another', async () => {

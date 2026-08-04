@@ -1,44 +1,14 @@
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { ThemedText } from './ui/ThemedText';
+import { MAX_POLL_OPTIONS, type PollDraft } from '../lib/pollDraft';
 import { colors, radii, spacing, type } from '../theme/tokens';
-
-/**
- * PLA-48 opens the option list to the whole group; until then a poll is a
- * short host-written list, and six is already generous for one.
- */
-export const MAX_POLL_OPTIONS = 6;
-
-export interface PollDraft {
-  question: string;
-  options: string[];
-}
-
-export const emptyPollDraft = (): PollDraft => ({ question: '', options: ['', ''] });
-
-/** Trimmed, blanks dropped — what actually gets inserted. */
-export function cleanPollDraft(draft: PollDraft): { question: string; options: string[] } {
-  return {
-    question: draft.question.trim(),
-    options: draft.options.map((o) => o.trim()).filter(Boolean),
-  };
-}
-
-/** A question with fewer than two real options is not a question. */
-export function pollDraftValid(draft: PollDraft): boolean {
-  const { question, options } = cleanPollDraft(draft);
-  return question.length > 0 && options.length >= 2 && new Set(options).size === options.length;
-}
-
-/** Anything typed at all — the create sheet must not post half a poll. */
-export function pollDraftTouched(draft: PollDraft): boolean {
-  return draft.question.trim().length > 0 || draft.options.some((o) => o.trim().length > 0);
-}
 
 /**
  * The option list the host writes: one bordered row per option with a ✕ to
  * take it back out, and a ghost "Add another…" row that becomes real when
  * tapped. Shared by the new-poll sheet and the create sheet's collapsed
- * section so the two paths cannot drift.
+ * section so the two paths cannot drift. The draft logic itself lives in
+ * lib/pollDraft.
  */
 export function PollOptionsEditor({
   options,
@@ -109,11 +79,9 @@ export function PollOptionsEditor({
 export function PollComposer({
   draft,
   onChange,
-  autoFocus = false,
 }: {
   draft: PollDraft;
   onChange: (draft: PollDraft) => void;
-  autoFocus?: boolean;
 }) {
   return (
     <View style={styles.fields}>
@@ -123,7 +91,6 @@ export function PollComposer({
         placeholderTextColor={colors.textFaint}
         value={draft.question}
         onChangeText={(question) => onChange({ ...draft, question })}
-        autoFocus={autoFocus}
         testID="poll-question-input"
       />
       <PollOptionsEditor

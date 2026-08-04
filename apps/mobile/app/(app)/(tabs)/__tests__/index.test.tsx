@@ -24,7 +24,7 @@ const mockFrom = supabase.from as jest.Mock;
 /** Chainable, awaitable Supabase query-builder stub. */
 function chain(result: unknown) {
   const c: any = {};
-  ['select', 'eq', 'in', 'neq', 'gte', 'order', 'upsert', 'update', 'delete'].forEach((m) => {
+  ['select', 'eq', 'in', 'neq', 'gte', 'order', 'limit', 'upsert', 'update', 'delete'].forEach((m) => {
     c[m] = jest.fn(() => c);
   });
   c.then = (resolve: (v: unknown) => void) => Promise.resolve(result).then(resolve);

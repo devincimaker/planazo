@@ -15,18 +15,22 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
+  canVoteOnPolls,
   countAvailabilityByDate,
+  countPollVotes,
   earliestViableDate,
   flattenNestedOptions,
   isPlanConfirmed,
   isPlanFull,
   isPlanPast,
   needsUserResponse,
+  pollPeopleIn,
+  pollVotedPhrase,
   waitlistPosition,
 } from '@planazo/shared';
 import { supabase } from '../../../lib/supabase';
 import { deleteOwnRsvp, offerWaitingList, waitingLabel } from '../../../lib/rsvp';
-import { voteErrorCopy } from '../../../lib/usePlanPoll';
+import { useVotePlanPoll } from '../../../lib/usePlanPoll';
 import { actionErrorCopy, errorCopy } from '../../../lib/queryErrors';
 import { usePullToRefresh } from '../../../lib/usePullToRefresh';
 import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
@@ -92,7 +96,12 @@ export default function FeedScreen() {
         )
         .in('group_id', groupIds)
         .neq('status', 'cancelled')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        // A feed card is a summary: it carries the plan's first poll only,
+        // and whoever wants the second is one tap from the plan. Selecting
+        // it here keeps the embed small and deletes the client-side sort.
+        .order('created_at', { referencedTable: 'plan_polls', ascending: true })
+        .limit(1, { referencedTable: 'plan_polls' });
 
       if (error) throw error;
       return data ?? [];
@@ -202,45 +211,9 @@ export default function FeedScreen() {
   });
 
   // One pick each, straight from the card: another option moves the vote,
-  // your own withdraws it (PLA-47).
-  const voteOnPoll = useMutation({
-    mutationFn: async ({
-      planId,
-      pollId,
-      optionId,
-      mine,
-    }: {
-      planId: string;
-      pollId: string;
-      optionId: string;
-      mine: boolean;
-    }) => {
-      if (mine) {
-        const { error } = await supabase
-          .from('plan_poll_votes')
-          .delete()
-          .eq('poll_id', pollId)
-          .eq('user_id', user!.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from('plan_poll_votes').upsert(
-          { poll_id: pollId, plan_id: planId, user_id: user!.id, option_id: optionId },
-          { onConflict: 'poll_id,user_id' }
-        );
-        if (error) throw error;
-      }
-    },
-    onSuccess: (_data, vars) => {
-      invalidate();
-      queryClient.invalidateQueries({ queryKey: ['plan-poll', vars.planId] });
-    },
-    // A vote can be refused by a stale gate (you withdrew your yes on another
-    // device); the generic forbidden copy would claim you're not in the group.
-    onError: (error: unknown) => {
-      const { title, body } = voteErrorCopy(error);
-      Alert.alert(title, body);
-    },
-  });
+  // your own withdraws it (PLA-47). The write, its invalidations and its
+  // refusal copy all live in the shared hook.
+  const voteOnPoll = useVotePlanPoll();
 
   const declineFlexible = useMutation({
     mutationFn: async ({ planId, optionIds }: { planId: string; optionIds: string[] }) => {
@@ -324,14 +297,11 @@ export default function FeedScreen() {
       // Only you see your own place in the queue (PLA-37).
       const waitPosition = waitlistPosition(plan.rsvps, user?.id);
 
-      // The plan's first poll (PLA-47), votable right on the card. One per
-      // card: a feed card is a summary, and whoever wants the second poll is
-      // one tap from the plan. Voting is for the people who are in, the same
-      // gate the RLS enforces, so a bystander sees the tally inert.
-      const pollRows = [...(plan.plan_polls ?? [])].sort(
-        (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      );
-      const pollRow = pollRows[0] ?? null;
+      // The plan's first poll (PLA-47), votable right on the card — the
+      // query keeps only the oldest one. The pick gate and the turnout
+      // phrase are the shared derivations the plan screen also uses, so the
+      // two surfaces cannot disagree about either.
+      const pollRow = (plan.plan_polls ?? [])[0] ?? null;
       let poll: {
         id: string;
         question: string;
@@ -340,30 +310,29 @@ export default function FeedScreen() {
         canVote: boolean;
       } | null = null;
       if (pollRow) {
-        const canVote =
-          plan.created_by === user?.id ||
-          (rsvpDriven ? userRsvp?.response === 'yes' : myDates > 0);
+        const canVote = canVoteOnPolls(
+          { created_by: plan.created_by, rsvps: plan.rsvps, availabilities },
+          user?.id
+        );
         const votes: { option_id: string; user_id: string }[] = pollRow.plan_poll_votes ?? [];
+        const sortedOptions = [...(pollRow.plan_poll_options ?? [])].sort(
+          (a: any, b: any) => a.position - b.position
+        );
+        const counts = countPollVotes(sortedOptions, votes);
         const myVote = votes.find((v) => v.user_id === user?.id);
-        const options = [...(pollRow.plan_poll_options ?? [])]
-          .sort((a: any, b: any) => a.position - b.position)
-          .map((o: any) => ({
-            id: o.id as string,
-            label: o.label as string,
-            votes: votes.filter((v) => v.option_id === o.id).length,
-            mine: myVote?.option_id === o.id,
-          }));
+        const options = sortedOptions.map((o: any) => ({
+          id: o.id as string,
+          label: o.label as string,
+          votes: counts[o.id],
+          mine: myVote?.option_id === o.id,
+        }));
         const myPick = options.find((o) => o.mine);
-        const peopleIn = goingNames.length;
+        const base = pollVotedPhrase(votes.length, pollPeopleIn(plan.rsvps, availabilities));
         const caption = myPick
           ? `You picked ${myPick.label} · tap to change`
-          : votes.length === 0
-            ? canVote
-              ? 'Nobody has voted · tap to vote'
-              : 'Nobody has voted'
-            : canVote
-              ? `${votes.length} of ${peopleIn} voted · tap to vote`
-              : `${votes.length} of ${peopleIn} voted`;
+          : canVote
+            ? `${base} · tap to vote`
+            : base;
         poll = { id: pollRow.id, question: pollRow.question, options, caption, canVote };
       }
 
@@ -687,8 +656,8 @@ export default function FeedScreen() {
                                   voteOnPoll.mutate({
                                     planId: d.plan.id,
                                     pollId: d.poll!.id,
-                                    optionId: opt.id,
-                                    mine: opt.mine,
+                                    userId: user!.id,
+                                    optionId: opt.mine ? null : opt.id,
                                   })
                               : undefined
                           }

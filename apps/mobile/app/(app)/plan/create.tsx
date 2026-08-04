@@ -19,14 +19,9 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import Animated, { FadeInDown, FadeOutUp, LinearTransition } from 'react-native-reanimated';
 import { supabase } from '../../../lib/supabase';
 import { contentViolation } from '../../../lib/moderation';
-import { insertPlanPoll } from '../../../lib/usePlanPoll';
-import {
-  PollComposer,
-  cleanPollDraft,
-  emptyPollDraft,
-  pollDraftTouched,
-  pollDraftValid,
-} from '../../../components/PollComposer';
+import { submitPollDraft } from '../../../lib/usePlanPoll';
+import { emptyPollDraft, pollDraftTouched, pollDraftValid } from '../../../lib/pollDraft';
+import { PollComposer } from '../../../components/PollComposer';
 import { useAuthStore } from '../../../stores/authStore';
 import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
 import { ThemedText, Button, MonthCalendar, colorForName } from '../../../components/ui';
@@ -218,17 +213,12 @@ export default function CreatePlanScreen() {
         if (availError) throw availError;
       }
 
-      // The optional question rides along. Same moderation gate as the plan's
-      // own fields; born with its plan, so notify_plan_poll_opened stays
-      // silent and the plan_created push carries the group there.
+      // The optional question rides along — submitPollDraft owns the trim
+      // and the moderation gate. Born with its plan, so
+      // notify_plan_poll_opened stays silent and the plan_created push
+      // carries the group there.
       if (pollDraftTouched(pollDraft)) {
-        const poll = cleanPollDraft(pollDraft);
-        const pollViolation = contentViolation({
-          question: poll.question,
-          option: poll.options.join(' '),
-        });
-        if (pollViolation) throw new Error(pollViolation);
-        await insertPlanPoll(plan.id, poll.question, poll.options);
+        await submitPollDraft(plan.id, pollDraft);
       }
       return plan;
     },

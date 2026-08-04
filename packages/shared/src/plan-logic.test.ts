@@ -19,6 +19,9 @@ import {
   isPlanPast,
   countPollVotes,
   pollLeaders,
+  canVoteOnPolls,
+  pollPeopleIn,
+  pollVotedPhrase,
   DateOption,
   Availability,
 } from './plan-logic';
@@ -654,6 +657,49 @@ describe('polls (PLA-47)', () => {
 
   it('zero votes means no leader, not "everything leads"', () => {
     expect(pollLeaders(options, [])).toEqual({ leaders: [], maxVotes: 0 });
+  });
+
+  it('a pick belongs to the people who are in, plus the creator', () => {
+    const data = {
+      created_by: 'u-host',
+      rsvps: [
+        { user_id: 'u-yes', response: 'yes' },
+        { user_id: 'u-no', response: 'no' },
+      ],
+      availabilities: [{ date_option_id: 'd1', user_id: 'u-avail' }],
+    };
+    expect(canVoteOnPolls(data, 'u-host')).toBe(true);
+    expect(canVoteOnPolls(data, 'u-yes')).toBe(true);
+    expect(canVoteOnPolls(data, 'u-avail')).toBe(true);
+    expect(canVoteOnPolls(data, 'u-no')).toBe(false);
+    expect(canVoteOnPolls(data, 'u-bystander')).toBe(false);
+    expect(canVoteOnPolls(data, null)).toBe(false);
+  });
+
+  it('the denominator is the distinct union of yeses and availability voters', () => {
+    // On a locked flexible plan the same person holds both a seeded yes and
+    // their old availability rows; they count once.
+    expect(
+      pollPeopleIn(
+        [
+          { user_id: 'u1', response: 'yes' },
+          { user_id: 'u2', response: 'no' },
+        ],
+        [
+          { date_option_id: 'd1', user_id: 'u1' },
+          { date_option_id: 'd1', user_id: 'u3' },
+        ]
+      )
+    ).toBe(2);
+    expect(pollPeopleIn(null, null)).toBe(0);
+  });
+
+  it('one turnout phrase for every surface', () => {
+    expect(pollVotedPhrase(0, 5)).toBe("Nobody's voted");
+    expect(pollVotedPhrase(3, 5)).toBe('3 of 5 voted');
+    expect(pollVotedPhrase(5, 5)).toBe("Everyone's voted");
+    // The creator's vote can outrun a denominator that doesn't count them.
+    expect(pollVotedPhrase(6, 5)).toBe("Everyone's voted");
   });
 
   it('confirmation knows nothing about polls', () => {

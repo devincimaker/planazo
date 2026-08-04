@@ -20,11 +20,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown, FadeOutUp, LinearTransition } from 'react-native-reanimated';
 import * as Clipboard from 'expo-clipboard';
 import {
+  canVoteOnPolls,
   countAvailabilityByDate,
   getYesCount,
   isPlanFull,
   isPlanPast,
   planLastDate,
+  pollPeopleIn,
   waitlistPosition,
   type DateCount,
 } from '@planazo/shared';
@@ -932,22 +934,21 @@ export default function PlanDetailScreen() {
         ) : null}
 
         {/* The plan's polls (PLA-47). Below the date vote on purpose: when is
-            still the primary decision, what is a detail of it. Voting is for
-            the people who are in, plus the plan's creator — NOT d.isHost,
-            which also covers group admins: an admin manages polls (isHost)
-            but holds no pick until they answer, matching the server's
-            can_vote_plan_poll and the feed card's gate. */}
+            still the primary decision, what is a detail of it. The pick gate
+            and the denominator are the shared client mirrors of the SQL
+            predicate — NOT d.isHost, which also covers group admins: an
+            admin manages polls (isHost) but holds no pick until they
+            answer. */}
         {user ? (
           <PlanPolls
             planId={String(id)}
             userId={user.id}
             isHost={d.isHost}
-            peopleIn={
-              d.isOpenFlexible
-                ? new Set((availabilities ?? []).map((a) => a.user_id)).size
-                : d.yesCount
-            }
-            canVote={d.youIn || plan.created_by === user.id}
+            peopleIn={pollPeopleIn(rsvps, availabilities)}
+            canVote={canVoteOnPolls(
+              { created_by: plan.created_by, rsvps, availabilities },
+              user.id
+            )}
             planEnded={d.isCancelled || d.isPast}
           />
         ) : null}
