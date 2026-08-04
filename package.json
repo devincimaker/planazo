@@ -5,6 +5,8 @@
     "dev": "turbo dev --ui tui",
     "build": "turbo build",
     "lint": "turbo lint",
+    "knip": "knip --include files,dependencies,unlisted,binaries",
+    "knip:all": "knip",
     "dev:mobile": "turbo dev --filter=mobile",
     "db:push": "npx supabase db push",
     "db:reset": "npx supabase db reset",
@@ -28,6 +30,7 @@
     "dotenv": "^16.4.5",
     "eslint": "^10",
     "eslint-plugin-react-hooks": "^7",
+    "knip": "^6.31.0",
     "turbo": "^2.3.0",
     "typescript-eslint": "^8"
   },

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+
+  // Dead-code detection for the whole workspace. ESLint sees one file at a
+  // time, so it catches an unused local and nothing else; knip resolves the
+  // whole import graph and answers the question ESLint cannot: is anything
+  // still reaching this?
+  //
+  // Which findings are a *gate* is set by the `knip` script in package.json,
+  // not here. Today that is the structural set — dead files, undeclared
+  // imports, dependencies nothing uses. Unused exports are a real backlog (20
+  // of them) living mostly in the screens PLA-58/59/60 are splitting up, and
+  // turning them on mid-refactor would fight that work. PLA-64 clears them
+  // and widens the gate.
+  //
+  // `pnpm knip` is exactly what CI runs, so a green run locally means a green
+  // run there. `pnpm knip:all` adds the deferred backlog on top.
+
+  "workspaces": {
+    ".": {
+      // Deployed to Supabase and invoked by the trg_push_notification pg_net
+      // trigger, so nothing in this repo imports it. Without this line it
+      // reads as a dead file (see supabase/config.toml).
+      "entry": ["supabase/functions/**/index.ts"],
+
+      // That function is Deno, where a dependency is written inline as
+      // `npm:@supabase/supabase-js@2`. knip resolves the specifier to a
+      // package literally named "npm". There is nothing to declare: Deno
+      // fetches it at deploy time, and this repo's package.json has no say.
+      "ignoreDependencies": ["npm"]
+    },
+
+    "apps/mobile": {
+      "ignoreDependencies": [
+        // Declared on purpose in c5f9be9 ("so production builds embed the JS
+        // bundle"): the @sentry/react-native/expo plugin shells out to it
+        // during an EAS build. Nothing imports it, and nothing should.
+        "@sentry/cli",
+
+        // jest-expo's renderer reaches for this at runtime rather than
+        // through an import, so dropping it turns every component test red.
+        "react-test-renderer",
+
+        // Inferred by knip's Expo plugin from app.json keys rather than from
+        // any import: `userInterfaceStyle` implies expo-system-ui, the EAS
+        // project id implies expo-updates. Neither is installed and the app
+        // builds without them. Worth revisiting if Android ever ships, since
+        // expo-system-ui is what applies `userInterfaceStyle` there.
+        "expo-updates",
+        "expo-system-ui"
+      ]
+    }
+  },
+
+  // The Supabase CLI is deliberately not a dependency: CI pins it with
+  // supabase/setup-cli at 2.90.0 (newer versions break table grants, see
+  // ci.yml) and locally it comes from npx. Declaring it in package.json would
+  // give us a second version to keep in sync with that pin.
+  "ignoreBinaries": ["supabase"]
+}

@@ -40,6 +40,13 @@ jobs:
       - name: Lint
         run: pnpm turbo lint
 
+      # ESLint sees one file at a time, so a file nothing imports and an export
+      # nobody reads both look fine to it. knip resolves the whole import graph
+      # instead. Gated on the structural findings only; see knip.jsonc for what
+      # is deferred and why.
+      - name: Dead code
+        run: pnpm knip
+
       - name: Unit tests (shared)
         run: pnpm --filter @planazo/shared test
 
@@ -57,17 +64,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # `db push` matches migrations to the remote history table by version
-      # timestamp, so editing a file that production has already applied is
-      # SILENTLY skipped at deploy — CI's fresh stack would test the edit,
-      # production would never receive it, and the two diverge without a single
-      # red signal. Migrations that predate the change are therefore immutable:
-      # fix forward with a new migration. On PRs the baseline is the base
-      # branch; on direct pushes to main it is the previous tip, which turns a
-      # silent divergence into a loud red run at the exact commit that caused
-      # it (and blocks that run's own deploy). A branch's own new migrations
-      # stay freely editable.
-      - name: Existing migrations are immutable
+      # What this change is measured against: the base branch on a PR, the
+      # previous tip on a direct push to main. Empty means there is no baseline
+      # (a branch's first push, or the very first commit), which every step
+      # below reads as "assume everything changed" rather than "skip".
+      - name: Resolve the baseline commit
+        id: baseline
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             base="${{ github.event.pull_request.base.sha }}"
@@ -75,25 +77,76 @@ jobs:
             base="${{ github.event.before }}"
           fi
           case "$base" in
-            "" | 0000000000000000000000000000000000000000) exit 0 ;;
+            "" | 0000000000000000000000000000000000000000) base="" ;;
+            *) git fetch --quiet --depth=1 origin "$base" ;;
           esac
-          git fetch --quiet --depth=1 origin "$base"
+          echo "sha=$base" >> "$GITHUB_OUTPUT"
+
+      # `db push` matches migrations to the remote history table by version
+      # timestamp, so editing a file that production has already applied is
+      # SILENTLY skipped at deploy — CI's fresh stack would test the edit,
+      # production would never receive it, and the two diverge without a single
+      # red signal. Migrations that predate the change are therefore immutable:
+      # fix forward with a new migration. This runs on every event that has a
+      # baseline, including the ones that skip the stack below: it costs
+      # nothing, needs no dependencies, and a silent divergence is exactly what
+      # must never slip through.
+      - name: Existing migrations are immutable
+        if: steps.baseline.outputs.sha != ''
+        run: |
           changed=$(git diff --name-status --diff-filter=MDR \
-            "$base" HEAD -- supabase/migrations/)
+            "${{ steps.baseline.outputs.sha }}" HEAD -- supabase/migrations/)
           if [ -n "$changed" ]; then
             echo "$changed"
             echo "::error::This change modifies, deletes or renames migrations that already existed. 'supabase db push' identifies migrations by version and silently skips edited content, so production would never receive these changes. Write a new migration instead."
             exit 1
           fi
 
+      # Everything after this point costs minutes: a pinned CLI download, a
+      # full Postgres + auth boot, and the whole integration suite. A change
+      # that touches none of the inputs to that verdict cannot alter it, so it
+      # does not pay for it. The gate is per-step rather than on the job, so
+      # the job still reports success either way — a skipped job would be a
+      # skipped required check, and `deploy` needs this one.
+      #
+      # On the list: the schema and its seed, the tests themselves, the shared
+      # package they import, the lockfile (a dependency bump can change how
+      # supabase-js talks to the database) and this workflow.
+      - name: Does this change touch the database?
+        id: scope
+        run: |
+          base="${{ steps.baseline.outputs.sha }}"
+          if [ -z "$base" ]; then
+            echo "No baseline to compare against, so the whole job runs."
+            echo "touched=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed=$(git diff --name-only "$base" HEAD -- \
+            supabase/ \
+            packages/integration-tests/ \
+            packages/shared/ \
+            pnpm-lock.yaml \
+            .github/workflows/ci.yml)
+          if [ -n "$changed" ]; then
+            echo "Database-relevant files changed:"
+            echo "$changed"
+            echo "touched=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Nothing under supabase/, the integration tests, @planazo/shared, the lockfile or this workflow changed. Skipping the stack."
+            echo "touched=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: pnpm/action-setup@v4
+        if: steps.scope.outputs.touched == 'true'
 
       - uses: actions/setup-node@v4
+        if: steps.scope.outputs.touched == 'true'
         with:
           node-version: 22
           cache: pnpm
 
       - name: Install dependencies
+        if: steps.scope.outputs.touched == 'true'
         run: pnpm install --frozen-lockfile
 
       # Pinned, not latest: newer CLIs (2.110.0 observed) create the local DB
@@ -101,15 +154,18 @@ jobs:
       # API query fails with "permission denied for table". 2.90.0 matches
       # the locally verified behavior.
       - uses: supabase/setup-cli@v1
+        if: steps.scope.outputs.touched == 'true'
         with:
           version: 2.90.0
 
       # Full stack, not `db start`: the integration tests sign up real users,
       # so auth (and the REST API) must be up. Migrations apply on start.
       - name: Start local Supabase and apply all migrations
+        if: steps.scope.outputs.touched == 'true'
         run: supabase start
 
       - name: Integration tests (RLS, RPCs, triggers)
+        if: steps.scope.outputs.touched == 'true'
         run: pnpm --filter @planazo/integration-tests test
 
   deploy:
