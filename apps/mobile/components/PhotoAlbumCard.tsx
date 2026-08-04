@@ -130,7 +130,7 @@ export function PhotoAlbumCard({ planId, userId, albumOpen, canAdd }: Props) {
           <View style={[styles.pad, styles.strip]}>
             {strip.length
               ? strip.map((photo, index) => (
-                  <PhotoTile key={photo.id} url={photo.url} index={index} />
+                  <PhotoTile key={photo.id} url={photo.thumbUrl} index={index} />
                 ))
               : Array.from({ length: Math.min(total, STRIP_MAX) }, (_, index) => (
                   <PhotoTile key={index} index={index} />

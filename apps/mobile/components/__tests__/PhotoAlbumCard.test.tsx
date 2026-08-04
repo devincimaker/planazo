@@ -30,6 +30,7 @@ function photo(id: string, uploader: string, name: string) {
     plan_id: 'plan-1',
     uploaded_by: uploader,
     storage_path: `plan-1/${uploader}/${id}.jpg`,
+    thumb_path: `plan-1/${uploader}/${id}_thumb.jpg`,
     width: 900,
     height: 900,
     created_at: '2026-08-03T10:00:00Z',
@@ -40,7 +41,11 @@ function photo(id: string, uploader: string, name: string) {
 function prime(rows: ReturnType<typeof photo>[], error: unknown = null) {
   mockUsePlanPhotos.mockReturnValue({
     rows,
-    signed: rows.map((r) => ({ ...r, url: `https://signed/${r.id}` })),
+    signed: rows.map((r) => ({
+      ...r,
+      url: `https://signed/${r.id}`,
+      thumbUrl: `https://signed/${r.id}_thumb`,
+    })),
     isLoading: false,
     error,
   });

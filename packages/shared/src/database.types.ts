@@ -427,6 +427,7 @@ export type Database = {
           id: string
           plan_id: string
           storage_path: string
+          thumb_path: string | null
           uploaded_by: string
           width: number | null
         }
@@ -436,6 +437,7 @@ export type Database = {
           id?: string
           plan_id: string
           storage_path: string
+          thumb_path?: string | null
           uploaded_by: string
           width?: number | null
         }
@@ -445,6 +447,7 @@ export type Database = {
           id?: string
           plan_id?: string
           storage_path?: string
+          thumb_path?: string | null
           uploaded_by?: string
           width?: number | null
         }

@@ -130,7 +130,7 @@ export default function PlanAlbumScreen() {
               style={styles.cell}
               testID={`album-tile-${index}`}
             >
-              <PhotoTile url={'url' in item ? item.url : undefined} index={index} />
+              <PhotoTile url={'url' in item ? item.thumbUrl : undefined} index={index} />
             </Pressable>
           )}
         />
