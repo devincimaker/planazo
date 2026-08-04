@@ -6,7 +6,7 @@ import { ThemedText, AvatarStack } from '../ui';
 import { colors, fonts, spacing } from '../../theme/tokens';
 
 /** One plan's slice of the rows the group screen derives, as the Past section reads it. */
-export interface PastPlanRow {
+interface PastPlanRow {
   id: string;
   title: string;
   ending: 'cancelled' | 'expired' | 'happened' | null;

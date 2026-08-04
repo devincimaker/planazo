@@ -1,4 +1,5 @@
 import { View, StyleSheet, Pressable } from 'react-native';
+import { type RsvpResponse } from '@planazo/shared';
 import {
   ThemedText,
   Card,
@@ -9,11 +10,11 @@ import {
   DateOptionRow,
   colorForName,
 } from '../ui';
+import { fmtDay } from '../../lib/dates';
 import { waitingLabel } from '../../lib/rsvp';
+import { useVotePlanPoll } from '../../lib/usePlanPoll';
+import { useAuthStore } from '../../stores/authStore';
 import { colors, spacing } from '../../theme/tokens';
-
-const fmtDay = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 
 /** One feed card's slice of the decorated plan the feed screen computes. */
 export interface FeedPlan {
@@ -27,7 +28,7 @@ export interface FeedPlan {
   } | null;
   needs: boolean;
   confirmed: boolean;
-  userRsvp: any;
+  userRsvp?: { response: RsvpResponse | null };
   rsvpDriven: boolean;
   isFull: boolean;
   waitPosition: number | null;
@@ -36,24 +37,22 @@ export interface FeedPlan {
   goingNames: string[];
   dateOptions: { id: string; date: string }[];
   countByDate: Record<string, { count: number; date: string }>;
-  optionIds: string[];
 }
 
 interface FeedPlanCardProps {
-  d: FeedPlan;
+  item: FeedPlan;
   /** The user's uncommitted date picks for this plan; state lives in the screen. */
   picked: string[];
-  onTogglePicked: (optionId: string) => void;
-  onOpen: () => void;
-  onAnswer: (response: 'yes' | 'no' | 'pending') => void;
-  onClearAnswer: () => void;
-  onSendDates: (optionIds: string[]) => void;
-  onDecline: () => void;
-  onVote: (pollId: string, optionId: string | null) => void;
+  onTogglePicked: (planId: string, optionId: string) => void;
+  onOpen: (planId: string) => void;
+  onAnswer: (planId: string, response: RsvpResponse) => void;
+  onClearAnswer: (planId: string) => void;
+  onSendDates: (planId: string, optionIds: string[]) => void;
+  onDecline: (planId: string, optionIds: string[]) => void;
 }
 
 export function FeedPlanCard({
-  d,
+  item,
   picked,
   onTogglePicked,
   onOpen,
@@ -61,11 +60,16 @@ export function FeedPlanCard({
   onClearAnswer,
   onSendDates,
   onDecline,
-  onVote,
 }: FeedPlanCardProps) {
-  const { plan } = d;
+  const { plan } = item;
+  const { user } = useAuthStore();
   const groupName = plan.groups?.name ?? 'Group';
   const groupColor = plan.groups?.color ?? colorForName(groupName);
+
+  // One pick each, straight from the card: another option moves the vote,
+  // your own withdraws it (PLA-47). The write, its invalidations and its
+  // refusal copy all live in the shared hook, same as PlanPolls.
+  const voteOnPoll = useVotePlanPoll();
 
   const renderAnswer = () => {
     // A called-off plan is a record — the notice above the feed carries it.
@@ -75,59 +79,63 @@ export function FeedPlanCard({
     // flexible plan answers like a fixed one: a plain yes/no on your own row.
     // It has to stay reachable — locking seeds every available member into a
     // 'yes' they never tapped, and that's exactly when a clash shows up.
-    if (d.rsvpDriven) {
+    if (item.rsvpDriven) {
       // The card stays dense: the position is the whole message, and the
       // promise behind it ("we'll tell you") lives on plan detail.
-      if (d.userRsvp?.response === 'pending') {
+      if (item.userRsvp?.response === 'pending') {
         return (
           <AnswerFooter
             size="md"
             answered="pending"
-            answerLabel={waitingLabel(d.waitPosition)}
-            onChange={onClearAnswer}
+            answerLabel={waitingLabel(item.waitPosition)}
+            onChange={() => onClearAnswer(plan.id)}
           />
         );
       }
-      if (d.userRsvp?.response === 'yes' || d.userRsvp?.response === 'no') {
+      if (item.userRsvp?.response === 'yes' || item.userRsvp?.response === 'no') {
         return (
-          <AnswerFooter size="md" answered={d.userRsvp.response} onChange={onClearAnswer} />
+          <AnswerFooter
+            size="md"
+            answered={item.userRsvp.response}
+            onChange={() => onClearAnswer(plan.id)}
+          />
         );
       }
       return (
         <AnswerFooter
           size="md"
-          full={d.isFull}
-          onYes={() => onAnswer('yes')}
-          onNo={() => onAnswer('no')}
-          onWait={() => onAnswer('pending')}
+          full={item.isFull}
+          onYes={() => onAnswer(plan.id, 'yes')}
+          onNo={() => onAnswer(plan.id, 'no')}
+          onWait={() => onAnswer(plan.id, 'pending')}
         />
       );
     }
 
     // Flexible: answer inline — tap the dates that work, send them (2a)
-    if (d.userRsvp?.response === 'no') {
-      return <AnswerFooter size="md" answered="no" onChange={onClearAnswer} />;
+    if (item.userRsvp?.response === 'no') {
+      return <AnswerFooter size="md" answered="no" onChange={() => onClearAnswer(plan.id)} />;
     }
-    if (d.myDates > 0) {
+    if (item.myDates > 0) {
       return (
         <AnswerFooter
           size="md"
           answered="yes"
-          answerLabel={`You sent ${d.myDates} date${d.myDates === 1 ? '' : 's'}`}
-          onChange={onOpen}
+          answerLabel={`You sent ${item.myDates} date${item.myDates === 1 ? '' : 's'}`}
+          onChange={() => onOpen(plan.id)}
         />
       );
     }
 
     return (
       <View style={styles.chips}>
-        {d.dateOptions.map((opt) => (
+        {item.dateOptions.map((opt) => (
           <DateOptionRow
             key={opt.id}
             label={fmtDay(opt.date)}
-            meta={`${d.countByDate[opt.id]?.count ?? 0} free`}
+            meta={`${item.countByDate[opt.id]?.count ?? 0} free`}
             selected={picked.includes(opt.id)}
-            onPress={() => onTogglePicked(opt.id)}
+            onPress={() => onTogglePicked(plan.id, opt.id)}
             testID={`date-option-${opt.id}`}
           />
         ))}
@@ -137,7 +145,8 @@ export function FeedPlanCard({
           secondary={{
             label: "Can't make it",
             variant: 'secondary',
-            onPress: onDecline,
+            onPress: () =>
+              onDecline(plan.id, item.dateOptions.map((o) => o.id)),
           }}
           primary={
             picked.length === 0
@@ -149,7 +158,7 @@ export function FeedPlanCard({
                 }
               : {
                   label: `Send ${picked.length} date${picked.length === 1 ? '' : 's'}`,
-                  onPress: () => onSendDates(picked),
+                  onPress: () => onSendDates(plan.id, picked),
                 }
           }
         />
@@ -159,7 +168,7 @@ export function FeedPlanCard({
 
   return (
     <Card stripeColor={groupColor} testID={`plan-card-${plan.id}`}>
-      <Pressable onPress={onOpen}>
+      <Pressable onPress={() => onOpen(plan.id)}>
         <View style={styles.cardTop}>
           <View style={styles.groupRow}>
             <View style={[styles.swatch, { backgroundColor: groupColor }]} />
@@ -175,29 +184,29 @@ export function FeedPlanCard({
             the plan was short of people when often it was not.
           */}
           <Badge
-            label={d.needs ? 'Unanswered' : d.confirmed ? 'Confirmed' : 'Open'}
-            tone={d.needs ? 'open' : d.confirmed ? 'confirmed' : 'muted'}
+            label={item.needs ? 'Unanswered' : item.confirmed ? 'Confirmed' : 'Open'}
+            tone={item.needs ? 'open' : item.confirmed ? 'confirmed' : 'muted'}
           />
         </View>
 
         <ThemedText variant="cardTitle" style={styles.title}>
           {plan.title}
         </ThemedText>
-        <ThemedText variant="bodyStrong">{d.when}</ThemedText>
+        <ThemedText variant="bodyStrong">{item.when}</ThemedText>
         {plan.location || plan.description ? (
           <ThemedText variant="sub" numberOfLines={1} style={styles.sub}>
             {plan.location ?? plan.description}
           </ThemedText>
         ) : null}
 
-        {d.goingNames.length > 0 && !(plan.plan_type === 'flexible' && d.needs) ? (
+        {item.goingNames.length > 0 && !(plan.plan_type === 'flexible' && item.needs) ? (
           <View style={styles.faces}>
             <AvatarStack
-              names={d.goingNames}
+              names={item.goingNames}
               label={
-                d.goingNames.length < plan.min_people
-                  ? `${d.goingNames.length} of ${plan.min_people} needed`
-                  : `${d.goingNames.length} going`
+                item.goingNames.length < plan.min_people
+                  ? `${item.goingNames.length} of ${plan.min_people} needed`
+                  : `${item.goingNames.length} going`
               }
             />
           </View>
@@ -207,30 +216,36 @@ export function FeedPlanCard({
       {/* The plan's poll, votable without opening the plan
           (PLA-47). Outside the onOpen Pressable: a tap on an
           option is a vote, never a navigation. */}
-      {d.poll ? (
+      {item.poll ? (
         <View style={styles.pollSection} testID={`poll-feed-${plan.id}`}>
           <View style={styles.pollHead}>
             <ThemedText variant="sectionLabel" style={styles.pollQuestion} numberOfLines={1}>
-              {d.poll.question}
+              {item.poll.question}
             </ThemedText>
             <ThemedText
               variant="caption"
-              color={d.poll.canVote ? colors.accentPressed : colors.textMuted}
+              color={item.poll.canVote ? colors.accentPressed : colors.textMuted}
               numberOfLines={1}
               style={styles.pollCaption}
             >
-              {d.poll.caption}
+              {item.poll.caption}
             </ThemedText>
           </View>
-          {d.poll.options.map((opt) => (
+          {item.poll.options.map((opt) => (
             <DateOptionRow
               key={opt.id}
               label={opt.label}
               meta={opt.votes === 1 ? '1 vote' : `${opt.votes} votes`}
               selected={opt.mine}
               onPress={
-                d.poll!.canVote
-                  ? () => onVote(d.poll!.id, opt.mine ? null : opt.id)
+                item.poll!.canVote
+                  ? () =>
+                      voteOnPoll.mutate({
+                        planId: plan.id,
+                        pollId: item.poll!.id,
+                        userId: user!.id,
+                        optionId: opt.mine ? null : opt.id,
+                      })
                   : undefined
               }
               testID={`poll-feed-option-${opt.id}`}

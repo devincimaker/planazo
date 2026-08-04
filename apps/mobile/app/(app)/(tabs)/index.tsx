@@ -6,9 +6,8 @@ import {
   RefreshControl,
   Pressable,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -26,35 +25,23 @@ import {
   waitlistPosition,
 } from '@planazo/shared';
 import { supabase } from '../../../lib/supabase';
-import { deleteOwnRsvp, offerWaitingList } from '../../../lib/rsvp';
-import { useVotePlanPoll } from '../../../lib/usePlanPoll';
-import { actionErrorCopy, errorCopy } from '../../../lib/queryErrors';
+import { fmtDay, fmtTime } from '../../../lib/dates';
+import { useFeedAnswers } from '../../../lib/useFeedAnswers';
+import { useCancelNotices } from '../../../lib/useCancelNotices';
+import { errorCopy } from '../../../lib/queryErrors';
 import { usePullToRefresh } from '../../../lib/usePullToRefresh';
 import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
 import { useAuthStore } from '../../../stores/authStore';
 import { ThemedText, Chip, Avatar, EmptyState, ErrorState } from '../../../components/ui';
-import { FeedPlanCard } from '../../../components/feed/FeedPlanCard';
+import { FeedPlanCard, type FeedPlan } from '../../../components/feed/FeedPlanCard';
 import { CancelNotices } from '../../../components/feed/CancelNotices';
 import { colors, spacing } from '../../../theme/tokens';
 
 type Filter = 'all' | 'needs' | 'happening';
 
-const fmtDay = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-const fmtTime = (iso: string) =>
-  new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-
-// A failed write is never "Error: <raw postgres message>". actionErrorCopy
-// names the cases worth naming — a full plan above all (PLA-20).
-const alertActionError = (error: unknown) => {
-  const { title, body } = actionErrorCopy(error);
-  Alert.alert(title, body);
-};
-
 export default function FeedScreen() {
   const { profile, user } = useAuthStore();
   const router = useRouter();
-  const queryClient = useQueryClient();
   const [filter, setFilter] = useState<Filter>('all');
   // Local date selections per flexible plan, committed on "Send N dates"
   const [pickedDates, setPickedDates] = useState<Record<string, string[]>>({});
@@ -96,80 +83,10 @@ export default function FeedScreen() {
   });
   const { refreshing, onRefresh } = usePullToRefresh(refetch);
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['home-plans'] });
+  const { notices, dismiss } = useCancelNotices();
 
-  const answerFixed = useMutation({
-    mutationFn: async ({
-      planId,
-      response,
-    }: {
-      planId: string;
-      response: 'yes' | 'no' | 'pending';
-    }) => {
-      const { error } = await supabase.from('rsvps').upsert(
-        { plan_id: planId, user_id: user?.id, response },
-        { onConflict: 'plan_id,user_id' }
-      );
-      if (error) throw error;
-    },
-    onSuccess: invalidate,
-    // The plan can fill between the render and the tap. Rather than a dead end,
-    // offer the thing that now exists (PLA-37).
-    onError: (error, variables) =>
-      offerWaitingList(error, () =>
-        answerFixed.mutate({ planId: variables.planId, response: 'pending' })
-      ),
-  });
-
-  const clearAnswer = useMutation({
-    mutationFn: (planId: string) => deleteOwnRsvp(planId, user!.id),
-    onSuccess: invalidate,
-    onError: alertActionError,
-  });
-
-  const sendDates = useMutation({
-    mutationFn: async ({ planId, optionIds }: { planId: string; optionIds: string[] }) => {
-      const rows = optionIds.map((optionId) => ({
-        plan_id: planId,
-        user_id: user?.id,
-        date_option_id: optionId,
-        available: true,
-      }));
-      const { error } = await supabase
-        .from('date_availability')
-        .upsert(rows, { onConflict: 'plan_id,user_id,date_option_id' });
-      if (error) throw error;
-    },
-    onSuccess: (_data, { planId }) => {
-      setPickedDates((prev) => ({ ...prev, [planId]: [] }));
-      invalidate();
-    },
-    onError: alertActionError,
-  });
-
-  // One pick each, straight from the card: another option moves the vote,
-  // your own withdraws it (PLA-47). The write, its invalidations and its
-  // refusal copy all live in the shared hook.
-  const voteOnPoll = useVotePlanPoll();
-
-  const declineFlexible = useMutation({
-    mutationFn: async ({ planId, optionIds }: { planId: string; optionIds: string[] }) => {
-      const { error } = await supabase.from('rsvps').upsert(
-        { plan_id: planId, user_id: user?.id, response: 'no' },
-        { onConflict: 'plan_id,user_id' }
-      );
-      if (error) throw error;
-      if (optionIds.length > 0) {
-        const { error: availError } = await supabase
-          .from('date_availability')
-          .delete()
-          .eq('user_id', user!.id)
-          .in('date_option_id', optionIds);
-        if (availError) throw availError;
-      }
-    },
-    onSuccess: invalidate,
-    onError: alertActionError,
+  const answers = useFeedAnswers({
+    onDatesSent: (planId) => setPickedDates((prev) => ({ ...prev, [planId]: [] })),
   });
 
   const decorated = useMemo(() => {
@@ -239,13 +156,7 @@ export default function FeedScreen() {
       // phrase are the shared derivations the plan screen also uses, so the
       // two surfaces cannot disagree about either.
       const pollRow = (plan.plan_polls ?? [])[0] ?? null;
-      let poll: {
-        id: string;
-        question: string;
-        options: { id: string; label: string; votes: number; mine: boolean }[];
-        caption: string;
-        canVote: boolean;
-      } | null = null;
+      let poll: FeedPlan['poll'] = null;
       if (pollRow) {
         const canVote = canVoteOnPolls(
           { created_by: plan.created_by, rsvps: plan.rsvps, availabilities },
@@ -288,7 +199,6 @@ export default function FeedScreen() {
         goingNames,
         dateOptions,
         countByDate,
-        optionIds: dateOptions.map((o) => o.id),
         sortKey: sortDate ? new Date(sortDate).getTime() : Number.MAX_SAFE_INTEGER,
       };
     });
@@ -362,7 +272,7 @@ export default function FeedScreen() {
           contentContainerStyle={styles.listContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
-          <CancelNotices onOpenPlan={openPlan} />
+          <CancelNotices notices={notices} onDismiss={dismiss} />
 
           {visible.length === 0 ? (
             <EmptyState
@@ -379,19 +289,14 @@ export default function FeedScreen() {
             visible.map((d) => (
               <FeedPlanCard
                 key={d.plan.id}
-                d={d}
+                item={d}
                 picked={pickedDates[d.plan.id] ?? []}
-                onTogglePicked={(optionId) => togglePicked(d.plan.id, optionId)}
-                onOpen={() => openPlan(d.plan.id)}
-                onAnswer={(response) => answerFixed.mutate({ planId: d.plan.id, response })}
-                onClearAnswer={() => clearAnswer.mutate(d.plan.id)}
-                onSendDates={(optionIds) => sendDates.mutate({ planId: d.plan.id, optionIds })}
-                onDecline={() =>
-                  declineFlexible.mutate({ planId: d.plan.id, optionIds: d.optionIds })
-                }
-                onVote={(pollId, optionId) =>
-                  voteOnPoll.mutate({ planId: d.plan.id, pollId, userId: user!.id, optionId })
-                }
+                onTogglePicked={togglePicked}
+                onOpen={openPlan}
+                onAnswer={answers.answer}
+                onClearAnswer={answers.clearAnswer}
+                onSendDates={answers.sendDates}
+                onDecline={answers.decline}
               />
             ))
           )}

@@ -13,6 +13,7 @@ import { useQuery } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { isPlanPast, planLastDate } from '@planazo/shared';
 import { supabase } from '../../../../lib/supabase';
+import { fmtDay, fmtTime } from '../../../../lib/dates';
 import { useAuthStore } from '../../../../stores/authStore';
 import { errorCopy, isNotFoundError } from '../../../../lib/queryErrors';
 import { usePullToRefresh } from '../../../../lib/usePullToRefresh';
@@ -27,11 +28,6 @@ import {
 } from '../../../../components/ui';
 import { PastPlansSection } from '../../../../components/group/PastPlansSection';
 import { colors, spacing } from '../../../../theme/tokens';
-
-const fmtDay = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-const fmtTime = (iso: string) =>
-  new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
 export function shareInviteLink(groupName: string, inviteCode: string) {
   return Share.share({
