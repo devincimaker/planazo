@@ -1,9 +1,9 @@
-import { ActionSheetIOS, StyleSheet, type ViewStyle } from 'react-native';
+import { StyleSheet, type ViewStyle } from 'react-native';
 import { render, screen, fireEvent } from '@testing-library/react-native';
 import { GroupPhotoField } from '../GroupPhotoField';
 import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
 import { pickFromLibrary, takePhoto } from '../../../lib/images';
-import { chooseFromSheet, sheetOptions } from '../../../lib/testing/actionSheet';
+import { chooseFromSheet, mockActionSheet, sheetOptions } from '../../../lib/testing/actionSheet';
 
 jest.mock('../../../lib/images', () => ({
   pickFromLibrary: jest.fn(),
@@ -27,7 +27,7 @@ async function renderField(props: Partial<React.ComponentProps<typeof GroupPhoto
 
 beforeEach(() => {
   jest.clearAllMocks();
-  jest.spyOn(ActionSheetIOS, 'showActionSheetWithOptions').mockImplementation(() => {});
+  mockActionSheet();
 });
 
 describe('GroupPhotoField', () => {

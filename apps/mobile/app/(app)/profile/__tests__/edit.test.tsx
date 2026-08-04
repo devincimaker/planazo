@@ -5,7 +5,7 @@ import ProfileEdit from '../edit';
 import { useAuthStore } from '../../../../stores/authStore';
 import { supabase } from '../../../../lib/supabase';
 import { pickFromLibrary, uploadAvatar } from '../../../../lib/images';
-import { chooseFromSheet } from '../../../../lib/testing/actionSheet';
+import { chooseFromSheet, mockActionSheet } from '../../../../lib/testing/actionSheet';
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
@@ -85,7 +85,7 @@ async function renderEdit() {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  jest.spyOn(ActionSheetIOS, 'showActionSheetWithOptions').mockImplementation(() => {});
+  mockActionSheet();
   primeSupabase();
   useAuthStore.setState({ user: { id: 'me' } as any, profile: { ...ME } as any });
 });

@@ -4,15 +4,21 @@ import { act } from '@testing-library/react-native';
 /**
  * Drivers for screens that open an `ActionSheetIOS` sheet.
  *
- * Every caller first does `jest.spyOn(ActionSheetIOS, 'showActionSheetWithOptions')`
- * in a `beforeEach`, which swallows the call and leaves the arguments on the mock:
+ * `mockActionSheet()` swallows the call and leaves its arguments on the mock:
  * the config (with its `options` labels) and the callback the sheet would invoke
- * with the chosen row. These two functions read that pair back.
+ * with the chosen row. `sheetOptions()` and `chooseFromSheet()` read that pair
+ * back. A suite that drives a sheet needs all three, so the setup lives here
+ * rather than being a line each caller has to remember.
  *
  * This module deliberately sits outside `__tests__/`. `jest-expo`'s testMatch is
  * `**\/__tests__/**\/*.[jt]s?(x)`, so a helper file in there is collected as a
  * suite and fails the run for having no `it()`.
  */
+
+/** Stop the sheet reaching the OS, so a test can read and drive it. */
+export function mockActionSheet() {
+  jest.spyOn(ActionSheetIOS, 'showActionSheetWithOptions').mockImplementation(() => {});
+}
 
 function lastSheet() {
   const spy = ActionSheetIOS.showActionSheetWithOptions as jest.Mock;

@@ -1,10 +1,10 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
-import { ActionSheetIOS, Alert, StyleSheet, type ViewStyle } from 'react-native';
+import { Alert, StyleSheet, type ViewStyle } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import PlanDetailScreen from '../index';
 import { useAuthStore } from '../../../../../stores/authStore';
 import { supabase } from '../../../../../lib/supabase';
-import { chooseFromSheet, sheetOptions } from '../../../../../lib/testing/actionSheet';
+import { chooseFromSheet, mockActionSheet, sheetOptions } from '../../../../../lib/testing/actionSheet';
 
 jest.mock('../../../../../lib/supabase', () => ({
   supabase: { from: jest.fn(), rpc: jest.fn() },
@@ -151,7 +151,7 @@ beforeEach(() => {
   mockCanGoBack = true;
   mockParamId = 'plan-1';
   jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-  jest.spyOn(ActionSheetIOS, 'showActionSheetWithOptions').mockImplementation(() => {});
+  mockActionSheet();
   useAuthStore.setState({ user: { id: 'me' } as any, profile: { id: 'me' } as any });
 });
 
