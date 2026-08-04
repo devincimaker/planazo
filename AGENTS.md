@@ -2,7 +2,17 @@
 
 Canonical for every agent (Claude Code, Codex, …). `CLAUDE.md` just points here.
 
-## Product copy
+## A question is not an instruction
+
+When the user asks a question — "did we run X?", "does this handle Y?", "how
+hard would Z be?" — answer it and stop. A question is never permission to act
+on its subject: "did we run the simplify pass?" is answered with *no*, not by
+running the simplify pass.
+
+Start work only when the user actually tells you to: an explicit request
+("run it", "fix that", "add the column"), a slash command, or a plan they have
+agreed. If the answer makes a next step obvious, name it and offer it; taking
+it is the user's move, not yours.
 
 **Never use an em dash (`—`) in product copy or interfaces.** It reads as
 machine-written, and Planazo's voice is a person talking. This covers every
@@ -60,6 +70,10 @@ recorded in its gitignored `.env.worktree`: a **Metro port**, a **simulator**,
 and a **database** (`PLANAZO_DB_MODE` = `shared` or `branch`).
 
 ### Asked to make a worktree for a Linear issue
+
+`/start PLA-20` runs this whole sequence (issue → In Progress → routed worktree →
+inside it → plan together). The steps below are what it executes, and what to
+follow when doing it by hand.
 
 When the user says something like *"create a worktree for PLA-20"*:
 
