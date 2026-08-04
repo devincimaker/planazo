@@ -1,11 +1,17 @@
 import { View, StyleSheet, Pressable } from 'react-native';
+import type { GroupRole } from '@planazo/shared';
 import { MIN_TOUCH_TARGET } from '../../lib/a11y';
 import { ThemedText, Card, Avatar, SwipeRow, type SwipeAction } from '../ui';
 import { colors, radii, spacing } from '../../theme/tokens';
 
-export interface GroupMember {
+/**
+ * One row of the manage screen's `group_members` select — not
+ * `GroupMember` from @planazo/shared, which is the whole table row and
+ * carries a full profile this query never asks for.
+ */
+export interface GroupMemberRow {
   user_id: string;
-  role: string | null;
+  role: GroupRole | null;
   notify_new_plans: boolean | null;
   joined_at: string | null;
   profile: { display_name: string | null; avatar_url: string | null } | null;
@@ -41,7 +47,7 @@ function RemoveGlyph({ color }: { color: string }) {
  * Promotion needs a real interaction of its own, and has none until PLA-50
  * gives it one.
  */
-function adminBadge(m: GroupMember) {
+function adminBadge(m: GroupMemberRow) {
   return m.role === 'admin' ? (
     <View style={styles.roleChip} testID={`admin-${m.user_id}`}>
       <ThemedText variant="tag" color={colors.background}>
@@ -53,17 +59,16 @@ function adminBadge(m: GroupMember) {
 
 interface Props {
   /** This user's own row, pinned to the top and never swipeable. */
-  me: GroupMember | undefined;
+  me: GroupMemberRow | undefined;
   /** Everyone else, already minus anyone whose removal is pending. */
-  others: GroupMember[];
-  isAdmin: boolean;
+  others: GroupMemberRow[];
   /** Who this user has blocked (the shield rule). */
   blocked: Set<string>;
   /** Only one row is ever open. */
   openRowId: string | null;
   onOpenChange: (userId: string | null) => void;
-  onAskRemove: (m: GroupMember) => void;
-  onAskBlock: (m: GroupMember) => void;
+  onAskRemove: (m: GroupMemberRow) => void;
+  onAskBlock: (m: GroupMemberRow) => void;
   onInvite: () => void;
 }
 
@@ -71,7 +76,6 @@ interface Props {
 export function MemberList({
   me,
   others,
-  isAdmin,
   blocked,
   openRowId,
   onOpenChange,
@@ -79,7 +83,11 @@ export function MemberList({
   onAskBlock,
   onInvite,
 }: Props) {
-  const actionsFor = (m: GroupMember): SwipeAction[] => {
+  // Only an admin gets Remove, and whether this user is one is already in
+  // their own row.
+  const isAdmin = me?.role === 'admin';
+
+  const actionsFor = (m: GroupMemberRow): SwipeAction[] => {
     const isBlocked = blocked.has(m.user_id);
     const actions: SwipeAction[] = [
       {

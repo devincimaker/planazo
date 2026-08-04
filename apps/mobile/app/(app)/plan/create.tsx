@@ -93,17 +93,7 @@ export default function CreatePlanScreen() {
   const pollBlocks = pollDraftTouched(pollDraft) && !pollDraftValid(pollDraft);
   const isValid = title.trim().length > 0 && dates.length > 0 && !!groupId && !pollBlocks;
 
-  const createPlan = useCreatePlan({
-    groupId,
-    title,
-    dates,
-    time,
-    min,
-    cap,
-    location,
-    notes,
-    pollDraft,
-  });
+  const createPlan = useCreatePlan();
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
@@ -245,7 +235,19 @@ export default function CreatePlanScreen() {
           variant={isValid ? 'primary' : 'secondary'}
           disabled={!isValid || createPlan.isPending}
           haptic={isValid}
-          onPress={() => createPlan.mutate()}
+          onPress={() =>
+            createPlan.mutate({
+              groupId,
+              title,
+              dates,
+              time,
+              min,
+              cap,
+              location,
+              notes,
+              pollDraft,
+            })
+          }
           testID="post-cta"
         />
       </View>

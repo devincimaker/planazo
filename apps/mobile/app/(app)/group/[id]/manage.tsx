@@ -21,7 +21,7 @@ import {
   fetchBlockedIds,
   unblockUser,
 } from '../../../../lib/moderation';
-import { MemberList, type GroupMember } from '../../../../components/group/MemberList';
+import { MemberList, type GroupMemberRow } from '../../../../components/group/MemberList';
 import { GroupPrefsCard } from '../../../../components/group/GroupPrefsCard';
 import { ThemedText, ErrorState, ConfirmSheet } from '../../../../components/ui';
 import { colors, fonts, spacing } from '../../../../theme/tokens';
@@ -173,23 +173,22 @@ export default function ManageGroupScreen() {
     );
   }
 
-  const members = [...((group.group_members ?? []) as GroupMember[])].sort((a, b) =>
+  const members = [...((group.group_members ?? []) as GroupMemberRow[])].sort((a, b) =>
     (a.joined_at ?? '').localeCompare(b.joined_at ?? '')
   );
   const me = members.find((m) => m.user_id === user?.id);
-  // Somebody with a removal pending is already gone from the list: the undo is
-  // in the toast, not in a half-there row.
+  // Dropping the pending one is what usePendingRemoval's id is for.
   const others = members.filter(
     (m) => m.user_id !== user?.id && m.user_id !== pendingRemovalId
   );
   const isAdmin = me?.role === 'admin';
   const blocked = new Set(blockedIds ?? []);
-  const nameOf = (m: GroupMember) => m.profile?.display_name ?? 'this person';
+  const nameOf = (m: GroupMemberRow) => m.profile?.display_name ?? 'this person';
 
-  const askRemove = (m: GroupMember) =>
+  const askRemove = (m: GroupMemberRow) =>
     setConfirm({ kind: 'remove', userId: m.user_id, name: nameOf(m) });
 
-  const askBlock = (m: GroupMember) => {
+  const askBlock = (m: GroupMemberRow) => {
     // Unblocking is not destructive and undoes itself, so it does not ask.
     if (blocked.has(m.user_id)) {
       setBlocked.mutate({ userId: m.user_id, blocked: false });
@@ -250,7 +249,6 @@ export default function ManageGroupScreen() {
         <MemberList
           me={me}
           others={others}
-          isAdmin={isAdmin}
           blocked={blocked}
           openRowId={openRowId}
           onOpenChange={setOpenRowId}

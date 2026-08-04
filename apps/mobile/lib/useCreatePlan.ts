@@ -34,14 +34,18 @@ const localDate = (iso: string, h = 0, m = 0) => {
  * The host counts from the start — a yes-RSVP on a fixed plan, availability on
  * every proposed day on a flexible one — which is why this is more than an
  * insert.
+ *
+ * The form's values arrive at `mutate()` rather than at the hook, matching
+ * useVotePlanPoll: the hook is then a function of its variables instead of a
+ * subscriber to whatever the screen last rendered.
  */
-export function useCreatePlan(input: CreatePlanInput) {
+export function useCreatePlan() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
 
   return useMutation({
-    mutationFn: async () => {
+    mutationFn: async (input: CreatePlanInput) => {
       const { groupId, title, dates, time, min, cap, location, notes, pollDraft } = input;
       if (!groupId || !user) throw new Error('Pick a group first');
       // Guideline 1.2: objectionable language stops here, not in review.
@@ -103,7 +107,7 @@ export function useCreatePlan(input: CreatePlanInput) {
       }
       return plan;
     },
-    onSuccess: (plan) => {
+    onSuccess: (plan, input) => {
       queryClient.invalidateQueries({ queryKey: ['home-plans'] });
       queryClient.invalidateQueries({ queryKey: ['group-plans', input.groupId] });
       router.back();
