@@ -427,6 +427,7 @@ export type Database = {
           id: string
           plan_id: string
           storage_path: string
+          thumb_path: string | null
           uploaded_by: string
           width: number | null
         }
@@ -436,6 +437,7 @@ export type Database = {
           id?: string
           plan_id: string
           storage_path: string
+          thumb_path?: string | null
           uploaded_by: string
           width?: number | null
         }
@@ -445,6 +447,7 @@ export type Database = {
           id?: string
           plan_id?: string
           storage_path?: string
+          thumb_path?: string | null
           uploaded_by?: string
           width?: number | null
         }
@@ -707,6 +710,15 @@ export type Database = {
       lock_plan: {
         Args: { p_date_option_id?: string; p_plan_id: string }
         Returns: Json
+      }
+      plan_album_card: {
+        Args: { p_plan_id: string }
+        Returns: {
+          total: number
+          mine: number
+          uploaders: number
+          recent: Json
+        }[]
       }
       plan_photo_plan_id: { Args: { p_name: string }; Returns: string }
       reopen_plan: { Args: { p_plan_id: string }; Returns: Json }

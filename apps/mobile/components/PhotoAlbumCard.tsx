@@ -1,11 +1,11 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ThemedText } from './ui/ThemedText';
 import { Button } from './ui/Button';
 import { PhotoTile } from './ui/PhotoTile';
-import { usePlanPhotos, planPhotosKey } from '../lib/usePlanPhotos';
+import { usePlanAlbumCard, planPhotosKey } from '../lib/usePlanPhotos';
 import {
   MAX_PHOTOS_PER_PERSON,
   MAX_PHOTOS_PER_PLAN,
@@ -17,7 +17,9 @@ import {
 import { errorCopy } from '../lib/queryErrors';
 import { colors, radii, spacing } from '../theme/tokens';
 
-/** Tiles the strip shows before it stops and lets the count do the talking. */
+/** Tiles the strip shows before it stops and lets the count do the talking.
+ *  `plan_album_card` returns exactly this many, so changing one means
+ *  changing the other. */
 const STRIP_MAX = 4;
 
 interface Props {
@@ -35,13 +37,10 @@ export function PhotoAlbumCard({ planId, userId, albumOpen, canAdd }: Props) {
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [batch, setBatch] = useState<UploadOutcome | null>(null);
 
-  const { rows, signed, error } = usePlanPhotos(planId, { enabled: albumOpen });
+  const { summary, signed, error } = usePlanAlbumCard(planId, { enabled: albumOpen });
 
-  const total = rows?.length ?? 0;
-  const mine = useMemo(
-    () => (rows ?? []).filter((r) => r.uploaded_by === userId).length,
-    [rows, userId],
-  );
+  const total = summary?.total ?? 0;
+  const mine = summary?.mine ?? 0;
 
   const upload = useMutation({
     mutationFn: async () => {
@@ -130,7 +129,7 @@ export function PhotoAlbumCard({ planId, userId, albumOpen, canAdd }: Props) {
           <View style={[styles.pad, styles.strip]}>
             {strip.length
               ? strip.map((photo, index) => (
-                  <PhotoTile key={photo.id} url={photo.url} index={index} />
+                  <PhotoTile key={photo.id} url={photo.thumbUrl} index={index} />
                 ))
               : Array.from({ length: Math.min(total, STRIP_MAX) }, (_, index) => (
                   <PhotoTile key={index} index={index} />
@@ -146,7 +145,7 @@ export function PhotoAlbumCard({ planId, userId, albumOpen, canAdd }: Props) {
                 ? `Adding ${progress.done} of ${progress.total}`
                 : batch?.failed
                   ? `${batch.added} added. ${batch.failed} didn't upload.`
-                  : albumSummary(rows ?? [])}
+                  : albumSummary(summary ?? { total: 0, uploaders: 0 })}
             </ThemedText>
             {total > 1 && !uploading ? (
               <ThemedText variant="body" color={colors.textFaint}>

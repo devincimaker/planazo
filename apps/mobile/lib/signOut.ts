@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { clearPushToken } from './push';
+import { clearSignedUrlCache } from './photos';
 import { forgetStoredSession, supabase } from './supabase';
 import { useAuthStore } from '../stores/authStore';
 
@@ -42,6 +43,7 @@ export async function signOutOfAccount(
   if (!(await forgetStoredSession())) return false;
 
   queryClient.clear();
+  clearSignedUrlCache();
   useAuthStore.getState().logout();
   return true;
 }
