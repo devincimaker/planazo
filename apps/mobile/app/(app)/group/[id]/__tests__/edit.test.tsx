@@ -1,10 +1,10 @@
-import { ActionSheetIOS } from 'react-native';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react-native';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import EditGroupScreen from '../edit';
 import { supabase } from '../../../../../lib/supabase';
 import { pickFromLibrary, uploadGroupPhoto, removeGroupPhoto } from '../../../../../lib/images';
 import { colorForName } from '../../../../../components/ui';
+import { chooseFromSheet, mockActionSheet } from '../../../../../lib/testing/actionSheet';
 
 const mockBack = jest.fn();
 
@@ -70,14 +70,6 @@ function primeSupabase(group: GroupRow) {
   });
 }
 
-async function chooseFromSheet(index: number) {
-  const spy = ActionSheetIOS.showActionSheetWithOptions as jest.Mock;
-  const callback = spy.mock.calls[0][1] as (i: number) => void;
-  await act(async () => {
-    callback(index);
-  });
-}
-
 async function renderEdit(group = NO_PHOTO) {
   primeSupabase(group);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
@@ -91,7 +83,7 @@ async function renderEdit(group = NO_PHOTO) {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  jest.spyOn(ActionSheetIOS, 'showActionSheetWithOptions').mockImplementation(() => {});
+  mockActionSheet();
   mockUpload.mockResolvedValue(PHOTO_URL);
 });
 
