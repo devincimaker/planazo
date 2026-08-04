@@ -1,8 +1,9 @@
-import { ActionSheetIOS, StyleSheet, type ViewStyle } from 'react-native';
-import { render, screen, fireEvent, act } from '@testing-library/react-native';
+import { StyleSheet, type ViewStyle } from 'react-native';
+import { render, screen, fireEvent } from '@testing-library/react-native';
 import { GroupPhotoField } from '../GroupPhotoField';
 import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
 import { pickFromLibrary, takePhoto } from '../../../lib/images';
+import { chooseFromSheet, mockActionSheet, sheetOptions } from '../../../lib/testing/actionSheet';
 
 jest.mock('../../../lib/images', () => ({
   pickFromLibrary: jest.fn(),
@@ -15,19 +16,6 @@ const mockCamera = takePhoto as jest.Mock;
 const PHOTO = 'file:///picked.jpg';
 const CAPTION = 'The photo is the group’s tile everywhere.';
 
-function sheetOptions(): string[] {
-  const spy = ActionSheetIOS.showActionSheetWithOptions as jest.Mock;
-  return spy.mock.calls[0][0].options;
-}
-
-async function chooseFromSheet(index: number) {
-  const spy = ActionSheetIOS.showActionSheetWithOptions as jest.Mock;
-  const callback = spy.mock.calls[0][1] as (i: number) => void;
-  await act(async () => {
-    callback(index);
-  });
-}
-
 async function renderField(props: Partial<React.ComponentProps<typeof GroupPhotoField>> = {}) {
   const onPick = jest.fn();
   const onRemove = jest.fn();
@@ -39,7 +27,7 @@ async function renderField(props: Partial<React.ComponentProps<typeof GroupPhoto
 
 beforeEach(() => {
   jest.clearAllMocks();
-  jest.spyOn(ActionSheetIOS, 'showActionSheetWithOptions').mockImplementation(() => {});
+  mockActionSheet();
 });
 
 describe('GroupPhotoField', () => {
