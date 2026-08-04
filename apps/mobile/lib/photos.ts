@@ -85,6 +85,18 @@ export function pickPhotos(limit: number): Promise<PickedImage[]> {
   return pickManyFromLibrary(limit);
 }
 
+/** Downscale to a longest edge and re-encode. The one place the resize and
+ *  encode rules (orientation handling, quality, format) live; both the stored
+ *  original and the tile rendition are cut by it. */
+async function downscaleToEdge(photo: PickedImage, edge: number): Promise<PickedImage> {
+  const resize = photo.width >= photo.height ? { width: edge } : { height: edge };
+  const out = await ImageManipulator.manipulateAsync(photo.uri, [{ resize }], {
+    compress: QUALITY,
+    format: ImageManipulator.SaveFormat.JPEG,
+  });
+  return { uri: out.uri, width: out.width, height: out.height };
+}
+
 /**
  * Downscale and re-encode one photo before it costs anything to store.
  *
@@ -103,34 +115,7 @@ async function preparePhoto(photo: PickedImage): Promise<{ photo: PickedImage; t
     return { photo, temp: false };
   }
 
-  const resize = photo.width >= photo.height ? { width: MAX_EDGE } : { height: MAX_EDGE };
-  const out = await ImageManipulator.manipulateAsync(photo.uri, [{ resize }], {
-    compress: QUALITY,
-    format: ImageManipulator.SaveFormat.JPEG,
-  });
-
-  return { photo: { uri: out.uri, width: out.width, height: out.height }, temp: true };
-}
-
-/**
- * The tile rendition, from the same full-resolution source.
- *
- * Returns null when the source is already at or under thumbnail size: the
- * original *is* the thumbnail then, re-encoding would cost quality to save
- * nothing, and the NULL lands in `thumb_path` where the read side knows to
- * fall back. The file returned is always ours to delete.
- */
-async function prepareThumb(photo: PickedImage): Promise<{ uri: string } | null> {
-  const longest = Math.max(photo.width, photo.height);
-  if (!longest || longest <= THUMB_EDGE) return null;
-
-  const resize = photo.width >= photo.height ? { width: THUMB_EDGE } : { height: THUMB_EDGE };
-  const out = await ImageManipulator.manipulateAsync(photo.uri, [{ resize }], {
-    compress: QUALITY,
-    format: ImageManipulator.SaveFormat.JPEG,
-  });
-
-  return { uri: out.uri };
+  return { photo: await downscaleToEdge(photo, MAX_EDGE), temp: true };
 }
 
 export interface UploadOutcome {
@@ -175,12 +160,21 @@ export async function uploadPhotos(
     try {
       const { photo: prepared, temp } = await preparePhoto(picked);
       if (temp) scratch.push(prepared.uri);
-      const thumb = await prepareThumb(picked);
-      if (thumb) scratch.push(thumb.uri);
 
       const key = photoKey();
       const path = `${planId}/${userId}/${key}.jpg`;
-      const thumbPath = thumb ? `${planId}/${userId}/${key}_thumb.jpg` : null;
+
+      // The rendition is cut from the already-prepared image rather than the
+      // full sensor original: identical pixels at tile size, and a ~3MP
+      // decode instead of ~12. None when the prepared image is already
+      // tile-sized; the NULL lands in thumb_path, where the read side knows
+      // to fall back to the original.
+      let thumb: { uri: string; path: string } | null = null;
+      if (Math.max(prepared.width, prepared.height) > THUMB_EDGE) {
+        const out = await downscaleToEdge(prepared, THUMB_EDGE);
+        scratch.push(out.uri);
+        thumb = { uri: out.uri, path: `${planId}/${userId}/${key}_thumb.jpg` };
+      }
 
       const { data: row, error: insertError } = await supabase
         .from('plan_photos')
@@ -188,7 +182,7 @@ export async function uploadPhotos(
           plan_id: planId,
           uploaded_by: userId,
           storage_path: path,
-          thumb_path: thumbPath,
+          thumb_path: thumb?.path ?? null,
           width: prepared.width,
           height: prepared.height,
         })
@@ -206,9 +200,9 @@ export async function uploadPhotos(
       // Thumb first: the pair is all-or-nothing (there is no UPDATE policy to
       // null a thumb_path later), so on a connection that is going to die,
       // dying after 30KB beats dying after 500.
-      if (thumb && thumbPath) {
-        await uploadJpeg(PHOTO_BUCKET, thumbPath, thumb.uri);
-        uploadedThumb = thumbPath;
+      if (thumb) {
+        await uploadJpeg(PHOTO_BUCKET, thumb.path, thumb.uri);
+        uploadedThumb = thumb.path;
       }
       await uploadJpeg(PHOTO_BUCKET, path, prepared.uri);
 
@@ -266,9 +260,19 @@ export async function uploadPhotos(
 const signedUrlCache = new Map<string, { url: string; expiresAtMs: number }>();
 
 /** Re-sign a held URL once less than half its life remains, so what we hand
- *  out is always good for a comfortable browse. The signed query's staleTime
- *  is derived from the same number and can only serve fresher than this. */
-const SIGNED_URL_REFRESH_MS = (SIGNED_URL_TTL_SECONDS * 1000) / 2;
+ *  out is always good for a comfortable browse. Exported because the signed
+ *  queries in usePlanPhotos.ts use it as their staleTime: they can only ever
+ *  serve fresher than the cache refreshes, and the two numbers moving apart
+ *  would quietly reintroduce the double-signing this file exists to kill. */
+export const SIGNED_URL_REFRESH_MS = (SIGNED_URL_TTL_SECONDS * 1000) / 2;
+
+/** The storage objects behind one photo: the original, plus the rendition
+ *  when it has one. Signing, delete and the account purge all enumerate
+ *  through this, so a future second rendition is one edit here rather than a
+ *  hunt for every place that spells the pair out. */
+function photoObjectPaths(p: Pick<PlanPhoto, 'storage_path' | 'thumb_path'>): string[] {
+  return p.thumb_path ? [p.storage_path, p.thumb_path] : [p.storage_path];
+}
 
 /** The other half of `queryClient.clear()` in signOut.ts: the next account on
  *  this device starts with no URLs minted for the last one. */
@@ -311,9 +315,7 @@ export async function signPhotos<T extends { storage_path: string; thumb_path: s
   // Originals and renditions in the same request: 2N paths is still one round
   // trip, and the response is a few hundred bytes per path against the 450KB
   // a tile saves by drawing the rendition instead of the original.
-  const wanted = photos.flatMap((p) =>
-    p.thumb_path ? [p.storage_path, p.thumb_path] : [p.storage_path],
-  );
+  const wanted = photos.flatMap(photoObjectPaths);
 
   const now = Date.now();
   const missing = wanted.filter((path) => {
@@ -329,9 +331,15 @@ export async function signPhotos<T extends { storage_path: string; thumb_path: s
 
     const expiresAtMs = now + SIGNED_URL_TTL_SECONDS * 1000;
     for (const entry of data ?? []) {
-      if (entry.signedUrl && !entry.error && entry.path) {
-        signedUrlCache.set(entry.path, { url: entry.signedUrl, expiresAtMs });
-      }
+      if (!entry.signedUrl || entry.error || !entry.path) continue;
+      // First write wins. A concurrent caller (the card and the album screen
+      // are mounted together) may have filled this path while our request was
+      // in flight; overwriting would hand the two of them different strings
+      // for the same tile, which is the re-download this cache exists to
+      // prevent. Only an absent or stale entry is replaced.
+      const held = signedUrlCache.get(entry.path);
+      if (held && held.expiresAtMs - now >= SIGNED_URL_REFRESH_MS) continue;
+      signedUrlCache.set(entry.path, { url: entry.signedUrl, expiresAtMs });
     }
   }
 
@@ -355,10 +363,9 @@ export async function signPhotos<T extends { storage_path: string; thumb_path: s
  * the tile anyway.
  */
 export async function deletePhoto(photo: PlanPhoto): Promise<void> {
-  const paths = photo.thumb_path
-    ? [photo.storage_path, photo.thumb_path]
-    : [photo.storage_path];
-  const { error: objectError } = await supabase.storage.from(PHOTO_BUCKET).remove(paths);
+  const { error: objectError } = await supabase.storage
+    .from(PHOTO_BUCKET)
+    .remove(photoObjectPaths(photo));
   if (objectError) throw objectError;
 
   const { error: rowError } = await supabase.from('plan_photos').delete().eq('id', photo.id);
@@ -380,9 +387,7 @@ export async function listOwnedPhotoPaths(userId: string): Promise<string[]> {
     .select('storage_path, thumb_path')
     .eq('uploaded_by', userId);
   if (error) throw error;
-  return (data ?? []).flatMap((row) =>
-    row.thumb_path ? [row.storage_path, row.thumb_path] : [row.storage_path],
-  );
+  return (data ?? []).flatMap(photoObjectPaths);
 }
 
 /**
@@ -401,8 +406,7 @@ export function albumSummary(album: {
   /** Whoever uploaded the newest photo. */
   name?: string | null;
 }): string {
-  const { total, uploaders } = album;
-  const name = album.name ?? null;
+  const { total, uploaders, name } = album;
   if (!total) return '';
 
   if (total === 1) return name ? `One photo, from ${name}` : 'One photo';

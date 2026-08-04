@@ -162,6 +162,29 @@ describe('signPhotos cache', () => {
     await expect(signPhotos([row({})])).resolves.toEqual([]);
     nowSpy.mockRestore();
   });
+
+  // The card and the album screen are mounted together, and a realtime
+  // invalidation refetches both signed queries at once. Both race past the
+  // empty cache and sign, but the first response to land is the one every
+  // caller gets back — two surfaces, one string, one download per tile.
+  it('keeps the first-written string when two calls race', async () => {
+    let call = 0;
+    const createSignedUrls = jest.fn(async (paths: string[]) => {
+      call += 1;
+      const v = call;
+      return {
+        data: paths.map((path) => ({ path, signedUrl: `https://signed/${path}?v=${v}`, error: null })),
+        error: null,
+      };
+    });
+    mockStorageFrom.mockReturnValue({ createSignedUrls, remove: jest.fn() });
+
+    const [a, b] = await Promise.all([signPhotos([row({})]), signPhotos([row({})])]);
+
+    expect(createSignedUrls).toHaveBeenCalledTimes(2);
+    expect(b[0].url).toBe(a[0].url);
+    expect(b[0].thumbUrl).toBe(a[0].thumbUrl);
+  });
 });
 
 describe('uploadPhotos', () => {
@@ -203,14 +226,15 @@ describe('uploadPhotos', () => {
 
     expect(mockUploadJpeg).toHaveBeenCalledTimes(2);
     expect(mockUploadJpeg.mock.calls[0][1]).toBe(values.thumb_path);
-    expect(mockUploadJpeg.mock.calls[0][2]).toBe('file:///pick/a.jpg#512');
+    // The rendition is cut from the prepared 2048 image, not the original.
+    expect(mockUploadJpeg.mock.calls[0][2]).toBe('file:///pick/a.jpg#2048#512');
     expect(mockUploadJpeg.mock.calls[1][1]).toBe(values.storage_path);
     expect(mockUploadJpeg.mock.calls[1][2]).toBe('file:///pick/a.jpg#2048');
 
     // Both scratch renditions are collected; the picked original is not ours.
     expect(mockDeleteAsync.mock.calls.map((c) => c[0]).sort()).toEqual([
       'file:///pick/a.jpg#2048',
-      'file:///pick/a.jpg#512',
+      'file:///pick/a.jpg#2048#512',
     ]);
   });
 

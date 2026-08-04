@@ -23,11 +23,12 @@ RETURNS TABLE (
   total INTEGER,
   mine INTEGER,
   uploaders INTEGER,
-  -- Whoever uploaded the newest photo, which is what the album sentence
-  -- leads with ("12 photos from Alex").
-  first_uploader_name TEXT,
-  -- The newest four, newest first: id, storage_path, thumb_path. JSONB
-  -- rather than four more columns per slot, because the shape is a list.
+  -- The newest four, newest first: id, storage_path, thumb_path,
+  -- uploader_name. JSONB rather than columns per slot, because the shape is
+  -- a list. The uploader's name rides on each slot so the sentence ("12
+  -- photos from Alex" leads with the newest photo's uploader) is read off
+  -- recent[0] client-side: one ordered scan, and the sentence and the strip
+  -- cannot disagree about which photo is newest.
   recent JSONB
 )
 LANGUAGE sql
@@ -44,28 +45,23 @@ AS $$
     (COUNT(*) FILTER (WHERE v.uploaded_by = auth.uid()))::INTEGER,
     COUNT(DISTINCT v.uploaded_by)::INTEGER,
     (
-      SELECT pr.display_name
-      FROM visible n
-      JOIN public.profiles pr ON pr.id = n.uploaded_by
-      ORDER BY n.created_at DESC
-      LIMIT 1
-    ),
-    (
       SELECT COALESCE(
         jsonb_agg(
           jsonb_build_object(
             'id', s.id,
             'storage_path', s.storage_path,
-            'thumb_path', s.thumb_path
+            'thumb_path', s.thumb_path,
+            'uploader_name', s.display_name
           )
           ORDER BY s.created_at DESC
         ),
         '[]'::jsonb
       )
       FROM (
-        SELECT id, storage_path, thumb_path, created_at
-        FROM visible
-        ORDER BY created_at DESC
+        SELECT n.id, n.storage_path, n.thumb_path, n.created_at, pr.display_name
+        FROM visible n
+        LEFT JOIN public.profiles pr ON pr.id = n.uploaded_by
+        ORDER BY n.created_at DESC
         LIMIT 4
       ) s
     )

@@ -145,11 +145,7 @@ export function PhotoAlbumCard({ planId, userId, albumOpen, canAdd }: Props) {
                 ? `Adding ${progress.done} of ${progress.total}`
                 : batch?.failed
                   ? `${batch.added} added. ${batch.failed} didn't upload.`
-                  : albumSummary({
-                    total,
-                    uploaders: summary?.uploaders ?? 0,
-                    name: summary?.firstUploaderName,
-                  })}
+                  : albumSummary(summary ?? { total: 0, uploaders: 0 })}
             </ThemedText>
             {total > 1 && !uploading ? (
               <ThemedText variant="body" color={colors.textFaint}>

@@ -75,20 +75,30 @@ beforeAll(async () => {
 afterAll(() => bed.dispose());
 
 describe('plan_album_card', () => {
-  it('answers with counts, the newest name, and the newest four', async () => {
+  it('answers with counts and the newest four, each naming its uploader', async () => {
     const summary = ok(await card(guest));
 
     expect(summary.total).toBe(5);
     expect(summary.mine).toBe(3);
     expect(summary.uploaders).toBe(2);
-    expect(summary.first_uploader_name).toBe('Album Guest');
 
-    const recent = summary.recent as { storage_path: string; thumb_path: string | null }[];
+    const recent = summary.recent as {
+      storage_path: string;
+      thumb_path: string | null;
+      uploader_name: string | null;
+    }[];
     expect(recent.map((r) => r.storage_path.split('/').pop())).toEqual([
       'g3.jpg',
       'g2.jpg',
       'g1.jpg',
       'h2.jpg',
+    ]);
+    // The sentence leads with the newest photo's uploader, read off recent[0].
+    expect(recent.map((r) => r.uploader_name)).toEqual([
+      'Album Guest',
+      'Album Guest',
+      'Album Guest',
+      'Album Host',
     ]);
     // The rendition column rides along, NULL where the photo predates it.
     expect(recent[0].thumb_path?.endsWith('g3_thumb.jpg')).toBe(true);
@@ -105,7 +115,6 @@ describe('plan_album_card', () => {
 
     expect(summary.total).toBe(0);
     expect(summary.uploaders).toBe(0);
-    expect(summary.first_uploader_name).toBeNull();
     expect(summary.recent).toEqual([]);
   });
 
@@ -125,7 +134,8 @@ describe('plan_album_card', () => {
 
     expect(summary.total).toBe(2);
     expect(summary.uploaders).toBe(1);
-    expect(summary.first_uploader_name).toBe('Album Host');
-    expect((summary.recent as unknown[]).length).toBe(2);
+    const recent = summary.recent as { uploader_name: string | null }[];
+    expect(recent.length).toBe(2);
+    expect(recent[0].uploader_name).toBe('Album Host');
   });
 });

@@ -717,7 +717,6 @@ export type Database = {
           total: number
           mine: number
           uploaders: number
-          first_uploader_name: string | null
           recent: Json
         }[]
       }
