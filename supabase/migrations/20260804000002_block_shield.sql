@@ -666,6 +666,17 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+  -- Gathered once so both participation DELETEs share a single definition of
+  -- "live" and a single scan of plans. A flexible plan nobody has locked yet
+  -- has no start at all, which the 'infinity' fallback folds into "live".
+  v_live_plan_ids UUID[] := ARRAY(
+    SELECT p.id FROM public.plans p
+    WHERE p.created_by = p_blocker
+      AND p.status IN ('open', 'locked')
+      AND COALESCE(p.locked_date, p.event_date, 'infinity'::timestamptz)
+          >= NOW() - INTERVAL '1 day'
+  );
 BEGIN
   DELETE FROM public.friendships
   WHERE (requester_id = p_blocker AND addressee_id = p_blocked)
@@ -676,23 +687,11 @@ BEGIN
     AND ((invited_by = p_blocker AND invitee_id = p_blocked)
       OR (invited_by = p_blocked AND invitee_id = p_blocker));
 
-  DELETE FROM public.rsvps r
-  USING public.plans p
-  WHERE r.plan_id = p.id
-    AND r.user_id = p_blocked
-    AND p.created_by = p_blocker
-    AND p.status IN ('open', 'locked')
-    AND (COALESCE(p.locked_date, p.event_date) IS NULL
-         OR COALESCE(p.locked_date, p.event_date) >= NOW() - INTERVAL '1 day');
+  DELETE FROM public.rsvps
+  WHERE user_id = p_blocked AND plan_id = ANY(v_live_plan_ids);
 
-  DELETE FROM public.date_availability da
-  USING public.plans p
-  WHERE da.plan_id = p.id
-    AND da.user_id = p_blocked
-    AND p.created_by = p_blocker
-    AND p.status IN ('open', 'locked')
-    AND (COALESCE(p.locked_date, p.event_date) IS NULL
-         OR COALESCE(p.locked_date, p.event_date) >= NOW() - INTERVAL '1 day');
+  DELETE FROM public.date_availability
+  WHERE user_id = p_blocked AND plan_id = ANY(v_live_plan_ids);
 END;
 $$;
 
@@ -883,19 +882,22 @@ DECLARE
   -- Wildcards and the escape character are stripped rather than escaped: a
   -- name cannot contain them, so the only thing they could be is a probe.
   v_q TEXT := regexp_replace(TRIM(COALESCE(p_query, '')), '[%_\\]', '', 'g');
+  -- Captured once: the ILIKE scan visits every profile row, and auth.uid()
+  -- is a per-call settings read that STABLE does not fold away per row.
+  v_uid UUID := auth.uid();
 BEGIN
-  IF auth.uid() IS NULL OR length(v_q) < 2 THEN
+  IF v_uid IS NULL OR length(v_q) < 2 THEN
     RETURN;
   END IF;
 
   RETURN QUERY
   SELECT p.id, p.display_name, p.handle, p.avatar_url
   FROM public.profiles p
-  WHERE p.id <> auth.uid()
+  WHERE p.id <> v_uid
     AND (p.handle ILIKE '%' || v_q || '%' OR p.display_name ILIKE '%' || v_q || '%')
     AND NOT EXISTS (
       SELECT 1 FROM public.blocked_users b
-      WHERE b.blocker_id = p.id AND b.blocked_id = auth.uid()
+      WHERE b.blocker_id = p.id AND b.blocked_id = v_uid
     )
   ORDER BY p.display_name ASC
   LIMIT 20;
@@ -913,10 +915,5 @@ GRANT EXECUTE ON FUNCTION public.search_people(TEXT) TO authenticated;
 -- friendship gone, pending invites gone, participation in the blocker's live
 -- plans gone, with any freed seats promoting through the queue. Runs after
 -- the function definitions above so promotions use the flipped logic.
-DO $$
-DECLARE r RECORD;
-BEGIN
-  FOR r IN SELECT blocker_id, blocked_id FROM public.blocked_users LOOP
-    PERFORM public.dissolve_block_ties(r.blocker_id, r.blocked_id);
-  END LOOP;
-END $$;
+SELECT public.dissolve_block_ties(blocker_id, blocked_id)
+FROM public.blocked_users;

@@ -3,7 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
-import { BLOCKED_QUERY_KEY, unblockUser } from '../../../lib/moderation';
+import { BLOCKED_QUERY_KEY, fetchBlockedIds, unblockUser } from '../../../lib/moderation';
 import { useAuthStore } from '../../../stores/authStore';
 import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
 import { Avatar, Card, ThemedText } from '../../../components/ui';
@@ -30,15 +30,10 @@ export default function BlockedPeopleScreen() {
   const { data: blocked, isPending } = useQuery({
     queryKey: [...BLOCKED_QUERY_KEY, 'profiles'],
     queryFn: async (): Promise<BlockedPerson[]> => {
-      // RLS returns only this user's own blocks. Two steps because
-      // blocked_users points at auth.users, which PostgREST cannot embed
-      // profiles through.
-      const { data: rows, error } = await supabase
-        .from('blocked_users')
-        .select('blocked_id, created_at')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      const ids = (rows ?? []).map((r) => r.blocked_id);
+      // fetchBlockedIds owns the block list (newest first); the second query
+      // only hydrates profiles, which PostgREST cannot embed through
+      // blocked_users' auth.users FK.
+      const ids = await fetchBlockedIds();
       if (ids.length === 0) return [];
 
       const { data: profiles, error: profilesError } = await supabase
@@ -68,6 +63,8 @@ export default function BlockedPeopleScreen() {
     onError: (error: Error) => Alert.alert('Error', error.message),
   });
 
+  const people = blocked ?? [];
+
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <View style={styles.navRow}>
@@ -83,15 +80,13 @@ export default function BlockedPeopleScreen() {
       </View>
 
       <ScrollView style={styles.flex} contentContainerStyle={styles.content}>
-        {(blocked ?? []).length === 0 ? (
-          isPending ? null : (
-            <ThemedText variant="sub" testID="blocked-empty">
-              You haven't blocked anyone.
-            </ThemedText>
-          )
+        {isPending ? null : people.length === 0 ? (
+          <ThemedText variant="sub" testID="blocked-empty">
+            You haven't blocked anyone.
+          </ThemedText>
         ) : (
           <Card padded={false}>
-            {(blocked ?? []).map((p, i) => (
+            {people.map((p, i) => (
               <View key={p.id} style={[styles.personRow, i > 0 && styles.divider]}>
                 <Avatar name={p.name} size={42} imageUrl={p.avatarUrl} />
                 <View style={styles.personBody}>

@@ -9,6 +9,10 @@
 // so this file is where the rule actually gets checked, direction by
 // direction. The old behaviour (a personal mute: has_blocked hiding *their*
 // plans from *you*) is asserted dead in the "keeps seeing" tests.
+//
+// Independent reads and writes go through Promise.all: against a branch
+// database every round trip is real latency, and none of the paired
+// assertions here cares which side lands first.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { TestBed, TestUser, ok, daysFromNow } from './testbed';
@@ -29,13 +33,12 @@ let blocked2: TestUser;
 let waiter2: TestUser;
 let g2: string;
 
+// Plain insert: every test blocks a pair exactly once. The app's
+// double-block-is-fine upsert lives in lib/moderation.ts, where it belongs.
 const block = (blocker: TestUser, blocked: TestUser) =>
   blocker.client
     .from('blocked_users')
-    .upsert(
-      { blocker_id: blocker.id, blocked_id: blocked.id },
-      { onConflict: 'blocker_id,blocked_id', ignoreDuplicates: true },
-    );
+    .insert({ blocker_id: blocker.id, blocked_id: blocked.id });
 
 const unblock = (blocker: TestUser, blocked: TestUser) =>
   blocker.client
@@ -43,6 +46,15 @@ const unblock = (blocker: TestUser, blocked: TestUser) =>
     .delete()
     .eq('blocker_id', blocker.id)
     .eq('blocked_id', blocked.id);
+
+/** Friendship rows between the pair, either direction, as the service role. */
+const friendshipRows = (a: TestUser, b: TestUser) =>
+  bed.service
+    .from('friendships')
+    .select('id')
+    .or(
+      `and(requester_id.eq.${a.id},addressee_id.eq.${b.id}),and(requester_id.eq.${b.id},addressee_id.eq.${a.id})`,
+    );
 
 async function createPlan(
   host: TestUser,
@@ -103,13 +115,11 @@ beforeAll(async () => {
   ]);
   [g1, g2] = await Promise.all([
     bed.createGroup(ana).then(async (g) => {
-      await bed.join(g.id, beto);
-      await bed.join(g.id, carla);
+      await Promise.all([bed.join(g.id, beto), bed.join(g.id, carla)]);
       return g.id;
     }),
     bed.createGroup(host2).then(async (g) => {
-      await bed.join(g.id, blocked2);
-      await bed.join(g.id, waiter2);
+      await Promise.all([bed.join(g.id, blocked2), bed.join(g.id, waiter2)]);
       return g.id;
     }),
   ]);
@@ -126,10 +136,13 @@ describe('sight', () => {
   let betoPlan: string;
 
   it('before any block, both see each other', async () => {
-    anaPlan = await createPlan(ana, g1);
-    betoPlan = await createPlan(beto, g1);
-    expect(await seesPlan(beto, anaPlan)).toBe(true);
-    expect(await seesPlan(ana, betoPlan)).toBe(true);
+    [anaPlan, betoPlan] = await Promise.all([createPlan(ana, g1), createPlan(beto, g1)]);
+    const [betoSees, anaSees] = await Promise.all([
+      seesPlan(beto, anaPlan),
+      seesPlan(ana, betoPlan),
+    ]);
+    expect(betoSees).toBe(true);
+    expect(anaSees).toBe(true);
   });
 
   it("Ana blocks Beto: her plan stops existing for him, by list and by id", async () => {
@@ -144,8 +157,12 @@ describe('sight', () => {
   });
 
   it('a third party sees everything', async () => {
-    expect(await seesPlan(carla, anaPlan)).toBe(true);
-    expect(await seesPlan(carla, betoPlan)).toBe(true);
+    const [seesAnas, seesBetos] = await Promise.all([
+      seesPlan(carla, anaPlan),
+      seesPlan(carla, betoPlan),
+    ]);
+    expect(seesAnas).toBe(true);
+    expect(seesBetos).toBe(true);
   });
 
   it("he can no longer RSVP to a plan he cannot see", async () => {
@@ -155,8 +172,10 @@ describe('sight', () => {
 
   it("on a third party's plan they still see each other, and the count is real", async () => {
     const carlaPlan = await createPlan(carla, g1);
-    ok(await say(ana, carlaPlan, 'yes'));
-    ok(await say(beto, carlaPlan, 'yes'));
+    await Promise.all([
+      say(ana, carlaPlan, 'yes').then(ok),
+      say(beto, carlaPlan, 'yes').then(ok),
+    ]);
     const betoView = ok(
       await beto.client.from('rsvps').select('user_id').eq('plan_id', carlaPlan),
     ).map((r) => r.user_id);
@@ -168,8 +187,12 @@ describe('sight', () => {
 describe('notifications follow sight', () => {
   it('a new plan by Ana reaches Carla but not Beto', async () => {
     const planId = await createPlan(ana, g1);
-    expect(await notified(carla.id, 'plan_created', planId)).toBe(true);
-    expect(await notified(beto.id, 'plan_created', planId)).toBe(false);
+    const [carlaGot, betoGot] = await Promise.all([
+      notified(carla.id, 'plan_created', planId),
+      notified(beto.id, 'plan_created', planId),
+    ]);
+    expect(carlaGot).toBe(true);
+    expect(betoGot).toBe(false);
   });
 
   it('a new plan by Beto still reaches Ana (the old direction is gone)', async () => {
@@ -180,30 +203,21 @@ describe('notifications follow sight', () => {
 
 describe('finding and contact', () => {
   it('search: Beto cannot find Ana; Ana still finds Beto', async () => {
-    const betoSees = ok(await beto.client.rpc('search_people', { p_query: suffix })).map(
-      (p) => p.id,
-    );
+    const [betoResults, anaResults] = await Promise.all([
+      beto.client.rpc('search_people', { p_query: suffix }),
+      ana.client.rpc('search_people', { p_query: suffix }),
+    ]);
+    const betoSees = ok(betoResults).map((p) => p.id);
     expect(betoSees).toContain(carla.id);
     expect(betoSees).not.toContain(ana.id);
-
-    const anaSees = ok(await ana.client.rpc('search_people', { p_query: suffix })).map(
-      (p) => p.id,
-    );
-    expect(anaSees).toContain(beto.id);
+    expect(ok(anaResults).map((p) => p.id)).toContain(beto.id);
   });
 
   it('a friend request from Beto pretends to succeed and writes nothing', async () => {
     expect(ok(await beto.client.rpc('send_friend_request', { p_addressee: ana.id }))).toEqual({
       status: 'requested',
     });
-    const rows = ok(
-      await bed.service
-        .from('friendships')
-        .select('id')
-        .eq('requester_id', beto.id)
-        .eq('addressee_id', ana.id),
-    );
-    expect(rows).toEqual([]);
+    expect(ok(await friendshipRows(beto, ana))).toEqual([]);
   });
 
   it('a friend request from Ana toward someone she blocked is answered honestly', async () => {
@@ -213,23 +227,22 @@ describe('finding and contact', () => {
   });
 
   it('group invites: same pair of answers, nothing written either way', async () => {
-    const anaOnly = await bed.createGroup(ana);
-    expect(
-      ok(await ana.client.rpc('invite_to_group', { p_group_id: anaOnly.id, p_invitee: beto.id })),
-    ).toEqual({ status: 'you_blocked_them' });
+    const [anaOnly, betoOnly] = await Promise.all([bed.createGroup(ana), bed.createGroup(beto)]);
+    const [fromAna, fromBeto] = await Promise.all([
+      ana.client.rpc('invite_to_group', { p_group_id: anaOnly.id, p_invitee: beto.id }),
+      beto.client.rpc('invite_to_group', { p_group_id: betoOnly.id, p_invitee: ana.id }),
+    ]);
+    expect(ok(fromAna)).toEqual({ status: 'you_blocked_them' });
+    expect(ok(fromBeto)).toEqual({ status: 'invited' });
 
-    const betoOnly = await bed.createGroup(beto);
     expect(
-      ok(await beto.client.rpc('invite_to_group', { p_group_id: betoOnly.id, p_invitee: ana.id })),
-    ).toEqual({ status: 'invited' });
-
-    const rows = ok(
-      await bed.service
-        .from('group_invites')
-        .select('id')
-        .in('group_id', [anaOnly.id, betoOnly.id]),
-    );
-    expect(rows).toEqual([]);
+      ok(
+        await bed.service
+          .from('group_invites')
+          .select('id')
+          .in('group_id', [anaOnly.id, betoOnly.id]),
+      ),
+    ).toEqual([]);
   });
 });
 
@@ -246,16 +259,23 @@ describe('blocking back, and unblocking one arrow at a time', () => {
     expect(members).toContain(ana.id);
 
     ok(await block(beto, ana));
-    anaPlan = await createPlan(ana, g1);
-    betoPlan = await createPlan(beto, g1);
-    expect(await seesPlan(beto, anaPlan)).toBe(false);
-    expect(await seesPlan(ana, betoPlan)).toBe(false);
+    [anaPlan, betoPlan] = await Promise.all([createPlan(ana, g1), createPlan(beto, g1)]);
+    const [betoSees, anaSees] = await Promise.all([
+      seesPlan(beto, anaPlan),
+      seesPlan(ana, betoPlan),
+    ]);
+    expect(betoSees).toBe(false);
+    expect(anaSees).toBe(false);
   });
 
   it("Beto unblocks: Ana sees his plans again, his side of the shield stays up", async () => {
     ok(await unblock(beto, ana));
-    expect(await seesPlan(ana, betoPlan)).toBe(true);
-    expect(await seesPlan(beto, anaPlan)).toBe(false);
+    const [anaSees, betoSees] = await Promise.all([
+      seesPlan(ana, betoPlan),
+      seesPlan(beto, anaPlan),
+    ]);
+    expect(anaSees).toBe(true);
+    expect(betoSees).toBe(false);
   });
 
   it('Ana unblocks: sight is fully restored', async () => {
@@ -288,7 +308,8 @@ describe('what a block dissolves', () => {
     pastPlan = await createPlan(host2, g2, { eventDate: daysFromNow(-3) });
     ok(await say(blocked2, pastPlan, 'yes'));
 
-    // A capped future plan, full, with somebody waiting.
+    // A capped future plan, full, with somebody waiting. Order matters: the
+    // queue position comes from insertion order.
     fullPlan = await createPlan(host2, g2, { maxPeople: 2 });
     ok(await say(host2, fullPlan, 'yes'));
     ok(await say(blocked2, fullPlan, 'yes'));
@@ -316,88 +337,67 @@ describe('what a block dissolves', () => {
   it('the block dissolves the ties and the freed seat promotes the waiter', async () => {
     ok(await block(host2, blocked2));
 
-    // Friendship: gone, both directions dead.
-    expect(
-      ok(
-        await bed.service
-          .from('friendships')
-          .select('id')
-          .or(
-            `and(requester_id.eq.${host2.id},addressee_id.eq.${blocked2.id}),and(requester_id.eq.${blocked2.id},addressee_id.eq.${host2.id})`,
-          ),
-      ),
-    ).toEqual([]);
-
-    // Pending invite between the pair: gone.
-    expect(
-      ok(
-        await bed.service
+    const [friendship, invites, rsvps, availability, past, members, promoted] =
+      await Promise.all([
+        friendshipRows(host2, blocked2).then(ok),
+        bed.service
           .from('group_invites')
           .select('id')
           .eq('invited_by', host2.id)
-          .eq('invitee_id', blocked2.id),
-      ),
-    ).toEqual([]);
-
-    // His yes on the full plan: gone, and the seat went to the waiter through
-    // the same promotion a real withdrawal uses, told about it and all.
-    const rsvps = ok(
-      await bed.service.from('rsvps').select('user_id, response').eq('plan_id', fullPlan),
-    );
-    expect(rsvps.find((r) => r.user_id === blocked2.id)).toBeUndefined();
-    expect(rsvps.find((r) => r.user_id === waiter2.id)?.response).toBe('yes');
-    expect(await notified(waiter2.id, 'plan_promoted', fullPlan)).toBe(true);
-
-    // His availability on the open vote: gone.
-    expect(
-      ok(
-        await bed.service
+          .eq('invitee_id', blocked2.id)
+          .then(ok),
+        bed.service.from('rsvps').select('user_id, response').eq('plan_id', fullPlan).then(ok),
+        bed.service
           .from('date_availability')
           .select('id')
           .eq('plan_id', flexPlan)
-          .eq('user_id', blocked2.id),
-      ),
-    ).toEqual([]);
+          .eq('user_id', blocked2.id)
+          .then(ok),
+        bed.service
+          .from('rsvps')
+          .select('response')
+          .eq('plan_id', pastPlan)
+          .eq('user_id', blocked2.id)
+          .single()
+          .then(ok),
+        bed.service.from('group_members').select('user_id').eq('group_id', g2).then(ok),
+        notified(waiter2.id, 'plan_promoted', fullPlan),
+      ]);
+
+    // Friendship: gone, both directions dead. Pending invite: gone.
+    expect(friendship).toEqual([]);
+    expect(invites).toEqual([]);
+
+    // His yes on the full plan: gone, and the seat went to the waiter through
+    // the same promotion a real withdrawal uses, told about it and all.
+    expect(rsvps.find((r) => r.user_id === blocked2.id)).toBeUndefined();
+    expect(rsvps.find((r) => r.user_id === waiter2.id)?.response).toBe('yes');
+    expect(promoted).toBe(true);
+
+    // His availability on the open vote: gone.
+    expect(availability).toEqual([]);
 
     // The past plan keeps its history.
-    const past = ok(
-      await bed.service
-        .from('rsvps')
-        .select('response')
-        .eq('plan_id', pastPlan)
-        .eq('user_id', blocked2.id)
-        .single(),
-    );
     expect(past.response).toBe('yes');
 
     // Membership is not the block's to touch.
-    const members = ok(
-      await bed.service.from('group_members').select('user_id').eq('group_id', g2),
-    ).map((m) => m.user_id);
-    expect(members).toContain(blocked2.id);
+    expect(members.map((m) => m.user_id)).toContain(blocked2.id);
   });
 
   it('unblocking restores sight but nothing it dissolved', async () => {
     ok(await unblock(host2, blocked2));
-    expect(await seesPlan(blocked2, fullPlan)).toBe(true);
-
-    expect(
-      ok(
-        await bed.service
-          .from('friendships')
-          .select('id')
-          .or(
-            `and(requester_id.eq.${host2.id},addressee_id.eq.${blocked2.id}),and(requester_id.eq.${blocked2.id},addressee_id.eq.${host2.id})`,
-          ),
-      ),
-    ).toEqual([]);
-    const seat = ok(
-      await bed.service
+    const [sees, friendship, seat] = await Promise.all([
+      seesPlan(blocked2, fullPlan),
+      friendshipRows(host2, blocked2).then(ok),
+      bed.service
         .from('rsvps')
         .select('id')
         .eq('plan_id', fullPlan)
-        .eq('user_id', blocked2.id),
-    );
+        .eq('user_id', blocked2.id)
+        .then(ok),
+    ]);
+    expect(sees).toBe(true);
+    expect(friendship).toEqual([]);
     expect(seat).toEqual([]);
   });
 });

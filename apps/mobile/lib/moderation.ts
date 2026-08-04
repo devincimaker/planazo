@@ -82,9 +82,16 @@ export async function unblockUser(blockerId: string, blockedId: string): Promise
   if (error) throw error;
 }
 
-/** Ids this user has blocked. RLS means it can only ever be their own list. */
+/**
+ * Ids this user has blocked, most recent block first. RLS means it can only
+ * ever be their own list. The order matters to the Blocked people screen;
+ * manage.tsx builds a Set from it and never notices.
+ */
 export async function fetchBlockedIds(): Promise<string[]> {
-  const { data, error } = await supabase.from('blocked_users').select('blocked_id');
+  const { data, error } = await supabase
+    .from('blocked_users')
+    .select('blocked_id')
+    .order('created_at', { ascending: false });
   if (error) throw error;
   return (data ?? []).map((row) => row.blocked_id);
 }
