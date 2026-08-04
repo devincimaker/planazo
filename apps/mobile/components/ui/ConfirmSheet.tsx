@@ -1,7 +1,7 @@
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import { Button } from './Button';
 import { ThemedText } from './ThemedText';
-import { colors, radii, spacing } from '../../theme/tokens';
+import { colors, spacing } from '../../theme/tokens';
 
 interface ConfirmSheetProps {
   visible: boolean;

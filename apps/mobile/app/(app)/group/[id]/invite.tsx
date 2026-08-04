@@ -5,7 +5,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import { supabase } from '../../../../lib/supabase';
-import { useAuthStore } from '../../../../stores/authStore';
 import { useFriends } from '../../../../lib/useFriends';
 import { MIN_TOUCH_TARGET } from '../../../../lib/a11y';
 import { ThemedText, Avatar, Button } from '../../../../components/ui';
@@ -16,7 +15,6 @@ export default function InviteToGroupSheet() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { user } = useAuthStore();
   const [picks, setPicks] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
 

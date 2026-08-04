@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "scripts": {
+    "lint": "eslint .",
     "dev": "expo start",
     "start": "expo start",
     "android": "expo run:android",
