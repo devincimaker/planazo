@@ -18,6 +18,7 @@ import { useAuthStore } from '../../../stores/authStore';
 import { usePendingInvites } from '../../../lib/usePendingInvites';
 import { useFriends } from '../../../lib/useFriends';
 import { errorCopy } from '../../../lib/queryErrors';
+import { usePullToRefresh } from '../../../lib/usePullToRefresh';
 import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
 import {
   ThemedText,
@@ -53,7 +54,7 @@ export default function GroupsScreen() {
   const { groupInvites, friendRequests, count: inviteCount } = usePendingInvites();
   const { friends } = useFriends();
 
-  const { data: rows, isLoading, isError, error, refetch, isRefetching } = useQuery({
+  const { data: rows, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['groups', user?.id],
     queryFn: async (): Promise<GroupRow[]> => {
       const { data: memberships, error } = await supabase
@@ -115,6 +116,7 @@ export default function GroupsScreen() {
     },
     enabled: !!user,
   });
+  const { refreshing, onRefresh } = usePullToRefresh(refetch);
 
   const joinByCode = useMutation({
     mutationFn: async (code: string) => {
@@ -180,7 +182,7 @@ export default function GroupsScreen() {
         <ScrollView
           style={styles.list}
           contentContainerStyle={styles.errorContent}
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
           <ErrorState {...errorCopy(error)} onRetry={() => refetch()} testID="groups-error" />
         </ScrollView>
@@ -246,7 +248,7 @@ export default function GroupsScreen() {
         <ScrollView
           style={styles.list}
           contentContainerStyle={styles.listContent}
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
           {inviteCount > 0 ? (
             <Pressable

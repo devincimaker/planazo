@@ -24,6 +24,7 @@ import {
 import { supabase } from '../../../lib/supabase';
 import { deleteOwnRsvp, offerWaitingList, waitingLabel } from '../../../lib/rsvp';
 import { actionErrorCopy, errorCopy } from '../../../lib/queryErrors';
+import { usePullToRefresh } from '../../../lib/usePullToRefresh';
 import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
 import { useAuthStore } from '../../../stores/authStore';
 import {
@@ -64,7 +65,7 @@ export default function FeedScreen() {
   // Local date selections per flexible plan, committed on "Send N dates"
   const [pickedDates, setPickedDates] = useState<Record<string, string[]>>({});
 
-  const { data: plans, isLoading, isError, error, refetch, isRefetching } = useQuery({
+  const { data: plans, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['home-plans', user?.id],
     queryFn: async () => {
       const { data: memberships, error: memberError } = await supabase
@@ -93,6 +94,7 @@ export default function FeedScreen() {
     },
     enabled: !!user,
   });
+  const { refreshing, onRefresh } = usePullToRefresh(refetch);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['home-plans'] });
 
@@ -449,7 +451,7 @@ export default function FeedScreen() {
         <ScrollView
           style={styles.list}
           contentContainerStyle={styles.errorContent}
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
           <ErrorState {...errorCopy(error)} onRetry={() => refetch()} testID="feed-error" />
         </ScrollView>
@@ -457,7 +459,7 @@ export default function FeedScreen() {
         <ScrollView
           style={styles.list}
           contentContainerStyle={styles.listContent}
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
           {(cancelNotices ?? []).length > 0 ? (
             <View style={styles.notices}>
