@@ -259,7 +259,9 @@ export async function uploadPhotos(
  * broken tile: the signer reports per-path errors, and a photo we cannot show
  * is better absent than grey.
  */
-export async function signPhotos(photos: PhotoRow[]): Promise<SignedPhoto[]> {
+export async function signPhotos<T extends { storage_path: string; thumb_path: string | null }>(
+  photos: T[],
+): Promise<(T & { url: string; thumbUrl: string })[]> {
   if (!photos.length) return [];
 
   // Originals and renditions in the same request: 2N paths is still one round
@@ -335,16 +337,30 @@ export async function listOwnedPhotoPaths(userId: string): Promise<string[]> {
  *
  * One function because the card and the album screen say the same sentence,
  * and when they each had their own the screen ended up rendering
- * "1 photos from Lucía".
+ * "1 photos from Lucía". Takes counts rather than rows because the card gets
+ * its numbers from `plan_album_card` without ever holding the rows; the album
+ * screen, which does hold them, adapts through {@link albumSummaryFromRows}.
  */
-export function albumSummary(rows: Pick<PhotoRow, 'uploaded_by' | 'uploader'>[]): string {
-  const total = rows.length;
+export function albumSummary(album: {
+  total: number;
+  uploaders: number;
+  /** Whoever uploaded the newest photo. */
+  name?: string | null;
+}): string {
+  const { total, uploaders } = album;
+  const name = album.name ?? null;
   if (!total) return '';
-
-  const uploaders = new Set(rows.map((r) => r.uploaded_by)).size;
-  const name = rows[0]?.uploader?.display_name;
 
   if (total === 1) return name ? `One photo, from ${name}` : 'One photo';
   if (uploaders === 1) return name ? `${total} photos from ${name}` : `${total} photos`;
   return `${total} photos from ${spellCount(uploaders)} people`;
+}
+
+/** The same sentence, from rows ordered newest first. */
+export function albumSummaryFromRows(rows: Pick<PhotoRow, 'uploaded_by' | 'uploader'>[]): string {
+  return albumSummary({
+    total: rows.length,
+    uploaders: new Set(rows.map((r) => r.uploaded_by)).size,
+    name: rows[0]?.uploader?.display_name,
+  });
 }

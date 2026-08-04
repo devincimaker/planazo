@@ -1,14 +1,14 @@
 import { render, screen, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PhotoAlbumCard } from '../PhotoAlbumCard';
-import { usePlanPhotos } from '../../lib/usePlanPhotos';
+import { usePlanAlbumCard } from '../../lib/usePlanPhotos';
 
 // photos.ts reaches the supabase client through lib/images, which reads env
 // at import time. The card never touches it in these tests.
 jest.mock('../../lib/supabase', () => ({ supabase: { from: jest.fn(), storage: {} } }));
 
 jest.mock('../../lib/usePlanPhotos', () => ({
-  usePlanPhotos: jest.fn(),
+  usePlanAlbumCard: jest.fn(),
   planPhotosKey: (planId: string) => ['plan-photos', planId],
 }));
 
@@ -22,30 +22,41 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn() }),
 }));
 
-const mockUsePlanPhotos = usePlanPhotos as jest.Mock;
+const mockUsePlanAlbumCard = usePlanAlbumCard as jest.Mock;
 
 function photo(id: string, uploader: string, name: string) {
   return {
     id,
-    plan_id: 'plan-1',
     uploaded_by: uploader,
     storage_path: `plan-1/${uploader}/${id}.jpg`,
     thumb_path: `plan-1/${uploader}/${id}_thumb.jpg`,
-    width: 900,
-    height: 900,
-    created_at: '2026-08-03T10:00:00Z',
     uploader: { display_name: name },
   };
 }
 
+/** Rows in, hook result out, shaped the way `plan_album_card` shapes it.
+ *  Rows are newest first; the component's userId is always 'me'. */
 function prime(rows: ReturnType<typeof photo>[], error: unknown = null) {
-  mockUsePlanPhotos.mockReturnValue({
-    rows,
-    signed: rows.map((r) => ({
-      ...r,
-      url: `https://signed/${r.id}`,
-      thumbUrl: `https://signed/${r.id}_thumb`,
-    })),
+  const recent = rows
+    .slice(0, 4)
+    .map(({ id, storage_path, thumb_path }) => ({ id, storage_path, thumb_path }));
+  mockUsePlanAlbumCard.mockReturnValue({
+    summary: error
+      ? undefined
+      : {
+          total: rows.length,
+          mine: rows.filter((r) => r.uploaded_by === 'me').length,
+          uploaders: new Set(rows.map((r) => r.uploaded_by)).size,
+          firstUploaderName: rows[0]?.uploader.display_name ?? null,
+          recent,
+        },
+    signed: error
+      ? undefined
+      : recent.map((r) => ({
+          ...r,
+          url: `https://signed/${r.id}`,
+          thumbUrl: `https://signed/${r.id}_thumb`,
+        })),
     isLoading: false,
     error,
   });

@@ -711,6 +711,16 @@ export type Database = {
         Args: { p_date_option_id?: string; p_plan_id: string }
         Returns: Json
       }
+      plan_album_card: {
+        Args: { p_plan_id: string }
+        Returns: {
+          total: number
+          mine: number
+          uploaders: number
+          first_uploader_name: string | null
+          recent: Json
+        }[]
+      }
       plan_photo_plan_id: { Args: { p_name: string }; Returns: string }
       reopen_plan: { Args: { p_plan_id: string }; Returns: Json }
       respond_friend_request: {
