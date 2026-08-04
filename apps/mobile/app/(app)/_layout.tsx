@@ -29,6 +29,10 @@ export default function AppLayout() {
           }}
         />
         <Stack.Screen name="profile/edit" options={{ presentation: 'modal', headerShown: false }} />
+        <Stack.Screen
+          name="profile/blocked"
+          options={{ presentation: 'modal', headerShown: false }}
+        />
         <Stack.Screen name="group/[id]" options={{ headerShown: false }} />
         <Stack.Screen
           name="group/new"
