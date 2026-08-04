@@ -18,7 +18,7 @@ export default function Index() {
     }, 100);
 
     return () => clearTimeout(timer);
-  }, [session]);
+  }, [session, router]);
 
   return <BrandSplash />;
 }

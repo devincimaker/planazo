@@ -22,7 +22,6 @@ jest.mock('@supabase/supabase-js', () => ({
 process.env.EXPO_PUBLIC_SUPABASE_URL = 'http://127.0.0.1:55321';
 process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY = 'anon-key';
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { forgetStoredSession } = require('../supabase');
 const storage = () => mockCaptured.storage;
 

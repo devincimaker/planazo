@@ -194,6 +194,10 @@ function InitialLayout() {
   );
 
   useEffect(() => {
+    // Bootstrapping auth is exactly the case the rule warns about and the one
+    // it cannot help with: the first load has to land in state, and it happens
+    // once on mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void initialize();
     // Retries call initialize() directly; re-running it on every render would
     // refetch the profile for nothing.
@@ -230,6 +234,9 @@ function InitialLayout() {
 
   useEffect(() => {
     if (!pushedPlanId || isLoading || !session || !navReady) return;
+    // Consuming a one-shot intent: clearing it is what stops the navigation
+    // firing twice, so the write is the point rather than a cascade.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPushedPlanId(null);
     router.push(`/(app)/plan/${pushedPlanId}`);
   }, [pushedPlanId, isLoading, session, navReady, router]);
@@ -240,6 +247,8 @@ function InitialLayout() {
   // mounts once we stop rendering the error state in its place.
   useEffect(() => {
     if (!leavingForLogin || !navReady) return;
+    // Same one-shot consume as the push intent above.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLeavingForLogin(false);
     router.replace('/(auth)/login');
   }, [leavingForLogin, navReady, router]);

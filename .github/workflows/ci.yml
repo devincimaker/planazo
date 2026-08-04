@@ -34,6 +34,12 @@ jobs:
       - name: Typecheck
         run: pnpm turbo typecheck
 
+      # The conventions in AGENTS.md that a machine can check, checked by one.
+      # Without this step the rules hold only for as long as everyone remembers
+      # them, which is the state PLA-57 found them in.
+      - name: Lint
+        run: pnpm turbo lint
+
       - name: Unit tests (shared)
         run: pnpm --filter @planazo/shared test
 

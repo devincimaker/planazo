@@ -1,3 +1,6 @@
+/* eslint-disable max-lines -- 422 lines of code against a 400 cap.
+   Splitting this screen is tracked in PLA-59; the cap binds on everything
+   else from the day it went in (PLA-57). Remove this line with the split. */
 import { useState } from 'react';
 import {
   View,

@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useRef } from 'react';
+import { ReactNode, useCallback, useEffect, useRef } from 'react';
 import { Animated, Easing, PanResponder, Pressable, StyleSheet, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { ThemedText } from './ThemedText';
@@ -86,20 +86,25 @@ export function SwipeRow({
   notifyRef.current = onOpenChange;
   const touched = useRef(false);
 
-  const snapTo = (to: number) => {
-    resting.current = to;
-    Animated.timing(translateX, {
-      toValue: to,
-      duration: SNAP_MS,
-      easing: Easing.out(Easing.ease),
-      useNativeDriver: true,
-    }).start();
-  };
+  // Stable: it only touches refs, so the effects below can depend on it
+  // honestly instead of omitting it and hoping.
+  const snapTo = useCallback(
+    (to: number) => {
+      resting.current = to;
+      Animated.timing(translateX, {
+        toValue: to,
+        duration: SNAP_MS,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }).start();
+    },
+    [translateX]
+  );
 
   // The list closed us because another row opened, or an action fired.
   useEffect(() => {
     if (!open && resting.current !== 0) snapTo(0);
-  }, [open]);
+  }, [open, snapTo]);
 
   useEffect(() => {
     if (!peek) return;
@@ -116,7 +121,7 @@ export function SwipeRow({
       clearTimeout(out);
       clearTimeout(back);
     };
-  }, [peek]);
+  }, [peek, snapTo]);
 
   const pan = useRef(
     PanResponder.create({

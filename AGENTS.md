@@ -33,6 +33,32 @@ Two things this rule does **not** cover:
 
 Hyphens in compound words (`five-a-side`, `invite-only`) are unaffected.
 
+**`pnpm turbo lint` enforces this**, both carve-outs included, so a slip fails CI
+rather than reaching a reviewer. See `eslint.config.mjs`. Markdown is outside
+ESLint's reach, so `store-assets/APP-STORE.md` is still read by eye.
+
+## Lint
+
+`eslint.config.mjs` at the root covers every package. It does two jobs, and a new
+rule belongs to one of them:
+
+- **Catching bugs**, with off-the-shelf rules from `typescript-eslint` and
+  `eslint-plugin-react-hooks`.
+- **Enforcing the conventions in this file**, with rules written here because the
+  convention is ours: the em dash ban, and a 400-line cap on real code
+  (blanks and comments do not count, so commenting well is never penalised).
+
+Rules that are **off** carry the reason next to them. Keep that up: a rule that
+is off because it is wrong for this codebase is a decision worth reading, and one
+that is off because it got noisy and nobody looked is rot.
+
+Suppressions come in two kinds, and they are not the same thing:
+
+- `/* eslint-disable max-lines -- ... */` at the top of a file is **debt**, and
+  points at the issue that removes it (PLA-58, PLA-59, PLA-60).
+- An inline `eslint-disable-next-line` with a comment explaining the pattern is a
+  **documented exception**, and is meant to stay.
+
 ## Linear Integration
 
 - **Workspace**: fioris

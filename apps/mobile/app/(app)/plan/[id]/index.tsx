@@ -1,3 +1,6 @@
+/* eslint-disable max-lines -- 1161 lines of code against a 400 cap.
+   Splitting this screen is tracked in PLA-58; the cap binds on everything
+   else from the day it went in (PLA-57). Remove this line with the split. */
 import { useMemo, useState } from 'react';
 import {
   View,
@@ -441,6 +444,10 @@ export default function PlanDetailScreen() {
     // plan nobody has locked has neither, and no album, because the night does
     // not exist yet.
     const albumStart = plan.locked_date ?? plan.event_date;
+    // A snapshot on purpose. The album opening is a once-per-plan threshold
+    // hours wide, not something anyone watches tick over, so reading the clock
+    // here costs a stale render nobody can perceive and saves a timer.
+    // eslint-disable-next-line react-hooks/purity
     const albumOpen = !!albumStart && new Date(albumStart).getTime() <= Date.now();
 
     // Looking is for the group, adding is for the people who were there. The
