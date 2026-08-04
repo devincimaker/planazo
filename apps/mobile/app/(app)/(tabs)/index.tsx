@@ -1,6 +1,3 @@
-/* eslint-disable max-lines -- 633 lines of code against a 400 cap.
-   Splitting this screen is tracked in PLA-60; the cap binds on everything
-   else from the day it went in (PLA-57). Remove this line with the split. */
 import { useMemo, useState } from 'react';
 import {
   View,
@@ -29,26 +26,15 @@ import {
   waitlistPosition,
 } from '@planazo/shared';
 import { supabase } from '../../../lib/supabase';
-import { deleteOwnRsvp, offerWaitingList, waitingLabel } from '../../../lib/rsvp';
+import { deleteOwnRsvp, offerWaitingList } from '../../../lib/rsvp';
 import { useVotePlanPoll } from '../../../lib/usePlanPoll';
 import { actionErrorCopy, errorCopy } from '../../../lib/queryErrors';
 import { usePullToRefresh } from '../../../lib/usePullToRefresh';
 import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
 import { useAuthStore } from '../../../stores/authStore';
-import {
-  ThemedText,
-  Card,
-  Chip,
-  Badge,
-  Avatar,
-  AvatarStack,
-  AnswerFooter,
-  ButtonRow,
-  DateOptionRow,
-  EmptyState,
-  ErrorState,
-  colorForName,
-} from '../../../components/ui';
+import { ThemedText, Chip, Avatar, EmptyState, ErrorState } from '../../../components/ui';
+import { FeedPlanCard } from '../../../components/feed/FeedPlanCard';
+import { CancelNotices } from '../../../components/feed/CancelNotices';
 import { colors, spacing } from '../../../theme/tokens';
 
 type Filter = 'all' | 'needs' | 'happening';
@@ -111,55 +97,6 @@ export default function FeedScreen() {
   const { refreshing, onRefresh } = usePullToRefresh(refetch);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['home-plans'] });
-
-  // 19e: a cancellation of a plan you'd said yes to earns one dismissable
-  // notice above the feed. The unread plan_cancelled row *is* the pin — the
-  // RPC only writes them for people who were in, and 24h clears it either way.
-  const { data: cancelNotices } = useQuery({
-    queryKey: ['cancel-notices', user?.id],
-    queryFn: async () => {
-      const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-      const { data: notes, error } = await supabase
-        .from('notifications')
-        .select('id, data, created_at')
-        .eq('user_id', user!.id)
-        .eq('type', 'plan_cancelled')
-        .eq('read', false)
-        .gte('created_at', since)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      const planIds = [
-        ...new Set((notes ?? []).map((n: any) => n.data?.plan_id).filter(Boolean)),
-      ];
-      if (planIds.length === 0) return [];
-      const { data: cancelledPlans, error: planError } = await supabase
-        .from('plans')
-        .select(
-          'id, title, status, event_date, locked_date, cancel_reason, canceller:profiles!plans_cancelled_by_fkey(display_name)'
-        )
-        .in('id', planIds);
-      if (planError) throw planError;
-      const byId = new Map((cancelledPlans ?? []).map((p: any) => [p.id, p]));
-      return (notes ?? [])
-        .map((n: any) => ({ noticeId: n.id as string, plan: byId.get(n.data?.plan_id) }))
-        // A restored plan takes its notice with it
-        .filter((n: any) => n.plan && n.plan.status === 'cancelled');
-    },
-    enabled: !!user,
-  });
-
-  const dismissNotice = useMutation({
-    mutationFn: async (noticeId: string) => {
-      const { error } = await supabase
-        .from('notifications')
-        .update({ read: true })
-        .eq('id', noticeId);
-      if (error) throw error;
-    },
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['cancel-notices'] }),
-    onError: alertActionError,
-  });
 
   const answerFixed = useMutation({
     mutationFn: async ({
@@ -369,111 +306,16 @@ export default function FeedScreen() {
 
   const openPlan = (planId: string) => router.push(`/(app)/plan/${planId}`);
 
-  const renderAnswer = (d: (typeof decorated)[number]) => {
-    const { plan } = d;
-    // A called-off plan is a record — the notice above the feed carries it.
-    if (plan.status === 'cancelled') return null;
-
-    // Once a plan locks, the date is real and the vote is over, so a locked
-    // flexible plan answers like a fixed one: a plain yes/no on your own row.
-    // It has to stay reachable — locking seeds every available member into a
-    // 'yes' they never tapped, and that's exactly when a clash shows up.
-    if (d.rsvpDriven) {
-      // The card stays dense: the position is the whole message, and the
-      // promise behind it ("we'll tell you") lives on plan detail.
-      if (d.userRsvp?.response === 'pending') {
-        return (
-          <AnswerFooter
-            size="md"
-            answered="pending"
-            answerLabel={waitingLabel(d.waitPosition)}
-            onChange={() => clearAnswer.mutate(plan.id)}
-          />
-        );
-      }
-      if (d.userRsvp?.response === 'yes' || d.userRsvp?.response === 'no') {
-        return (
-          <AnswerFooter
-            size="md"
-            answered={d.userRsvp.response}
-            onChange={() => clearAnswer.mutate(plan.id)}
-          />
-        );
-      }
-      return (
-        <AnswerFooter
-          size="md"
-          full={d.isFull}
-          onYes={() => answerFixed.mutate({ planId: plan.id, response: 'yes' })}
-          onNo={() => answerFixed.mutate({ planId: plan.id, response: 'no' })}
-          onWait={() => answerFixed.mutate({ planId: plan.id, response: 'pending' })}
-        />
-      );
-    }
-
-    // Flexible: answer inline — tap the dates that work, send them (2a)
-    if (d.userRsvp?.response === 'no') {
-      return (
-        <AnswerFooter size="md" answered="no" onChange={() => clearAnswer.mutate(plan.id)} />
-      );
-    }
-    if (d.myDates > 0) {
-      return (
-        <AnswerFooter
-          size="md"
-          answered="yes"
-          answerLabel={`You sent ${d.myDates} date${d.myDates === 1 ? '' : 's'}`}
-          onChange={() => openPlan(plan.id)}
-        />
-      );
-    }
-
-    const picked = pickedDates[plan.id] ?? [];
-    const togglePicked = (optionId: string) =>
-      setPickedDates((prev) => ({
+  const togglePicked = (planId: string, optionId: string) =>
+    setPickedDates((prev) => {
+      const picked = prev[planId] ?? [];
+      return {
         ...prev,
-        [plan.id]: picked.includes(optionId)
+        [planId]: picked.includes(optionId)
           ? picked.filter((id) => id !== optionId)
           : [...picked, optionId],
-      }));
-
-    return (
-      <View style={styles.chips}>
-        {d.dateOptions.map((opt) => (
-          <DateOptionRow
-            key={opt.id}
-            label={fmtDay(opt.date)}
-            meta={`${d.countByDate[opt.id]?.count ?? 0} free`}
-            selected={picked.includes(opt.id)}
-            onPress={() => togglePicked(opt.id)}
-            testID={`date-option-${opt.id}`}
-          />
-        ))}
-        <ButtonRow
-          size="md"
-          style={styles.chipButtons}
-          secondary={{
-            label: "Can't make it",
-            variant: 'secondary',
-            onPress: () => declineFlexible.mutate({ planId: plan.id, optionIds: d.optionIds }),
-          }}
-          primary={
-            picked.length === 0
-              ? {
-                  label: 'Tap the dates you can do',
-                  variant: 'secondary',
-                  disabled: true,
-                  haptic: false,
-                }
-              : {
-                  label: `Send ${picked.length} date${picked.length === 1 ? '' : 's'}`,
-                  onPress: () => sendDates.mutate({ planId: plan.id, optionIds: picked }),
-                }
-          }
-        />
-      </View>
-    );
-  };
+      };
+    });
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
@@ -520,49 +362,7 @@ export default function FeedScreen() {
           contentContainerStyle={styles.listContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
-          {(cancelNotices ?? []).length > 0 ? (
-            <View style={styles.notices}>
-              {(cancelNotices ?? []).map(({ noticeId, plan }: any) => {
-                const name = plan.canceller?.display_name ?? 'The host';
-                const date = plan.locked_date ?? plan.event_date;
-                const line = plan.cancel_reason
-                  ? `${date ? `${fmtDay(date)} is off. ` : ''}${name} says “${plan.cancel_reason}”`
-                  : `${name} called this off.`;
-                return (
-                  <View key={noticeId} style={styles.notice} testID={`cancel-notice-${plan.id}`}>
-                    <ThemedText variant="tag" color={colors.textMuted} style={styles.noticeLabel}>
-                      Called off
-                    </ThemedText>
-                    <ThemedText variant="cardTitle">{plan.title}</ThemedText>
-                    <ThemedText variant="sub" style={styles.noticeLine}>
-                      {line}
-                    </ThemedText>
-                    <View style={styles.noticeActions}>
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() => dismissNotice.mutate(noticeId)}
-                        style={styles.gotIt}
-                        testID={`got-it-${plan.id}`}
-                      >
-                        <ThemedText variant="bodyStrong">Got it</ThemedText>
-                      </Pressable>
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() => openPlan(plan.id)}
-                        style={styles.seePlan}
-                        testID={`see-plan-${plan.id}`}
-                      >
-                        <ThemedText variant="bodyStrong" color={colors.textSecondary}>
-                          See the plan
-                        </ThemedText>
-                      </Pressable>
-                    </View>
-                  </View>
-                );
-              })}
-              <View style={styles.noticeDivider} />
-            </View>
-          ) : null}
+          <CancelNotices onOpenPlan={openPlan} />
 
           {visible.length === 0 ? (
             <EmptyState
@@ -576,101 +376,24 @@ export default function FeedScreen() {
               onPress={() => router.push('/(app)/plan/create')}
             />
           ) : (
-            visible.map((d) => {
-              const groupName = d.plan.groups?.name ?? 'Group';
-              const groupColor = d.plan.groups?.color ?? colorForName(groupName);
-              return (
-                <Card key={d.plan.id} stripeColor={groupColor} testID={`plan-card-${d.plan.id}`}>
-                  <Pressable onPress={() => openPlan(d.plan.id)}>
-                    <View style={styles.cardTop}>
-                      <View style={styles.groupRow}>
-                        <View style={[styles.swatch, { backgroundColor: groupColor }]} />
-                        <ThemedText variant="caption" color={colors.textSecondary}>
-                          {groupName}
-                        </ThemedText>
-                      </View>
-                      {/*
-                        Two independent facts share one slot, so the label has
-                        to pick. "Unanswered" is the one that is always true
-                        when it shows: a plan with its numbers can still be
-                        waiting on your reply, and the old "Needs you" claimed
-                        the plan was short of people when often it was not.
-                      */}
-                      <Badge
-                        label={d.needs ? 'Unanswered' : d.confirmed ? 'Confirmed' : 'Open'}
-                        tone={d.needs ? 'open' : d.confirmed ? 'confirmed' : 'muted'}
-                      />
-                    </View>
-
-                    <ThemedText variant="cardTitle" style={styles.title}>
-                      {d.plan.title}
-                    </ThemedText>
-                    <ThemedText variant="bodyStrong">{d.when}</ThemedText>
-                    {d.plan.location || d.plan.description ? (
-                      <ThemedText variant="sub" numberOfLines={1} style={styles.sub}>
-                        {d.plan.location ?? d.plan.description}
-                      </ThemedText>
-                    ) : null}
-
-                    {d.goingNames.length > 0 && !(d.plan.plan_type === 'flexible' && d.needs) ? (
-                      <View style={styles.faces}>
-                        <AvatarStack
-                          names={d.goingNames}
-                          label={
-                            d.goingNames.length < d.plan.min_people
-                              ? `${d.goingNames.length} of ${d.plan.min_people} needed`
-                              : `${d.goingNames.length} going`
-                          }
-                        />
-                      </View>
-                    ) : null}
-                  </Pressable>
-
-                  {/* The plan's poll, votable without opening the plan
-                      (PLA-47). Outside the openPlan Pressable: a tap on an
-                      option is a vote, never a navigation. */}
-                  {d.poll ? (
-                    <View style={styles.pollSection} testID={`poll-feed-${d.plan.id}`}>
-                      <View style={styles.pollHead}>
-                        <ThemedText variant="sectionLabel" style={styles.pollQuestion} numberOfLines={1}>
-                          {d.poll.question}
-                        </ThemedText>
-                        <ThemedText
-                          variant="caption"
-                          color={d.poll.canVote ? colors.accentPressed : colors.textMuted}
-                          numberOfLines={1}
-                          style={styles.pollCaption}
-                        >
-                          {d.poll.caption}
-                        </ThemedText>
-                      </View>
-                      {d.poll.options.map((opt) => (
-                        <DateOptionRow
-                          key={opt.id}
-                          label={opt.label}
-                          meta={opt.votes === 1 ? '1 vote' : `${opt.votes} votes`}
-                          selected={opt.mine}
-                          onPress={
-                            d.poll!.canVote
-                              ? () =>
-                                  voteOnPoll.mutate({
-                                    planId: d.plan.id,
-                                    pollId: d.poll!.id,
-                                    userId: user!.id,
-                                    optionId: opt.mine ? null : opt.id,
-                                  })
-                              : undefined
-                          }
-                          testID={`poll-feed-option-${opt.id}`}
-                        />
-                      ))}
-                    </View>
-                  ) : null}
-
-                  <View style={styles.answer}>{renderAnswer(d)}</View>
-                </Card>
-              );
-            })
+            visible.map((d) => (
+              <FeedPlanCard
+                key={d.plan.id}
+                d={d}
+                picked={pickedDates[d.plan.id] ?? []}
+                onTogglePicked={(optionId) => togglePicked(d.plan.id, optionId)}
+                onOpen={() => openPlan(d.plan.id)}
+                onAnswer={(response) => answerFixed.mutate({ planId: d.plan.id, response })}
+                onClearAnswer={() => clearAnswer.mutate(d.plan.id)}
+                onSendDates={(optionIds) => sendDates.mutate({ planId: d.plan.id, optionIds })}
+                onDecline={() =>
+                  declineFlexible.mutate({ planId: d.plan.id, optionIds: d.optionIds })
+                }
+                onVote={(pollId, optionId) =>
+                  voteOnPoll.mutate({ planId: d.plan.id, pollId, userId: user!.id, optionId })
+                }
+              />
+            ))
           )}
         </ScrollView>
       )}
@@ -682,26 +405,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  pollSection: {
-    marginTop: spacing.lg,
-    paddingTop: spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: colors.divider,
-    gap: spacing.sm,
-  },
-  pollHead: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-    gap: spacing.md,
-  },
-  pollQuestion: {
-    flexShrink: 0,
-  },
-  pollCaption: {
-    flexShrink: 1,
-    textAlign: 'right',
   },
   header: {
     flexDirection: 'row',
@@ -745,90 +448,5 @@ const styles = StyleSheet.create({
   errorContent: {
     flexGrow: 1,
     paddingBottom: 120,
-  },
-  // 19e cancellation notice: stone, not red — it's news, not an alarm
-  notices: {
-    gap: spacing.md,
-  },
-  notice: {
-    backgroundColor: colors.endedCard,
-    borderWidth: 1,
-    borderColor: colors.endedBorder,
-    borderRadius: 22,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: 15,
-    gap: 3,
-  },
-  noticeLabel: {
-    textTransform: 'uppercase',
-    letterSpacing: 0.48,
-  },
-  noticeLine: {
-    marginTop: spacing.xxs,
-  },
-  noticeActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 9,
-    marginTop: spacing.sm + 1,
-  },
-  // 43 and 40 respectively — the two ways to answer a "this plan was called
-  // off" notice. The row they sit in grows by 1pt (PLA-40).
-  gotIt: {
-    flex: 1,
-    paddingVertical: 11,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: MIN_TOUCH_TARGET,
-    backgroundColor: colors.surface,
-    borderWidth: 1.5,
-    borderColor: colors.endedBorder,
-  },
-  seePlan: {
-    flex: 1,
-    paddingVertical: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: MIN_TOUCH_TARGET,
-  },
-  noticeDivider: {
-    height: 1,
-    backgroundColor: colors.tabBarBorder,
-    marginVertical: 6,
-  },
-  cardTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  groupRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-  },
-  swatch: {
-    width: 20,
-    height: 20,
-    borderRadius: 6,
-  },
-  title: {
-    marginBottom: spacing.xs,
-  },
-  sub: {
-    marginTop: spacing.xxs,
-  },
-  faces: {
-    marginTop: spacing.md,
-  },
-  answer: {
-    marginTop: spacing.md,
-  },
-  chips: {
-    gap: spacing.sm,
-  },
-  chipButtons: {
-    marginTop: spacing.xxs,
   },
 });

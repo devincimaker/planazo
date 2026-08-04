@@ -1,7 +1,8 @@
 import { Alert } from 'react-native';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import GroupsScreen, { inviteCodeFrom } from '../groups';
+import GroupsScreen from '../groups';
+import { inviteCodeFrom } from '../../../../lib/inviteCode';
 import { useAuthStore } from '../../../../stores/authStore';
 import { supabase } from '../../../../lib/supabase';
 
