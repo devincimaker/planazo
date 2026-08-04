@@ -1,7 +1,4 @@
-/* eslint-disable max-lines -- 503 lines of code against a 400 cap.
-   Splitting this screen is tracked in PLA-60; the cap binds on everything
-   else from the day it went in (PLA-57). Remove this line with the split. */
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import {
   View,
   ScrollView,
@@ -16,6 +13,7 @@ import { useQuery } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { isPlanPast, planLastDate } from '@planazo/shared';
 import { supabase } from '../../../../lib/supabase';
+import { fmtDay, fmtTime } from '../../../../lib/dates';
 import { useAuthStore } from '../../../../stores/authStore';
 import { errorCopy, isNotFoundError } from '../../../../lib/queryErrors';
 import { usePullToRefresh } from '../../../../lib/usePullToRefresh';
@@ -28,12 +26,8 @@ import {
   GroupTile,
   ErrorState,
 } from '../../../../components/ui';
-import { colors, fonts, spacing } from '../../../../theme/tokens';
-
-const fmtDay = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-const fmtTime = (iso: string) =>
-  new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+import { PastPlansSection } from '../../../../components/group/PastPlansSection';
+import { colors, spacing } from '../../../../theme/tokens';
 
 export function shareInviteLink(groupName: string, inviteCode: string) {
   return Share.share({
@@ -45,8 +39,6 @@ export default function GroupDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { user } = useAuthStore();
-  // 19d: Past is closed by default — it costs one line until you want it
-  const [showPast, setShowPast] = useState(false);
 
   const { data: group, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['group', id],
@@ -191,46 +183,6 @@ export default function GroupDetailScreen() {
     );
   }
 
-  const renderPastRow = (p: any) => {
-    const d = p.endDate ? new Date(p.endDate) : null;
-    const stone = p.ending !== 'happened';
-    return (
-      <Pressable
-        key={p.id}
-        onPress={() => router.push(`/(app)/plan/${p.id}`)}
-        style={[styles.pastCard, stone && styles.pastCardStone]}
-        testID={`past-row-${p.id}`}
-      >
-        <View style={[styles.dateTile, stone && styles.dateTileStone]}>
-          <ThemedText variant="tag" color={stone ? colors.textMuted : colors.textSecondary} style={styles.dateTileMonth}>
-            {d ? d.toLocaleDateString('en-GB', { month: 'short' }) : '—'}
-          </ThemedText>
-          <ThemedText variant="rowValue" color={stone ? colors.textMuted : colors.textSecondary} style={styles.dateTileDay}>
-            {d ? d.getDate() : ''}
-          </ThemedText>
-        </View>
-        <View style={styles.pastBody}>
-          <ThemedText
-            variant="rowValue"
-            color={stone ? colors.textSecondary : colors.textPrimary}
-            numberOfLines={1}
-          >
-            {p.title}
-          </ThemedText>
-          {p.ending === 'happened' ? (
-            <View style={styles.wentRow}>
-              <AvatarStack names={p.wentNames} label={p.wentLabel} />
-            </View>
-          ) : (
-            <ThemedText variant="caption" color={colors.textMuted} style={styles.pastLine}>
-              {p.endingLine}
-            </ThemedText>
-          )}
-        </View>
-      </Pressable>
-    );
-  };
-
   const renderPlanRow = (p: any, tone: 'waiting' | 'locked') => (
     <Card key={p.id}>
       <Pressable onPress={() => router.push(`/(app)/plan/${p.id}`)} testID={`plan-row-${p.id}`}>
@@ -363,27 +315,7 @@ export default function GroupDetailScreen() {
           </>
         )}
 
-        {pastRows.length > 0 ? (
-          <View style={styles.section}>
-            <Pressable
-              onPress={() => setShowPast((s) => !s)}
-              accessibilityRole="button"
-              style={styles.pastHeader}
-              testID="past-toggle"
-            >
-              <View style={styles.sectionHeader}>
-                <ThemedText variant="sectionLabel">Past</ThemedText>
-                <ThemedText variant="sectionLabel" color={colors.endedMuted}>
-                  {pastRows.length}
-                </ThemedText>
-              </View>
-              <ThemedText variant="caption" color={colors.textMuted}>
-                {showPast ? 'Hide ⌃' : 'Show ⌄'}
-              </ThemedText>
-            </Pressable>
-            {showPast ? pastRows.map((p: any) => renderPastRow(p)) : null}
-          </View>
-        ) : null}
+        <PastPlansSection rows={pastRows} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -484,63 +416,5 @@ const styles = StyleSheet.create({
   },
   planMeta: {
     marginTop: spacing.xs,
-  },
-  pastHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    // Its content is 17pt tall. Reach the 44 by growing up into the 24pt gap
-    // above rather than down into the 10pt one below, where the first past
-    // card — tappable itself — would have ended up under this box (PLA-40).
-    minHeight: MIN_TOUCH_TARGET,
-    marginTop: -20,
-    marginBottom: -7,
-  },
-  // 19d past cards: a happened plan keeps its white card and the faces of
-  // who was there; called off and never-quite sink into flat stone.
-  pastCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.lg - 2,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 22,
-    padding: spacing.lg - 2,
-  },
-  pastCardStone: {
-    backgroundColor: colors.pastCard,
-    borderColor: colors.endedBadge,
-  },
-  dateTile: {
-    width: 54,
-    height: 58,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.tabBarBorder,
-  },
-  dateTileStone: {
-    backgroundColor: colors.endedBadge,
-  },
-  dateTileMonth: {
-    textTransform: 'uppercase',
-    letterSpacing: 0.66,
-    opacity: 0.75,
-  },
-  dateTileDay: {
-    fontFamily: fonts.display,
-    fontSize: 22,
-    lineHeight: 24,
-  },
-  pastBody: {
-    flex: 1,
-    gap: 3,
-  },
-  wentRow: {
-    marginTop: spacing.xxs,
-  },
-  pastLine: {
-    fontFamily: fonts.body,
   },
 });

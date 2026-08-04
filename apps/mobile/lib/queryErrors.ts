@@ -8,6 +8,7 @@
  * It also decides when a failure is bad enough to throw the user's session
  * away, which is why the auth-side shapes are read here too (PLA-36).
  */
+import { Alert } from 'react-native';
 import { TIMED_OUT_PREFIX, UNREACHABLE_PREFIX } from './timeoutFetch';
 
 /**
@@ -253,4 +254,14 @@ export function actionErrorCopy(error: unknown): { title: string; body: string }
     };
   }
   return copy;
+}
+
+/**
+ * The alert most write mutations want onError: a failed write is never
+ * "Error: <raw postgres message>" — actionErrorCopy names the cases worth
+ * naming, a full plan above all (PLA-20).
+ */
+export function alertActionError(error: unknown): void {
+  const { title, body } = actionErrorCopy(error);
+  Alert.alert(title, body);
 }

@@ -1,7 +1,3 @@
-/* eslint-disable max-lines -- 557 lines of code against a 400 cap.
-   Splitting this screen is tracked in PLA-60; the cap binds on everything
-   else from the day it went in (PLA-57). Remove this line with the split. */
-import { useState } from 'react';
 import {
   View,
   ScrollView,
@@ -9,35 +5,21 @@ import {
   RefreshControl,
   Pressable,
   ActivityIndicator,
-  Alert,
-  TextInput,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { flattenNestedOptions, needsUserResponse } from '@planazo/shared';
 import { supabase } from '../../../lib/supabase';
 import { useAuthStore } from '../../../stores/authStore';
-import { usePendingInvites } from '../../../lib/usePendingInvites';
 import { useFriends } from '../../../lib/useFriends';
 import { errorCopy } from '../../../lib/queryErrors';
 import { usePullToRefresh } from '../../../lib/usePullToRefresh';
 import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
-import {
-  ThemedText,
-  Card,
-  Button,
-  Avatar,
-  AvatarStack,
-  GroupTile,
-  ErrorState,
-} from '../../../components/ui';
-import { colors, fonts, radii, spacing, groupColors } from '../../../theme/tokens';
-
-/** Invite codes travel as links; accept a raw code or anything containing one. */
-export function inviteCodeFrom(text: string): string | null {
-  return text.toUpperCase().match(/[A-HJ-NP-Z2-9]{8}/)?.[0] ?? null;
-}
+import { ThemedText, Card, AvatarStack, GroupTile, ErrorState } from '../../../components/ui';
+import { GroupsEmptyState } from '../../../components/group/GroupsEmptyState';
+import { InvitesRow } from '../../../components/group/InvitesRow';
+import { colors, fonts, radii, spacing } from '../../../theme/tokens';
 
 interface GroupRow {
   id: string;
@@ -51,10 +33,7 @@ interface GroupRow {
 
 export default function GroupsScreen() {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const { user } = useAuthStore();
-  const [joinText, setJoinText] = useState('');
-  const { groupInvites, friendRequests, count: inviteCount } = usePendingInvites();
   const { friends } = useFriends();
 
   const { data: rows, isLoading, isError, error, refetch } = useQuery({
@@ -121,39 +100,7 @@ export default function GroupsScreen() {
   });
   const { refreshing, onRefresh } = usePullToRefresh(refetch);
 
-  const joinByCode = useMutation({
-    mutationFn: async (code: string) => {
-      // PLA-35: the code goes to the server, which resolves it and writes the
-      // membership as 'member'. Resolving here and inserting separately meant
-      // the database never saw proof the caller held the code — nor any say
-      // in the role they arrived with.
-      const { data, error } = await supabase.rpc('join_group_by_invite_code', { p_code: code });
-      if (error) throw new Error(error.message);
-
-      const result = data as { status: string; group_id?: string; name?: string };
-      if (result.status === 'not_found') throw new Error('That link doesn’t work');
-      if (result.status === 'already_member') throw new Error('You’re already in this group');
-      return { id: result.group_id as string, name: result.name as string };
-    },
-    onSuccess: (group) => {
-      setJoinText('');
-      queryClient.invalidateQueries({ queryKey: ['groups'] });
-      router.push(`/(app)/group/${group.id}`);
-    },
-    onError: (error: Error) => Alert.alert('Couldn’t join', error.message),
-  });
-
   const hasGroups = (rows ?? []).length > 0;
-  const joinCode = inviteCodeFrom(joinText);
-
-  // Faces + "Padel Dilluns, Aina Roig and 1 more" for the collapsed row (18a)
-  const inviteLabels = [
-    ...groupInvites.map((i) => i.groupName),
-    ...friendRequests.map((r) => r.personName),
-  ];
-  const inviteLine =
-    inviteLabels.slice(0, 2).join(', ') +
-    (inviteLabels.length > 2 ? ` and ${inviteLabels.length - 2} more` : '');
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
@@ -190,96 +137,14 @@ export default function GroupsScreen() {
           <ErrorState {...errorCopy(error)} onRetry={() => refetch()} testID="groups-error" />
         </ScrollView>
       ) : !hasGroups ? (
-        // 16a: two ways in, and they're not equal — the link field is real,
-        // creating is second, and the header pill stays gone.
-        <View style={styles.empty}>
-          <View style={styles.emptyArt}>
-            <View style={[styles.emptyTile, { backgroundColor: groupColors[0] }]} />
-            <View style={[styles.emptyTile, { backgroundColor: colors.border }]} />
-            <View style={[styles.emptyTile, styles.emptyTileDashed]} />
-          </View>
-          <ThemedText variant="headerTitle" style={styles.emptyTitle}>
-            A group is just{'\n'}your group of people
-          </ThemedText>
-          <ThemedText variant="body" color={colors.textSecondary}>
-            Flatmates, the padel lot, the ones who actually turn up. Plans you make go to one
-            group, not to everybody.
-          </ThemedText>
-
-          <View style={styles.joinRow}>
-            <TextInput
-              style={styles.joinInput}
-              placeholder="Paste an invite link"
-              placeholderTextColor={colors.textFaint}
-              value={joinText}
-              onChangeText={setJoinText}
-              autoCapitalize="none"
-              autoCorrect={false}
-              testID="join-input"
-            />
-            <Pressable
-              accessibilityRole="button"
-              disabled={!joinCode || joinByCode.isPending}
-              onPress={() => joinCode && joinByCode.mutate(joinCode)}
-              style={[styles.joinButton, joinCode ? styles.joinButtonReady : null]}
-              testID="join-button"
-            >
-              <ThemedText
-                variant="bodyStrong"
-                color={joinCode ? colors.textOnAccent : colors.textFaint}
-                style={styles.joinButtonLabel}
-              >
-                Join
-              </ThemedText>
-            </Pressable>
-          </View>
-          <View style={styles.orRow}>
-            <View style={styles.orLine} />
-            <ThemedText variant="caption" color={colors.textFaint}>
-              or
-            </ThemedText>
-            <View style={styles.orLine} />
-          </View>
-          <Button
-            label="Create a group"
-            variant="ink"
-            onPress={() => router.push('/(app)/group/new')}
-            testID="create-group"
-          />
-        </View>
+        <GroupsEmptyState />
       ) : (
         <ScrollView
           style={styles.list}
           contentContainerStyle={styles.listContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
-          {inviteCount > 0 ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => router.push('/(app)/invites')}
-              style={({ pressed }) => [styles.invitesRow, pressed && styles.pressed]}
-              testID="invites-row"
-            >
-              <View style={styles.invitesFaces}>
-                {inviteLabels.slice(0, 3).map((name, i) => (
-                  <View key={`${name}-${i}`} style={[styles.invitesFace, i > 0 && styles.invitesFaceOverlap]}>
-                    <Avatar name={name} size={30} />
-                  </View>
-                ))}
-              </View>
-              <View style={styles.invitesBody}>
-                <ThemedText variant="bodyStrong" color={colors.background}>
-                  {inviteCount} invite{inviteCount === 1 ? '' : 's'}
-                </ThemedText>
-                <ThemedText variant="caption" color={colors.textFaint} numberOfLines={1}>
-                  {inviteLine}
-                </ThemedText>
-              </View>
-              <ThemedText variant="body" color={colors.tabInactive}>
-                ›
-              </ThemedText>
-            </Pressable>
-          ) : null}
+          <InvitesRow />
 
           <View style={styles.sectionHeader}>
             <ThemedText variant="sectionLabel">Your groups</ThemedText>
@@ -416,31 +281,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontFamily: fonts.bodyBold,
   },
-  invitesRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 13,
-    backgroundColor: colors.ink,
-    borderRadius: 20,
-    paddingVertical: 14,
-    paddingHorizontal: spacing.lg,
-    marginBottom: 22,
-  },
-  invitesFaces: {
-    flexDirection: 'row',
-  },
-  invitesFace: {
-    borderWidth: 2,
-    borderColor: colors.ink,
-    borderRadius: radii.pill,
-  },
-  invitesFaceOverlap: {
-    marginLeft: -11,
-  },
-  invitesBody: {
-    flex: 1,
-    gap: spacing.xxs,
-  },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -517,79 +357,5 @@ const styles = StyleSheet.create({
   rowMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  empty: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingBottom: 120,
-    gap: spacing.sm,
-  },
-  emptyArt: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  emptyTile: {
-    width: 52,
-    height: 52,
-    borderRadius: 17,
-  },
-  emptyTileDashed: {
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    borderColor: colors.borderStrong,
-  },
-  emptyTitle: {
-    paddingTop: spacing.xs,
-  },
-  joinRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1.5,
-    borderColor: colors.borderStrong,
-    borderRadius: 20,
-    // Half of what the Join button grew by comes back here, so the field
-    // stays about the height it was (PLA-40).
-    paddingVertical: spacing.xs,
-    paddingLeft: spacing.lg,
-    paddingRight: spacing.sm,
-    marginTop: spacing.lg,
-  },
-  joinInput: {
-    flex: 1,
-    fontFamily: fonts.body,
-    fontSize: 16,
-    color: colors.textPrimary,
-    paddingVertical: spacing.sm,
-  },
-  joinButton: {
-    backgroundColor: colors.surfaceSunken,
-    borderRadius: radii.pill,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: 14,
-    // Was 34 (8 + 18 + 8) — the only way to act on a code you just typed.
-    justifyContent: 'center',
-    minHeight: MIN_TOUCH_TARGET,
-  },
-  joinButtonReady: {
-    backgroundColor: colors.accent,
-  },
-  joinButtonLabel: {
-    fontSize: 14,
-    lineHeight: 18,
-  },
-  orRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: spacing.xxs,
-  },
-  orLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.tabBarBorder,
   },
 });
