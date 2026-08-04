@@ -121,7 +121,6 @@ describe('useRealtimeCacheSync', () => {
   let queryClient: QueryClient;
   let invalidateSpy: jest.SpyInstance;
   let appStateHandler: ((status: string) => void) | null;
-  let appStateSpy: jest.SpyInstance;
 
   function Wrapper({ children }: { children: React.ReactNode }) {
     return React.createElement(QueryClientProvider, { client: queryClient }, children);
@@ -139,7 +138,7 @@ describe('useRealtimeCacheSync', () => {
     queryClient = new QueryClient();
     invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
     appStateHandler = null;
-    appStateSpy = jest
+    jest
       .spyOn(AppState, 'addEventListener')
       .mockImplementation((_type: string, handler: any) => {
         appStateHandler = handler;

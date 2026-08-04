@@ -40,7 +40,7 @@ export default function DevLogin() {
     return () => {
       cancelled = true;
     };
-  }, [email, password]);
+  }, [email, password, setProfile, setSession]);
 
   if (!__DEV__) return <Redirect href="/" />;
   if (status === 'done') return <Redirect href="/(app)/(tabs)" />;
