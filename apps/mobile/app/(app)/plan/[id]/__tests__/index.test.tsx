@@ -50,7 +50,7 @@ const mockRpc = supabase.rpc as jest.Mock;
 
 function chain(result: unknown) {
   const c: any = {};
-  ['select', 'eq', 'in', 'neq', 'order', 'upsert', 'delete', 'single'].forEach((m) => {
+  ['select', 'eq', 'in', 'neq', 'order', 'upsert', 'delete', 'single', 'maybeSingle'].forEach((m) => {
     c[m] = jest.fn(() => c);
   });
   c.then = (resolve: (v: unknown) => void) => Promise.resolve(result).then(resolve);
@@ -80,6 +80,7 @@ function prime({
   avail = [],
   role = 'member',
   members = [],
+  polls = [],
 }: {
   plan: Record<string, unknown>;
   rsvps?: unknown[];
@@ -88,6 +89,8 @@ function prime({
   role?: string;
   /** user_ids in the group — drives the nudge count and "never answered" */
   members?: string[];
+  /** The plan's polls (PLA-47), oldest first. */
+  polls?: Record<string, unknown>[];
 }) {
   rsvpsChain = chain({ error: null });
   availChain = chain({ error: null });
@@ -100,6 +103,7 @@ function prime({
       return c;
     }
     if (table === 'plan_date_options') return chain({ data: options, error: null });
+    if (table === 'plan_polls') return chain({ data: polls, error: null });
     if (table === 'date_availability') {
       const c = chain({ data: avail, error: null });
       c.upsert = availChain.upsert;
@@ -646,6 +650,59 @@ describe('PlanDetailScreen — the 20a menu', () => {
 
     await chooseFromSheet(3);
     expect(mockPush).toHaveBeenCalledWith('/plan/plan-1/cancel');
+  });
+
+  it('PLA-47: the host sees the add-a-poll invitation in the plan body, guests do not', async () => {
+    prime({
+      plan: {
+        ...basePlan,
+        plan_type: 'fixed',
+        status: 'open',
+        event_date: iso(8),
+        created_by: 'me',
+      },
+      rsvps: [{ user_id: 'me', response: 'yes', profile: { display_name: 'Me' } }],
+    });
+    await renderDetail();
+    await waitFor(() => expect(screen.getByTestId('poll-add')).toBeTruthy());
+    expect(screen.getByText('+ Add a poll')).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('poll-add'));
+    expect(mockPush).toHaveBeenCalledWith(expect.stringMatching(/^\/plan\/plan-1\/poll/));
+
+    prime({
+      plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(8) },
+      rsvps: [{ user_id: 'me', response: 'yes', profile: { display_name: 'Me' } }],
+    });
+    await renderDetail();
+    await waitFor(() => expect(screen.getByTestId('plan-menu')).toBeTruthy());
+    expect(screen.queryByTestId('poll-add')).toBeNull();
+  });
+
+  it('PLA-47: a group admin who is not in manages polls but holds no pick', async () => {
+    prime({
+      // Someone else's plan; I am a Weekend Crew admin who never answered.
+      plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(8) },
+      rsvps: [{ user_id: 'u-marta', response: 'yes', profile: { display_name: 'Marta' } }],
+      role: 'admin',
+      polls: [
+        {
+          id: 'q1',
+          question: 'Which bar first?',
+          created_at: '2026-08-04T10:00:00Z',
+          plan_poll_options: [{ id: 'o1', label: 'Bar Colombo', position: 0 }],
+          plan_poll_votes: [
+            { option_id: 'o1', user_id: 'u-marta', profile: { display_name: 'Marta' } },
+          ],
+        },
+      ],
+    });
+    await renderDetail();
+
+    // Management yes: the dashed add card is there.
+    await waitFor(() => expect(screen.getByTestId('poll-add')).toBeTruthy());
+    // A pick no: the quiet caption shows and the row swallows the tap.
+    expect(screen.getByText("Say you're in and you get a pick.")).toBeTruthy();
   });
 
   it('back falls back to the group screen after a deep link', async () => {

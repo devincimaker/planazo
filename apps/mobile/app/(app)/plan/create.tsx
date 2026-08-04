@@ -19,6 +19,9 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import Animated, { FadeInDown, FadeOutUp, LinearTransition } from 'react-native-reanimated';
 import { supabase } from '../../../lib/supabase';
 import { contentViolation } from '../../../lib/moderation';
+import { submitPollDraft } from '../../../lib/usePlanPoll';
+import { emptyPollDraft, pollDraftTouched, pollDraftValid } from '../../../lib/pollDraft';
+import { PollComposer } from '../../../components/PollComposer';
 import { useAuthStore } from '../../../stores/authStore';
 import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
 import { ThemedText, Button, MonthCalendar, colorForName } from '../../../components/ui';
@@ -72,6 +75,10 @@ export default function CreatePlanScreen() {
   // 19c "Try again with a new date" preseeds everything but the date
   const [location, setLocation] = useState(params.location ?? '');
   const [notes, setNotes] = useState('');
+  // The one open question (PLA-47). Collapsed by default: most plans have no
+  // question, and this flow must not grow for them.
+  const [askOpen, setAskOpen] = useState(false);
+  const [pollDraft, setPollDraft] = useState(emptyPollDraft());
 
   const { data: groups } = useQuery({
     queryKey: ['my-groups', user?.id],
@@ -146,7 +153,11 @@ export default function CreatePlanScreen() {
         ? `Fixed date · ${fmtLong(dates[0])}`
         : `${dates.length} options · everyone ticks what works`;
 
-  const isValid = title.trim().length > 0 && dates.length > 0 && !!groupId;
+  // A half-typed question blocks the post rather than being silently
+  // dropped: posting "Which film?" with one option is a poll nobody can
+  // answer, and discarding typed text is worse.
+  const pollBlocks = pollDraftTouched(pollDraft) && !pollDraftValid(pollDraft);
+  const isValid = title.trim().length > 0 && dates.length > 0 && !!groupId && !pollBlocks;
 
   const createPlan = useMutation({
     mutationFn: async () => {
@@ -200,6 +211,14 @@ export default function CreatePlanScreen() {
           }))
         );
         if (availError) throw availError;
+      }
+
+      // The optional question rides along — submitPollDraft owns the trim
+      // and the moderation gate. Born with its plan, so
+      // notify_plan_poll_opened stays silent and the plan_created push
+      // carries the group there.
+      if (pollDraftTouched(pollDraft)) {
+        await submitPollDraft(plan.id, pollDraft);
       }
       return plan;
     },
@@ -473,6 +492,30 @@ export default function CreatePlanScreen() {
                   multiline
                   testID="notes-input"
                 />
+              </Animated.View>
+            ) : null}
+          </View>
+
+          {/* The one open question (PLA-47): same disclosure pattern as the
+              details, because most plans have no question and this flow must
+              not grow for them. */}
+          <View style={styles.section}>
+            <Pressable
+              onPress={() => setAskOpen((o) => !o)}
+              accessibilityRole="button"
+              testID="poll-toggle"
+              style={styles.detailsToggle}
+            >
+              <ThemedText variant="bodyStrong" color={colors.accent}>
+                {askOpen ? 'Hide the question' : 'Add a question to vote on'}
+              </ThemedText>
+              <ThemedText variant="tag" color={colors.accent}>
+                ▾
+              </ThemedText>
+            </Pressable>
+            {askOpen ? (
+              <Animated.View entering={FadeInDown} exiting={FadeOutUp} style={styles.detailsFields}>
+                <PollComposer draft={pollDraft} onChange={setPollDraft} />
               </Animated.View>
             ) : null}
           </View>

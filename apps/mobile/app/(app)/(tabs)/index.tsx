@@ -15,17 +15,22 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
+  canVoteOnPolls,
   countAvailabilityByDate,
+  countPollVotes,
   earliestViableDate,
   flattenNestedOptions,
   isPlanConfirmed,
   isPlanFull,
   isPlanPast,
   needsUserResponse,
+  pollPeopleIn,
+  pollVotedPhrase,
   waitlistPosition,
 } from '@planazo/shared';
 import { supabase } from '../../../lib/supabase';
 import { deleteOwnRsvp, offerWaitingList, waitingLabel } from '../../../lib/rsvp';
+import { useVotePlanPoll } from '../../../lib/usePlanPoll';
 import { actionErrorCopy, errorCopy } from '../../../lib/queryErrors';
 import { usePullToRefresh } from '../../../lib/usePullToRefresh';
 import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
@@ -86,11 +91,17 @@ export default function FeedScreen() {
           `*,
           groups(id, name, color),
           rsvps(user_id, response, waitlist_seq, profile:profiles(display_name)),
-          plan_date_options(id, date, date_availability(user_id, profile:profiles(display_name)))`
+          plan_date_options(id, date, date_availability(user_id, profile:profiles(display_name))),
+          plan_polls(id, question, created_at, plan_poll_options!plan_poll_options_poll_id_plan_id_fkey(id, label, position), plan_poll_votes(option_id, user_id))`
         )
         .in('group_id', groupIds)
         .neq('status', 'cancelled')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        // A feed card is a summary: it carries the plan's first poll only,
+        // and whoever wants the second is one tap from the plan. Selecting
+        // it here keeps the embed small and deletes the client-side sort.
+        .order('created_at', { referencedTable: 'plan_polls', ascending: true })
+        .limit(1, { referencedTable: 'plan_polls' });
 
       if (error) throw error;
       return data ?? [];
@@ -199,6 +210,11 @@ export default function FeedScreen() {
     onError: alertActionError,
   });
 
+  // One pick each, straight from the card: another option moves the vote,
+  // your own withdraws it (PLA-47). The write, its invalidations and its
+  // refusal copy all live in the shared hook.
+  const voteOnPoll = useVotePlanPoll();
+
   const declineFlexible = useMutation({
     mutationFn: async ({ planId, optionIds }: { planId: string; optionIds: string[] }) => {
       const { error } = await supabase.from('rsvps').upsert(
@@ -281,7 +297,47 @@ export default function FeedScreen() {
       // Only you see your own place in the queue (PLA-37).
       const waitPosition = waitlistPosition(plan.rsvps, user?.id);
 
+      // The plan's first poll (PLA-47), votable right on the card — the
+      // query keeps only the oldest one. The pick gate and the turnout
+      // phrase are the shared derivations the plan screen also uses, so the
+      // two surfaces cannot disagree about either.
+      const pollRow = (plan.plan_polls ?? [])[0] ?? null;
+      let poll: {
+        id: string;
+        question: string;
+        options: { id: string; label: string; votes: number; mine: boolean }[];
+        caption: string;
+        canVote: boolean;
+      } | null = null;
+      if (pollRow) {
+        const canVote = canVoteOnPolls(
+          { created_by: plan.created_by, rsvps: plan.rsvps, availabilities },
+          user?.id
+        );
+        const votes: { option_id: string; user_id: string }[] = pollRow.plan_poll_votes ?? [];
+        const sortedOptions = [...(pollRow.plan_poll_options ?? [])].sort(
+          (a: any, b: any) => a.position - b.position
+        );
+        const counts = countPollVotes(sortedOptions, votes);
+        const myVote = votes.find((v) => v.user_id === user?.id);
+        const options = sortedOptions.map((o: any) => ({
+          id: o.id as string,
+          label: o.label as string,
+          votes: counts[o.id],
+          mine: myVote?.option_id === o.id,
+        }));
+        const myPick = options.find((o) => o.mine);
+        const base = pollVotedPhrase(votes.length, pollPeopleIn(plan.rsvps, availabilities));
+        const caption = myPick
+          ? `You picked ${myPick.label} · tap to change`
+          : canVote
+            ? `${base} · tap to vote`
+            : base;
+        poll = { id: pollRow.id, question: pollRow.question, options, caption, canVote };
+      }
+
       return {
+        poll,
         plan,
         isPast,
         confirmed,
@@ -570,6 +626,47 @@ export default function FeedScreen() {
                     ) : null}
                   </Pressable>
 
+                  {/* The plan's poll, votable without opening the plan
+                      (PLA-47). Outside the openPlan Pressable: a tap on an
+                      option is a vote, never a navigation. */}
+                  {d.poll ? (
+                    <View style={styles.pollSection} testID={`poll-feed-${d.plan.id}`}>
+                      <View style={styles.pollHead}>
+                        <ThemedText variant="sectionLabel" style={styles.pollQuestion} numberOfLines={1}>
+                          {d.poll.question}
+                        </ThemedText>
+                        <ThemedText
+                          variant="caption"
+                          color={d.poll.canVote ? colors.accentPressed : colors.textMuted}
+                          numberOfLines={1}
+                          style={styles.pollCaption}
+                        >
+                          {d.poll.caption}
+                        </ThemedText>
+                      </View>
+                      {d.poll.options.map((opt) => (
+                        <DateOptionRow
+                          key={opt.id}
+                          label={opt.label}
+                          meta={opt.votes === 1 ? '1 vote' : `${opt.votes} votes`}
+                          selected={opt.mine}
+                          onPress={
+                            d.poll!.canVote
+                              ? () =>
+                                  voteOnPoll.mutate({
+                                    planId: d.plan.id,
+                                    pollId: d.poll!.id,
+                                    userId: user!.id,
+                                    optionId: opt.mine ? null : opt.id,
+                                  })
+                              : undefined
+                          }
+                          testID={`poll-feed-option-${opt.id}`}
+                        />
+                      ))}
+                    </View>
+                  ) : null}
+
                   <View style={styles.answer}>{renderAnswer(d)}</View>
                 </Card>
               );
@@ -585,6 +682,26 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  pollSection: {
+    marginTop: spacing.lg,
+    paddingTop: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+    gap: spacing.sm,
+  },
+  pollHead: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    gap: spacing.md,
+  },
+  pollQuestion: {
+    flexShrink: 0,
+  },
+  pollCaption: {
+    flexShrink: 1,
+    textAlign: 'right',
   },
   header: {
     flexDirection: 'row',

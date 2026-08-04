@@ -20,15 +20,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown, FadeOutUp, LinearTransition } from 'react-native-reanimated';
 import * as Clipboard from 'expo-clipboard';
 import {
+  canVoteOnPolls,
   countAvailabilityByDate,
   getYesCount,
   isPlanFull,
   isPlanPast,
   planLastDate,
+  pollPeopleIn,
   waitlistPosition,
   type DateCount,
 } from '@planazo/shared';
 import { PhotoAlbumCard } from '../../../../components/PhotoAlbumCard';
+import { PlanPolls } from '../../../../components/PlanPolls';
 import { spellCount } from '../../../../lib/words';
 import { supabase } from '../../../../lib/supabase';
 import { deleteOwnRsvp, offerWaitingList, waitingLabel } from '../../../../lib/rsvp';
@@ -928,6 +931,26 @@ export default function PlanDetailScreen() {
               );
             })}
           </Animated.View>
+        ) : null}
+
+        {/* The plan's polls (PLA-47). Below the date vote on purpose: when is
+            still the primary decision, what is a detail of it. The pick gate
+            and the denominator are the shared client mirrors of the SQL
+            predicate — NOT d.isHost, which also covers group admins: an
+            admin manages polls (isHost) but holds no pick until they
+            answer. */}
+        {user ? (
+          <PlanPolls
+            planId={String(id)}
+            userId={user.id}
+            isHost={d.isHost}
+            peopleIn={pollPeopleIn(rsvps, availabilities)}
+            canVote={canVoteOnPolls(
+              { created_by: plan.created_by, rsvps, availabilities },
+              user.id
+            )}
+            planEnded={d.isCancelled || d.isPast}
+          />
         ) : null}
 
         <Animated.View layout={LinearTransition}>
