@@ -25,6 +25,8 @@ import {
   waitlistPosition,
   type DateCount,
 } from '@planazo/shared';
+import { PhotoAlbumCard } from '../../../../components/PhotoAlbumCard';
+import { spellCount } from '../../../../lib/words';
 import { supabase } from '../../../../lib/supabase';
 import { deleteOwnRsvp, offerWaitingList, waitingLabel } from '../../../../lib/rsvp';
 import { actionErrorCopy, errorCopy, isNotFoundError } from '../../../../lib/queryErrors';
@@ -59,9 +61,12 @@ const fmtStamp = (iso: string) => {
   return `${day}, ${fmtTime(iso)}`;
 };
 
-// "Two short on the night" (19c) spells small counts out
-const NUM_WORDS = ['No one', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
-const countWord = (n: number) => NUM_WORDS[n] ?? String(n);
+// "Two short on the night" (19c) spells small counts out, capitalised because
+// it opens the sentence. The words themselves live in lib/words.ts.
+const countWord = (n: number) => {
+  const word = spellCount(n);
+  return word.charAt(0).toUpperCase() + word.slice(1);
+};
 
 // A failed write is never "Error: <raw postgres message>". actionErrorCopy
 // names the cases worth naming — a full plan above all (PLA-20).
@@ -428,7 +433,23 @@ export default function PlanDetailScreen() {
     // already fetched, so it costs nothing.
     const waitPosition = waitlistPosition(rsvps, user?.id);
 
+    // PLA-32. The album opens when the night does and never closes again.
+    // Mirrors can_add_plan_photo() in 20260803000001: the start is the locked
+    // date if a flexible plan has one, otherwise the fixed date. A flexible
+    // plan nobody has locked has neither, and no album, because the night does
+    // not exist yet.
+    const albumStart = plan.locked_date ?? plan.event_date;
+    const albumOpen = !!albumStart && new Date(albumStart).getTime() <= Date.now();
+
+    // Looking is for the group, adding is for the people who were there. The
+    // database enforces this; here it only decides whether to draw the button,
+    // and a yes is a yes rather than availability on a flexible plan.
+    const canAddPhotos =
+      albumOpen && !isCancelled && (isHost || userRsvp?.response === 'yes');
+
     return {
+      albumOpen,
+      canAddPhotos,
       waitPosition,
       isFlexible,
       isLocked,
@@ -1053,6 +1074,19 @@ export default function PlanDetailScreen() {
         ) : null}
         {!d.isCancelled && !d.isExpired && !d.confirmed ? (
           <Button label="Nudge the rest" variant="outline" onPress={nudge} haptic={false} />
+        ) : null}
+
+        {/* PLA-32. Last thing on the screen, under everything the plan is
+            asking of you, and only once the night has actually started. The
+            component decides for itself whether to render at all: a bystander
+            who cannot add photos sees nothing until somebody posts one. */}
+        {user ? (
+          <PhotoAlbumCard
+            planId={String(id)}
+            userId={user.id}
+            albumOpen={d.albumOpen}
+            canAdd={d.canAddPhotos}
+          />
         ) : null}
 
         {/* Guideline 1.2: every piece of user-generated content needs a way to

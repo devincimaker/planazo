@@ -30,6 +30,7 @@ const SUBJECT_NOUN: Record<ReportSubject, string> = {
   plan: 'plan',
   group: 'group',
   profile: 'person',
+  photo: 'photo',
 };
 
 /**

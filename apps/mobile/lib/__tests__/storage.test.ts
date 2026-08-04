@@ -2,10 +2,30 @@ import { purgeOwnedFiles } from '../storage';
 import { supabase } from '../supabase';
 
 jest.mock('../supabase', () => ({
-  supabase: { storage: { from: jest.fn() } },
+  supabase: { storage: { from: jest.fn() }, from: jest.fn() },
 }));
 
 const mockStorageFrom = supabase.storage.from as unknown as jest.Mock;
+const mockFrom = supabase.from as unknown as jest.Mock;
+
+/**
+ * `plan-photos` is keyed by plan, so its paths come from the plan_photos rows
+ * rather than from listing a folder. Default: this user has no photos, which
+ * leaves the two folder-keyed buckets behaving exactly as they did before.
+ */
+function primePhotoRows(paths: string[] = []) {
+  mockFrom.mockImplementation(() => {
+    const chain: any = {};
+    ['select', 'eq'].forEach((m) => {
+      chain[m] = jest.fn(() => chain);
+    });
+    chain.then = (resolve: (v: unknown) => void) =>
+      Promise.resolve({ data: paths.map((storage_path) => ({ storage_path })), error: null }).then(
+        resolve,
+      );
+    return chain;
+  });
+}
 
 /** A bucket that behaves: everything listed disappears when removed. */
 function bucket(initial: string[]) {
@@ -19,7 +39,13 @@ function bucket(initial: string[]) {
     files = files.filter((f) => !names.has(f));
     return { data: paths, error: null };
   });
-  return { list, remove, get files() { return files; } };
+  const createSignedUrls = jest.fn(async (paths: string[]) => ({
+    data: paths
+      .filter((p) => files.includes(p.split('/').pop() as string))
+      .map((path) => ({ path, signedUrl: `https://signed/${path}`, error: null })),
+    error: null,
+  }));
+  return { list, remove, createSignedUrls, get files() { return files; } };
 }
 
 let consoleError: jest.SpyInstance;
@@ -28,6 +54,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   // The failure paths log deliberately; keep the test output readable.
   consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+  primePhotoRows();
 });
 afterEach(() => consoleError.mockRestore());
 
@@ -110,4 +137,21 @@ describe('purgeOwnedFiles', () => {
     await expect(purgeOwnedFiles('u1')).resolves.toEqual({ failed: ['avatars'] });
     expect(shots.files).toEqual([]);
   });
+});
+
+// The promise the album's migration makes: deleting an account takes the
+// photos with it. Objects live in a plan-keyed bucket, so the rows are the
+// only index of where they are — and they cascade away with the account.
+it('purges plan photos, which no folder listing could find', async () => {
+  const avatars = bucket([]);
+  const shots = bucket([]);
+  const photos = bucket(['one.jpg', 'two.jpg']);
+  primePhotoRows(['plan-a/u1/one.jpg', 'plan-b/u1/two.jpg']);
+  mockStorageFrom.mockImplementation((name: string) =>
+    name === 'avatars' ? avatars : name === 'feedback-screenshots' ? shots : photos,
+  );
+
+  await expect(purgeOwnedFiles('u1')).resolves.toEqual({ failed: [] });
+  expect(photos.files).toEqual([]);
+  expect(photos.remove).toHaveBeenCalledWith(['plan-a/u1/one.jpg', 'plan-b/u1/two.jpg']);
 });

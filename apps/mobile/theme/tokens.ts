@@ -33,6 +33,13 @@ export const palette = {
   dust: '#E9E1DA',
   ash: '#C9BDB4',
   bone: '#F4EEE8',
+
+  // Album (PLA-32): what sits where a photograph is going to be. Two values
+  // rather than one so a grid of tiles waiting on their signed URLs reads as
+  // a grid rather than one flat block. Warmer than the endings stones on
+  // purpose: an album is not a plan that stopped.
+  clay: '#E4DAD1',
+  clay2: '#EAE4DC',
 } as const;
 
 export const colors = {
@@ -86,6 +93,14 @@ export const colors = {
 
   tabBarBackground: 'rgba(252,248,244,0.94)',
   tabBarBorder: palette.mist,
+
+  // Album: the fill under a photo that has not arrived yet, and the alternate
+  // it sits beside in a strip.
+  photoPlaceholder: palette.clay,
+  photoPlaceholderAlt: palette.clay2,
+  // Behind a photo filling the screen. Ink rather than black, so the viewer
+  // belongs to the same warm palette as everything it opened from.
+  photoBackdrop: 'rgba(23,18,21,0.94)',
 } as const;
 
 // Group identity colors (design: circle swatches + avatar backgrounds)
@@ -200,6 +215,12 @@ export const radii = {
   footerButton: 18,
   card: 24,
   pill: 999,
+
+  // Album (PLA-32). The hero is a card inset by 4px on every side, so its
+  // corner is the card's 24 less that inset. The strip tiles are smaller and
+  // take a tighter radius of their own, or four 20s in a row read as bubbles.
+  photo: 20,
+  photoTile: 14,
 } as const;
 
 /**

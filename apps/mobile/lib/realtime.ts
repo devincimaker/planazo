@@ -16,6 +16,7 @@ export const SUBSCRIBED_TABLES = [
   'date_availability',
   'plans',
   'group_members',
+  'plan_photos',
 ] as const;
 
 export type SubscribedTable = (typeof SUBSCRIBED_TABLES)[number];
@@ -60,6 +61,11 @@ export function keysForChange(
         ['group'],
         ['groups'],
       ];
+    case 'plan_photos':
+      // Somebody else's upload appearing under you while you are looking at
+      // the album is the whole point of this table being here. A delete
+      // carries only its id, so it falls back to the bare prefix.
+      return [planId ? ['plan-photos', planId] : ['plan-photos']];
     case 'plans': {
       // A plan's own id is its primary key, so even deletes can name it.
       const id = typeof record.id === 'string' ? record.id : null;
