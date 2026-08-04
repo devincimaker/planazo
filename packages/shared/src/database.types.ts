@@ -792,6 +792,10 @@ export type Database = {
         }
       }
       delete_my_account: { Args: never; Returns: undefined }
+      dissolve_block_ties: {
+        Args: { p_blocked: string; p_blocker: string }
+        Returns: undefined
+      }
       file_report: {
         Args: {
           p_block_user_id?: string
@@ -811,11 +815,11 @@ export type Database = {
           name: string
         }[]
       }
-      has_blocked: { Args: { p_target: string }; Returns: boolean }
       invite_to_group: {
         Args: { p_group_id: string; p_invitee: string }
         Returns: Json
       }
+      is_blocked_by: { Args: { p_other: string }; Returns: boolean }
       is_group_admin: { Args: { check_group_id: string }; Returns: boolean }
       is_group_image_admin: { Args: { object_name: string }; Returns: boolean }
       is_group_member: { Args: { check_group_id: string }; Returns: boolean }
@@ -849,6 +853,15 @@ export type Database = {
         Returns: Json
       }
       restore_plan: { Args: { p_plan_id: string }; Returns: Json }
+      search_people: {
+        Args: { p_query: string }
+        Returns: {
+          avatar_url: string
+          display_name: string
+          handle: string
+          id: string
+        }[]
+      }
       send_friend_request: { Args: { p_addressee: string }; Returns: Json }
       set_group_notify: {
         Args: { p_group_id: string; p_notify: boolean }

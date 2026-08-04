@@ -2,7 +2,17 @@
 
 Canonical for every agent (Claude Code, Codex, …). `CLAUDE.md` just points here.
 
-## Product copy
+## A question is not an instruction
+
+When the user asks a question — "did we run X?", "does this handle Y?", "how
+hard would Z be?" — answer it and stop. A question is never permission to act
+on its subject: "did we run the simplify pass?" is answered with *no*, not by
+running the simplify pass.
+
+Start work only when the user actually tells you to: an explicit request
+("run it", "fix that", "add the column"), a slash command, or a plan they have
+agreed. If the answer makes a next step obvious, name it and offer it; taking
+it is the user's move, not yours.
 
 **Never use an em dash (`—`) in product copy or interfaces.** It reads as
 machine-written, and Planazo's voice is a person talking. This covers every
@@ -59,6 +69,42 @@ Suppressions come in two kinds, and they are not the same thing:
 - An inline `eslint-disable-next-line` with a comment explaining the pattern is a
   **documented exception**, and is meant to stay.
 
+## Blocking: the shield rule
+
+Every blocking decision in Planazo follows one rule, settled in PLA-44:
+
+> A block erases you from the blocked person's life, not them from yours. The
+> person you block stops seeing what you create, cannot find or contact you,
+> and no longer attends your plans. You keep seeing them exactly as before. A
+> block is never announced. It never touches what belongs to the group, and
+> unblocking restores sight but never what it dissolved.
+
+Consequences that follow from it, for any surface touching blocks:
+
+- One `blocked_users` row is one arrow. Symmetry is never imposed; if both
+  people block each other there are two rows, and each unblock undoes only
+  its own side.
+- **If you can see a plan, you see its full list and its real count.** Counts
+  are never doctored per viewer; they change only via real joins and
+  withdrawals.
+- Member lists are load-bearing untouched: the member row is where the Block
+  button lives, which is what guarantees the blocked person can always block
+  back.
+- Blocking dissolves the friendship, pending invites between the pair, and
+  the blocked person's participation in the blocker's not-yet-past plans
+  (`dissolve_block_ties()`); past plans are history and stay.
+- Contact attempts from the blocked person get a success-shaped lie
+  (announcing a block is the one thing a block must not do); contact attempts
+  *by* the blocker toward someone they blocked get an honest
+  `you_blocked_them`.
+- People search runs server-side (`search_people`) because the exclusion
+  list — who blocked *me* — is exactly what RLS must keep a client from
+  reading.
+
+A personal mute ("their plans stop showing up for me") is what the pre-PLA-44
+block was. If it returns, it returns as its own feature, never by bending
+this rule.
+
 ## Linear Integration
 
 - **Workspace**: fioris
@@ -86,6 +132,10 @@ recorded in its gitignored `.env.worktree`: a **Metro port**, a **simulator**,
 and a **database** (`PLANAZO_DB_MODE` = `shared` or `branch`).
 
 ### Asked to make a worktree for a Linear issue
+
+`/start PLA-20` runs this whole sequence (issue → In Progress → routed worktree →
+inside it → plan together). The steps below are what it executes, and what to
+follow when doing it by hand.
 
 When the user says something like *"create a worktree for PLA-20"*:
 

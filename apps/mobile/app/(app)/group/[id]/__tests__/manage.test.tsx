@@ -50,7 +50,7 @@ function primeSupabase() {
   mockFrom.mockImplementation((table: string) => {
     const c: any = {};
     let mutation = false;
-    ['select', 'eq', 'single'].forEach((m) => {
+    ['select', 'eq', 'single', 'order'].forEach((m) => {
       c[m] = jest.fn(() => c);
     });
     c.update = jest.fn(() => {

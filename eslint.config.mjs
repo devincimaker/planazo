@@ -129,12 +129,13 @@ export default tseslint.config(
 
   {
     /**
-     * Tests and the integration-tests tooling are developer-facing throughout.
-     * AGENTS.md exempts test names from the em dash rule for the same reason it
-     * exempts comments, and the strings in `env.ts` and `global-setup.ts` are
-     * terminal output for whoever a guard just refused. Length is not the
-     * complexity max-lines exists to catch when a file is a flat list of
-     * independent cases, and `require` is how jest mocks are wired.
+     * Tests, their helpers, and the integration-tests tooling are
+     * developer-facing throughout. AGENTS.md exempts test names from the em dash
+     * rule for the same reason it exempts comments, and the strings in `env.ts`,
+     * `global-setup.ts` and `apps/mobile/lib/testing/` are terminal output for
+     * whoever a guard just refused. Length is not the complexity max-lines
+     * exists to catch when a file is a flat list of independent cases, and
+     * `require` is how jest mocks are wired.
      *
      * These are exclusions, not suppressions: the rules do not apply here, as
      * opposed to applying and being ignored.
@@ -143,12 +144,48 @@ export default tseslint.config(
       '**/__tests__/**/*.{ts,tsx}',
       '**/*.test.{ts,tsx}',
       '**/__mocks__/**/*.{ts,tsx}',
+      'apps/mobile/lib/testing/**/*.{ts,tsx}',
       'packages/integration-tests/**/*.ts',
     ],
     rules: {
       'max-lines': 'off',
       'no-restricted-syntax': 'off',
       '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
+
+  {
+    /**
+     * `lib/testing/` is for jest suites only. It imports
+     * `@testing-library/react-native`, a devDependency, and Metro's resolver
+     * does not distinguish those from real ones. A stray import from a screen
+     * would quietly ship the test renderer inside the app, and nothing would
+     * fail: not the build, not CI, not a release. Only the bundle size, and
+     * only if someone measured it.
+     */
+    files: ['apps/mobile/**/*.{ts,tsx}'],
+    ignores: [
+      'apps/mobile/**/__tests__/**',
+      'apps/mobile/**/*.test.{ts,tsx}',
+      'apps/mobile/**/__mocks__/**',
+      'apps/mobile/lib/testing/**',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              // Two shapes, because the rule matches the import string and not
+              // the resolved path: `../../lib/testing/x` from a screen, and
+              // `./testing/x` from a file already inside `lib/`.
+              group: ['**/lib/testing', '**/lib/testing/*', '*/testing', '*/testing/*'],
+              message:
+                'lib/testing/ is jest-only. Importing it from app code ships a devDependency in the bundle.',
+            },
+          ],
+        },
+      ],
     },
   },
 
