@@ -1,4 +1,10 @@
-import { listOwnedPhotoPaths, signPhotos, uploadPhotos, type PhotoRow } from '../photos';
+import {
+  clearSignedUrlCache,
+  listOwnedPhotoPaths,
+  signPhotos,
+  uploadPhotos,
+  type PhotoRow,
+} from '../photos';
 import { supabase } from '../supabase';
 import { uploadJpeg } from '../images';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -61,6 +67,9 @@ let consoleError: jest.SpyInstance;
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // The cache is module state and outlives a test the way it outlives a
+  // render. Every test starts with nothing minted.
+  clearSignedUrlCache();
   // The upload failure path logs deliberately; keep the test output readable.
   consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
 });
@@ -98,6 +107,60 @@ describe('signPhotos', () => {
     primeSigner(['plan-1/u1/a.jpg']);
 
     await expect(signPhotos([row({})])).resolves.toEqual([]);
+  });
+});
+
+// The point of the cache is what a URL's bytes do downstream: an identical
+// string keeps a mounted Image's uri identical, and iOS never re-downloads a
+// tile that did not change.
+describe('signPhotos cache', () => {
+  it('hands a later caller the identical strings without a second request', async () => {
+    const { createSignedUrls } = primeSigner();
+
+    const first = await signPhotos([row({})]);
+    const second = await signPhotos([row({})]);
+
+    expect(createSignedUrls).toHaveBeenCalledTimes(1);
+    expect(second[0].url).toBe(first[0].url);
+    expect(second[0].thumbUrl).toBe(first[0].thumbUrl);
+  });
+
+  it('signs only what it does not hold when the album grows', async () => {
+    const { createSignedUrls } = primeSigner();
+    const added = row({ id: 'p2', storage_path: 'plan-1/u1/b.jpg', thumb_path: 'plan-1/u1/b_thumb.jpg' });
+
+    await signPhotos([row({})]);
+    const signed = await signPhotos([added, row({})]);
+
+    expect(createSignedUrls).toHaveBeenCalledTimes(2);
+    expect(createSignedUrls.mock.calls[1][0]).toEqual(['plan-1/u1/b.jpg', 'plan-1/u1/b_thumb.jpg']);
+    expect(signed).toHaveLength(2);
+  });
+
+  it('re-signs once less than half the TTL remains', async () => {
+    const { createSignedUrls } = primeSigner();
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(0);
+
+    await signPhotos([row({})]);
+    nowSpy.mockReturnValue(1801 * 1000); // just past half of the 3600s TTL
+    await signPhotos([row({})]);
+
+    expect(createSignedUrls).toHaveBeenCalledTimes(2);
+    nowSpy.mockRestore();
+  });
+
+  it('stops serving a dead URL once it has expired', async () => {
+    primeSigner();
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(0);
+    await signPhotos([row({})]);
+
+    // The object is gone: re-signing quietly omits it, so expiry is the only
+    // thing standing between the grid and a broken tile.
+    primeSigner(['plan-1/u1/a.jpg', 'plan-1/u1/a_thumb.jpg']);
+    nowSpy.mockReturnValue(3601 * 1000);
+
+    await expect(signPhotos([row({})])).resolves.toEqual([]);
+    nowSpy.mockRestore();
   });
 });
 

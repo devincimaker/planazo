@@ -249,11 +249,55 @@ export async function uploadPhotos(
 }
 
 /**
+ * Signed URLs already minted, by path (PLA-56).
+ *
+ * Without this, any change to an album re-signed every path, and because each
+ * signature carries a fresh token, every mounted Image got a new `uri` and
+ * re-downloaded a tile that had not changed. Held here rather than in the
+ * query cache precisely so that query keys coming and going cannot rotate a
+ * URL that is still good: as long as a path's entry is fresh, every caller
+ * gets the byte-identical string and iOS's URL cache keeps doing its job.
+ *
+ * Bounded by what the person actually looks at (an entry is ~300 bytes, a
+ * full 200-photo album ~120KB), and dropped wholesale on sign-out. Entries
+ * for photos that get deleted linger until expiry, harmlessly: their rows are
+ * gone, so nothing asks for them again.
+ */
+const signedUrlCache = new Map<string, { url: string; expiresAtMs: number }>();
+
+/** Re-sign a held URL once less than half its life remains, so what we hand
+ *  out is always good for a comfortable browse. The signed query's staleTime
+ *  is derived from the same number and can only serve fresher than this. */
+const SIGNED_URL_REFRESH_MS = (SIGNED_URL_TTL_SECONDS * 1000) / 2;
+
+/** The other half of `queryClient.clear()` in signOut.ts: the next account on
+ *  this device starts with no URLs minted for the last one. */
+export function clearSignedUrlCache(): void {
+  signedUrlCache.clear();
+}
+
+/** A held URL that is still alive, evicting on the way out. Without the
+ *  eviction, a path whose object is gone would serve its dead URL forever:
+ *  re-signing it fails quietly (the signer just omits it), so expiry is the
+ *  only exit. */
+function heldUrl(path: string, now: number): string | undefined {
+  const held = signedUrlCache.get(path);
+  if (!held) return undefined;
+  if (held.expiresAtMs <= now) {
+    signedUrlCache.delete(path);
+    return undefined;
+  }
+  return held.url;
+}
+
+/**
  * Turn rows into displayable photos.
  *
  * A private bucket has no equivalent of `getPublicUrl`, so every render needs
  * signatures. `createSignedUrls` takes the whole batch in one request, which
- * is the difference between one round trip per album and one per tile.
+ * is the difference between one round trip per album and one per tile — and
+ * only paths the cache does not hold are in the batch at all, so one new
+ * photo costs one signature, not two hundred.
  *
  * Rows whose object has gone missing are dropped rather than rendered as a
  * broken tile: the signer reports per-path errors, and a photo we cannot show
@@ -267,26 +311,36 @@ export async function signPhotos<T extends { storage_path: string; thumb_path: s
   // Originals and renditions in the same request: 2N paths is still one round
   // trip, and the response is a few hundred bytes per path against the 450KB
   // a tile saves by drawing the rendition instead of the original.
-  const paths = photos.flatMap((p) => (p.thumb_path ? [p.storage_path, p.thumb_path] : [p.storage_path]));
+  const wanted = photos.flatMap((p) =>
+    p.thumb_path ? [p.storage_path, p.thumb_path] : [p.storage_path],
+  );
 
-  const { data, error } = await supabase.storage
-    .from(PHOTO_BUCKET)
-    .createSignedUrls(paths, SIGNED_URL_TTL_SECONDS);
-  if (error) throw error;
+  const now = Date.now();
+  const missing = wanted.filter((path) => {
+    const held = signedUrlCache.get(path);
+    return !held || held.expiresAtMs - now < SIGNED_URL_REFRESH_MS;
+  });
 
-  const urlByPath = new Map<string, string>();
-  for (const entry of data ?? []) {
-    if (entry.signedUrl && !entry.error && entry.path) {
-      urlByPath.set(entry.path, entry.signedUrl);
+  if (missing.length) {
+    const { data, error } = await supabase.storage
+      .from(PHOTO_BUCKET)
+      .createSignedUrls(missing, SIGNED_URL_TTL_SECONDS);
+    if (error) throw error;
+
+    const expiresAtMs = now + SIGNED_URL_TTL_SECONDS * 1000;
+    for (const entry of data ?? []) {
+      if (entry.signedUrl && !entry.error && entry.path) {
+        signedUrlCache.set(entry.path, { url: entry.signedUrl, expiresAtMs });
+      }
     }
   }
 
   // A missing original drops the photo; a missing rendition only falls back
   // to the original, so a half-deleted pair degrades instead of vanishing.
   return photos.flatMap((p) => {
-    const url = urlByPath.get(p.storage_path);
+    const url = heldUrl(p.storage_path, now);
     if (!url) return [];
-    const thumbUrl = (p.thumb_path && urlByPath.get(p.thumb_path)) || url;
+    const thumbUrl = (p.thumb_path && heldUrl(p.thumb_path, now)) || url;
     return [{ ...p, url, thumbUrl }];
   });
 }
