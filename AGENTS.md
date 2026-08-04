@@ -69,6 +69,29 @@ Suppressions come in two kinds, and they are not the same thing:
 - An inline `eslint-disable-next-line` with a comment explaining the pattern is a
   **documented exception**, and is meant to stay.
 
+## Dead code
+
+ESLint reads one file at a time, so a file nothing imports and an export nobody
+reads both look fine to it. `pnpm knip` resolves the whole import graph and
+answers what ESLint structurally cannot: is anything still reaching this?
+
+```bash
+pnpm knip       # exactly what CI gates on
+pnpm knip:all   # plus the unused-export backlog PLA-64 is clearing
+```
+
+CI runs `pnpm knip`, which covers dead files, imports of undeclared packages,
+and dependencies nothing uses. Unused *exports* are deliberately not gated yet:
+most of them sit in the screens PLA-58/59/60 are splitting up, so the gate
+widens once that work lands.
+
+`knip.jsonc` carries every exclusion **with its reason**, on the same principle
+as a switched-off lint rule. Most of them are things knip cannot see rather than
+things we are choosing to ignore: a Deno edge function whose caller is a
+Postgres trigger, a dependency an EAS build shells out to, a test renderer
+loaded at runtime. Before adding an exclusion, check it is one of those and not
+a real finding.
+
 ## Blocking: the shield rule
 
 Every blocking decision in Planazo follows one rule, settled in PLA-44:
