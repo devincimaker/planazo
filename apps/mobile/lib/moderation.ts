@@ -5,10 +5,13 @@ import { supabase } from './supabase';
  *
  * Kept in one module because they are one idea: somebody is posting something
  * they should not, and the app needs a way to stop the worst of it at the
- * door, a way for the person looking at it to tell us, and a way for them to
- * stop seeing the poster. The report goes to a queue only we can read; the
- * block takes effect in the database, not in a filter here — see
- * `has_blocked()` and the plans SELECT policy in the moderation migration.
+ * door, a way for the person looking at it to tell us, and a way to shut the
+ * poster out. The report goes to a queue only we can read; the block takes
+ * effect in the database, not in a filter here — the shield rule (PLA-44):
+ * the person you block stops seeing what you create, cannot find or contact
+ * you, and no longer attends your plans, while you keep seeing them exactly
+ * as before. See `is_blocked_by()` and `dissolve_block_ties()` in the
+ * block_shield migration.
  */
 
 // 'photo' (PLA-32) is not a nicety. A word list cannot read a photograph, so

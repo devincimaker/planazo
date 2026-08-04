@@ -279,6 +279,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     flexDirection: 'row',
     alignItems: 'center',
+    // The rider counter-translates, so with the row open it overhangs the
+    // content's frame by exactly the action area. Unclipped, that overhang is
+    // an invisible layer over Block and Remove that swallows every real tap
+    // (jest never sees this: pressing by testID skips hit-testing). Clipping
+    // costs nothing visually. The overhang is the hint and trailing chip,
+    // both already faded out by this point in the slide.
+    overflow: 'hidden',
   },
   rider: {
     flex: 1,

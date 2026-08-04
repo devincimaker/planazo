@@ -248,6 +248,12 @@ export default function ProfileSheet() {
             }
           />
           <ListRow title="Account" value={profile?.email} divider />
+          <ListRow
+            title="Blocked people"
+            divider
+            onPress={() => router.push('/(app)/profile/blocked')}
+            testID="blocked-people"
+          />
           {/* right: design 12b's sign-out row has no chevron */}
           <ListRow
             title="Sign out"

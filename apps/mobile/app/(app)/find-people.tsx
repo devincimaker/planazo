@@ -94,12 +94,11 @@ export default function FindPeopleScreen() {
   const { data: results } = useQuery({
     queryKey: ['people-search', cleanQuery],
     queryFn: async (): Promise<PersonRow[]> => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, display_name, handle, avatar_url')
-        .or(`handle.ilike.%${cleanQuery}%,display_name.ilike.%${cleanQuery}%`)
-        .neq('id', user!.id)
-        .limit(20);
+      // Server-side on purpose: the results must omit anyone who blocked this
+      // user, and that list is exactly what RLS keeps the client from reading.
+      const { data, error } = await supabase.rpc('search_people', {
+        p_query: cleanQuery,
+      });
       if (error) throw error;
       const sharedNote = new Map((sharedPeople ?? []).map((p) => [p.id, p.note]));
       return (data ?? []).map((p: any) => ({
@@ -122,6 +121,15 @@ export default function FindPeopleScreen() {
       return { personId, status: (data as any)?.status };
     },
     onSuccess: ({ personId, status }) => {
+      // The one status that should not flip Add to Requested: the block is the
+      // caller's own, so the answer is honest and actionable.
+      if (status === 'you_blocked_them') {
+        Alert.alert(
+          'You blocked them',
+          'Unblock them first, from Blocked people in your profile.',
+        );
+        return;
+      }
       setSentTo((prev) => ({ ...prev, [personId]: true }));
       // A crossing request auto-accepts: refresh friends and the invites badge
       if (status === 'accepted') {

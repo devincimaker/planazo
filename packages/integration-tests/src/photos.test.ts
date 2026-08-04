@@ -118,24 +118,28 @@ describe('plan_album_card', () => {
     expect(summary.recent).toEqual([]);
   });
 
-  // The SELECT policy hides a blocked uploader's rows, and invoker rights are
-  // what make that reach the counts. SECURITY DEFINER here would quietly
-  // count photographs the person asking can no longer see.
-  it('drops a blocked uploader from every number', async () => {
+  // The SELECT policy hides an uploader's rows from anyone that uploader has
+  // blocked (the shield rule, PLA-44), and invoker rights are what make that
+  // reach the counts. SECURITY DEFINER here would quietly count photographs
+  // the person asking can no longer see.
+  it('drops the photos of whoever blocked you from every number', async () => {
     ok(
-      await bystander.client
+      await guest.client
         .from('blocked_users')
-        .insert({ blocker_id: bystander.id, blocked_id: guest.id })
+        .insert({ blocker_id: guest.id, blocked_id: bystander.id })
         .select()
         .single(),
     );
 
+    // For the blocked bystander, the guest's three photos no longer exist.
     const summary = ok(await card(bystander));
-
     expect(summary.total).toBe(2);
     expect(summary.uploaders).toBe(1);
     const recent = summary.recent as { uploader_name: string | null }[];
     expect(recent.length).toBe(2);
     expect(recent[0].uploader_name).toBe('Album Host');
+
+    // The guest, who did the blocking, keeps seeing the whole album.
+    expect(ok(await card(guest)).total).toBe(5);
   });
 });
