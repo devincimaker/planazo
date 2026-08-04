@@ -1,10 +1,11 @@
 import { ActionSheetIOS } from 'react-native';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react-native';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import EditGroupScreen from '../edit';
 import { supabase } from '../../../../../lib/supabase';
 import { pickFromLibrary, uploadGroupPhoto, removeGroupPhoto } from '../../../../../lib/images';
 import { colorForName } from '../../../../../components/ui';
+import { chooseFromSheet } from '../../../../../lib/testing/actionSheet';
 
 const mockBack = jest.fn();
 
@@ -67,14 +68,6 @@ function primeSupabase(group: GroupRow) {
     c.then = (resolve: (v: unknown) => void) =>
       Promise.resolve({ data: null, error: null }).then(resolve);
     return c;
-  });
-}
-
-async function chooseFromSheet(index: number) {
-  const spy = ActionSheetIOS.showActionSheetWithOptions as jest.Mock;
-  const callback = spy.mock.calls[0][1] as (i: number) => void;
-  await act(async () => {
-    callback(index);
   });
 }
 

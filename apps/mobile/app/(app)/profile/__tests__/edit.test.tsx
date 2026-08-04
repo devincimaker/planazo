@@ -1,10 +1,11 @@
 import { ActionSheetIOS } from 'react-native';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react-native';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ProfileEdit from '../edit';
 import { useAuthStore } from '../../../../stores/authStore';
 import { supabase } from '../../../../lib/supabase';
 import { pickFromLibrary, uploadAvatar } from '../../../../lib/images';
+import { chooseFromSheet } from '../../../../lib/testing/actionSheet';
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
@@ -82,14 +83,6 @@ async function renderEdit() {
   );
 }
 
-async function chooseFromPhotoSheet(index: number) {
-  const sheetSpy = ActionSheetIOS.showActionSheetWithOptions as jest.Mock;
-  const callback = sheetSpy.mock.calls[0][1] as (i: number) => void;
-  await act(async () => {
-    callback(index);
-  });
-}
-
 beforeEach(() => {
   jest.clearAllMocks();
   jest.spyOn(ActionSheetIOS, 'showActionSheetWithOptions').mockImplementation(() => {});
@@ -136,7 +129,7 @@ describe('ProfileEdit', () => {
 
     await fireEvent.press(screen.getByTestId('avatar-press'));
     expect(ActionSheetIOS.showActionSheetWithOptions).toHaveBeenCalled();
-    await chooseFromPhotoSheet(2);
+    await chooseFromSheet(2);
 
     await fireEvent.press(screen.getByTestId('save'));
     await waitFor(() => {
@@ -150,7 +143,7 @@ describe('ProfileEdit', () => {
     await renderEdit();
 
     await fireEvent.press(screen.getByTestId('change-photo'));
-    await chooseFromPhotoSheet(1);
+    await chooseFromSheet(1);
     expect(mockUpload).not.toHaveBeenCalled();
 
     await fireEvent.press(screen.getByTestId('save'));

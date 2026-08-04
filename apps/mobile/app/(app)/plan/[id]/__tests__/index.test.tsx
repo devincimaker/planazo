@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import PlanDetailScreen from '../index';
 import { useAuthStore } from '../../../../../stores/authStore';
 import { supabase } from '../../../../../lib/supabase';
+import { chooseFromSheet, sheetOptions } from '../../../../../lib/testing/actionSheet';
 
 jest.mock('../../../../../lib/supabase', () => ({
   supabase: { from: jest.fn(), rpc: jest.fn() },
@@ -154,11 +155,10 @@ beforeEach(() => {
   useAuthStore.setState({ user: { id: 'me' } as any, profile: { id: 'me' } as any });
 });
 
-/** Open the ··· menu and return the option labels + the row-select callback. */
+/** Open the ··· menu and return its option labels. Pick a row with chooseFromSheet. */
 async function openMenu() {
   await fireEvent.press(screen.getByTestId('plan-menu'));
-  const call = (ActionSheetIOS.showActionSheetWithOptions as jest.Mock).mock.calls.at(-1);
-  return { options: call[0].options as string[], pick: call[1] as (i: number) => void };
+  return sheetOptions();
 }
 
 describe('PlanDetailScreen — fixed plans', () => {
@@ -633,8 +633,7 @@ describe('PlanDetailScreen — the 20a menu', () => {
     await renderDetail();
     await waitFor(() => expect(screen.getByTestId('plan-menu')).toBeTruthy());
 
-    const { options, pick } = await openMenu();
-    expect(options).toEqual([
+    expect(await openMenu()).toEqual([
       'Copy invite link',
       "Nudge the 3 who haven't answered",
       'Edit the details',
@@ -642,10 +641,10 @@ describe('PlanDetailScreen — the 20a menu', () => {
       'Cancel',
     ]);
 
-    pick(2);
+    await chooseFromSheet(2);
     expect(mockPush).toHaveBeenCalledWith('/plan/plan-1/edit');
 
-    pick(3);
+    await chooseFromSheet(3);
     expect(mockPush).toHaveBeenCalledWith('/plan/plan-1/cancel');
   });
 
@@ -669,7 +668,7 @@ describe('PlanDetailScreen — the 20a menu', () => {
     await renderDetail();
     await waitFor(() => expect(screen.getByTestId('plan-menu')).toBeTruthy());
 
-    const { options } = await openMenu();
+    const options = await openMenu();
     expect(options).not.toContain('Call it off');
     expect(options).not.toContain('Edit the details');
     expect(options).toContain('Copy invite link');
@@ -686,7 +685,7 @@ describe('PlanDetailScreen — the 20a menu', () => {
     await renderDetail();
     await waitFor(() => expect(screen.getByTestId('plan-menu')).toBeTruthy());
 
-    const { options } = await openMenu();
+    const options = await openMenu();
     expect(options).not.toContain('Edit the details');
     expect(options).not.toContain('Call it off');
   });
@@ -699,7 +698,7 @@ describe('PlanDetailScreen — the 20a menu', () => {
     await renderDetail();
     await waitFor(() => expect(screen.getByTestId('plan-menu')).toBeTruthy());
 
-    const { options } = await openMenu();
+    const options = await openMenu();
     expect(options).not.toContain('Edit the details');
     expect(options).not.toContain('Call it off');
   });
