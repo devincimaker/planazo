@@ -28,6 +28,7 @@ import { supabase } from '../../../lib/supabase';
 import { fmtDay, fmtTime } from '../../../lib/dates';
 import { useFeedAnswers } from '../../../lib/useFeedAnswers';
 import { useCancelNotices } from '../../../lib/useCancelNotices';
+import { useMyGroups } from '../../../lib/useMyGroups';
 import { errorCopy } from '../../../lib/queryErrors';
 import { usePullToRefresh } from '../../../lib/usePullToRefresh';
 import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
@@ -35,6 +36,7 @@ import { useAuthStore } from '../../../stores/authStore';
 import { ThemedText, Chip, Avatar, EmptyState, ErrorState } from '../../../components/ui';
 import { FeedPlanCard, type FeedPlan } from '../../../components/feed/FeedPlanCard';
 import { CancelNotices } from '../../../components/feed/CancelNotices';
+import { NeedsGroupState } from '../../../components/group/NeedsGroupState';
 import { colors, spacing } from '../../../theme/tokens';
 
 type Filter = 'all' | 'needs' | 'happening';
@@ -82,6 +84,11 @@ export default function FeedScreen() {
     enabled: !!user,
   });
   const { refreshing, onRefresh } = usePullToRefresh(refetch);
+
+  // An empty feed means two different things, and the plans query cannot tell
+  // them apart: it returns [] for "no groups" before it ever asks about plans.
+  // Only one of the two is the user's problem to solve (PLA-68).
+  const { hasGroups, loading: groupsLoading } = useMyGroups();
 
   const { notices, dismiss } = useCancelNotices();
 
@@ -252,7 +259,9 @@ export default function FeedScreen() {
         />
       </View>
 
-      {isLoading ? (
+      {/* Both queries, or the feed shows one empty state and swaps it for the
+          other a moment later. */}
+      {isLoading || groupsLoading ? (
         <View style={styles.loading}>
           <ActivityIndicator size="large" color={colors.accent} />
         </View>
@@ -274,7 +283,13 @@ export default function FeedScreen() {
         >
           <CancelNotices notices={notices} onDismiss={dismiss} />
 
-          {visible.length === 0 ? (
+          {visible.length === 0 && !hasGroups ? (
+            // Sending this user to the create sheet was the loop PLA-68 is
+            // about: the one action offered was the one thing they could not
+            // do. A filter they cannot have set yet is not worth a branch —
+            // with no groups there are no plans to filter.
+            <NeedsGroupState testID="feed-needs-group" />
+          ) : visible.length === 0 ? (
             <EmptyState
               title={filter === 'needs' ? 'Nothing to answer' : 'Nothing on the table'}
               body={

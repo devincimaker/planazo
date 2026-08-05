@@ -9,16 +9,15 @@ import {
   Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown, FadeOutUp } from 'react-native-reanimated';
-import { supabase } from '../../../lib/supabase';
 import { useCreatePlan } from '../../../lib/useCreatePlan';
+import { useMyGroups } from '../../../lib/useMyGroups';
 import { emptyPollDraft, pollDraftTouched, pollDraftValid } from '../../../lib/pollDraft';
 import { PollComposer } from '../../../components/PollComposer';
 import { WhenField } from '../../../components/plan/WhenField';
 import { HowManyField } from '../../../components/plan/HowManyField';
-import { useAuthStore } from '../../../stores/authStore';
+import { NeedsGroupState } from '../../../components/group/NeedsGroupState';
 import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
 import { ThemedText, Button, colorForName } from '../../../components/ui';
 import { colors, fonts, radii, spacing } from '../../../theme/tokens';
@@ -40,7 +39,6 @@ export default function CreatePlanScreen() {
     y?: string;
   }>();
   const router = useRouter();
-  const { user } = useAuthStore();
 
   const [title, setTitle] = useState(params.title ?? '');
   const [pickedGroupId, setPickedGroupId] = useState<string | null>(null);
@@ -61,26 +59,11 @@ export default function CreatePlanScreen() {
   const [askOpen, setAskOpen] = useState(false);
   const [pollDraft, setPollDraft] = useState(emptyPollDraft());
 
-  const { data: groups } = useQuery({
-    queryKey: ['my-groups', user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('group_members')
-        .select('groups:group_id (id, name, color)')
-        .eq('user_id', user!.id);
-      if (error) throw error;
-      return data
-        .map((row) => row.groups as unknown as { id: string; name: string; color: string | null } | null)
-        .filter(Boolean) as { id: string; name: string; color: string | null }[];
-    },
-    enabled: !!user,
-  });
+  const { groups, hasGroups, loading: groupsLoading } = useMyGroups();
 
   // Opened from a group: that group is settled and the chip row collapses to it.
   const paramGroupId = params.groupId || null;
-  const choices = paramGroupId
-    ? (groups ?? []).filter((g) => g.id === paramGroupId)
-    : (groups ?? []);
+  const choices = paramGroupId ? groups.filter((g) => g.id === paramGroupId) : groups;
   const groupId = paramGroupId ?? pickedGroupId ?? choices[0]?.id ?? null;
   const group = choices.find((g) => g.id === groupId) ?? null;
 
@@ -95,22 +78,45 @@ export default function CreatePlanScreen() {
 
   const createPlan = useCreatePlan();
 
+  // `planazo://plan/create` opens this sheet with nothing behind it, and
+  // back() is a no-op there: Cancel did nothing at all on a cold deep link.
+  const cancel = () =>
+    router.canGoBack() ? router.back() : router.replace('/(app)/(tabs)');
+
+  const header = (
+    <View style={styles.header}>
+      <Pressable
+        onPress={cancel}
+        accessibilityRole="button"
+        testID="cancel"
+        style={styles.headerAction}
+      >
+        <ThemedText variant="bodyStrong" color={colors.textMuted}>
+          Cancel
+        </ThemedText>
+      </Pressable>
+      <ThemedText style={styles.headerTitle}>New plan</ThemedText>
+      <View style={styles.headerSpacer} />
+    </View>
+  );
+
+  // The "+" already sends a groupless user to Groups instead of here, but
+  // `planazo://plan/create` is a live deep link and nothing guards it. The
+  // form below cannot be completed without a group, so it is not offered:
+  // that empty chip row and its permanently disabled "Post to …" were the
+  // dead end PLA-68 was reported for.
+  if (!groupsLoading && !hasGroups) {
+    return (
+      <SafeAreaView style={styles.screen} edges={['top']}>
+        {header}
+        <NeedsGroupState dismissFirst testID="create-needs-group" />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
-      <View style={styles.header}>
-        <Pressable
-          onPress={() => router.back()}
-          accessibilityRole="button"
-          testID="cancel"
-          style={styles.headerAction}
-        >
-          <ThemedText variant="bodyStrong" color={colors.textMuted}>
-            Cancel
-          </ThemedText>
-        </Pressable>
-        <ThemedText style={styles.headerTitle}>New plan</ThemedText>
-        <View style={styles.headerSpacer} />
-      </View>
+      {header}
 
       <KeyboardAvoidingView
         style={styles.flex}
@@ -231,7 +237,13 @@ export default function CreatePlanScreen() {
 
       <View style={styles.footer}>
         <Button
-          label={createPlan.isPending ? 'Posting…' : `Post to ${group?.name ?? '…'}`}
+          // Naming the group is the point of this label, so it waits until
+          // there is a name: "Post to …" used to flash for everyone while the
+          // groups query resolved, and sat there forever for anyone with none
+          // (PLA-68).
+          label={
+            createPlan.isPending ? 'Posting…' : group ? `Post to ${group.name}` : 'Post'
+          }
           variant={isValid ? 'primary' : 'secondary'}
           disabled={!isValid || createPlan.isPending}
           haptic={isValid}

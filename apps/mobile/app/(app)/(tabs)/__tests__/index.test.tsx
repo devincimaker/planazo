@@ -5,13 +5,19 @@ import { useAuthStore } from '../../../../stores/authStore';
 import { supabase } from '../../../../lib/supabase';
 
 const mockPush = jest.fn();
+const mockNavigate = jest.fn();
 
 jest.mock('../../../../lib/supabase', () => ({
   supabase: { from: jest.fn() },
 }));
 
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, replace: jest.fn(), back: jest.fn() }),
+  useRouter: () => ({
+    push: mockPush,
+    navigate: mockNavigate,
+    replace: jest.fn(),
+    back: jest.fn(),
+  }),
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -125,12 +131,16 @@ let availChain: ReturnType<typeof chain>;
 
 let noticesChain: ReturnType<typeof chain>;
 
+/** One group, in the shape both readers of group_members expect. */
+const IN_A_GROUP = [{ group_id: 'g1', groups: { id: 'g1', name: 'Domingueros', color: null } }];
+
 function primeSupabase(
   plans: unknown[],
   {
     notices = [],
     cancelledPlans = [],
-  }: { notices?: unknown[]; cancelledPlans?: unknown[] } = {}
+    memberships = IN_A_GROUP,
+  }: { notices?: unknown[]; cancelledPlans?: unknown[]; memberships?: unknown[] } = {}
 ) {
   plansChain = chain({ data: plans, error: null });
   pollVotesChain = chain({ error: null });
@@ -140,7 +150,12 @@ function primeSupabase(
   availChain = chain({ error: null });
   noticesChain = chain({ data: notices, error: null });
   mockFrom.mockImplementation((table: string) => {
-    if (table === 'group_members') return chain({ data: [{ group_id: 'g1' }], error: null });
+    // Two queries read this table with different shapes: the feed wants
+    // group_id to filter plans, useMyGroups wants the joined row to decide
+    // which empty state you get (PLA-68). One stub row satisfies both.
+    if (table === 'group_members') {
+      return chain({ data: memberships, error: null });
+    }
     if (table === 'plans') {
       // The home query filters cancelled via .neq; the 19e notice fetch
       // doesn't — that call gets the cancelled rows.
@@ -385,6 +400,29 @@ describe('FeedScreen', () => {
     await waitFor(() => expect(screen.getByText('Nothing on the table')).toBeTruthy());
     await fireEvent.press(screen.getByText('Start a plan'));
     expect(mockPush).toHaveBeenCalledWith('/(app)/plan/create');
+  });
+
+  // PLA-68: the same empty feed, and the reason for it decides what to say.
+  // "Start a plan" was the one thing this user could not do.
+  it('sends a user in no groups to Groups instead of the create sheet', async () => {
+    primeSupabase([], { memberships: [] });
+    await renderFeed();
+
+    await waitFor(() => expect(screen.getByText('Plans need a group first')).toBeTruthy());
+    expect(screen.queryByText('Nothing on the table')).toBeNull();
+    expect(screen.queryByText('Start a plan')).toBeNull();
+
+    await fireEvent.press(screen.getByText('Sort out a group'));
+    expect(mockNavigate).toHaveBeenCalledWith('/(app)/(tabs)/groups');
+    expect(mockPush).not.toHaveBeenCalledWith('/(app)/plan/create');
+  });
+
+  it('keeps the plans copy for someone who has a group but no plans', async () => {
+    primeSupabase([]);
+    await renderFeed();
+
+    await waitFor(() => expect(screen.getByText('Nothing on the table')).toBeTruthy());
+    expect(screen.queryByText('Plans need a group first')).toBeNull();
   });
 
   it('19e: past plans leave the feed silently at the end of their day', async () => {

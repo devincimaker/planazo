@@ -3,11 +3,16 @@ import { render, screen, fireEvent } from '@testing-library/react-native';
 import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
 import { TabBar } from '../TabBar';
 
-const mockPush = jest.fn();
+const mockNavigate = jest.fn();
 let mockPendingCount = 0;
+let mockGroups = { groups: [{ id: 'g1', name: 'Domingueros', color: null }], hasGroups: true, loading: false };
 
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({ navigate: mockNavigate }),
+}));
+
+jest.mock('../../../lib/useMyGroups', () => ({
+  useMyGroups: () => mockGroups,
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -42,6 +47,11 @@ describe('TabBar', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockPendingCount = 0;
+    mockGroups = {
+      groups: [{ id: 'g1', name: 'Domingueros', color: null }],
+      hasGroups: true,
+      loading: false,
+    };
   });
 
   it('renders both tabs and the create button', async () => {
@@ -76,8 +86,32 @@ describe('TabBar', () => {
   it('opens the create sheet from the + button', async () => {
     await render(<TabBar {...makeProps()} />);
 
+    expect(screen.getByLabelText('New plan')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('tab-create'));
-    expect(mockPush).toHaveBeenCalledWith('/(app)/plan/create');
+    expect(mockNavigate).toHaveBeenCalledWith('/(app)/plan/create');
+  });
+
+  // PLA-68: nothing can be posted without a group, so the + offers the step
+  // that is actually available. The Groups tab rather than the new-group form,
+  // because someone who arrived on an invite needs the paste-a-link field.
+  it('sends the + button to Groups while the user is in none', async () => {
+    mockGroups = { groups: [], hasGroups: false, loading: false };
+    await render(<TabBar {...makeProps()} />);
+
+    expect(screen.getByLabelText('Start with a group')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('tab-create'));
+    expect(mockNavigate).toHaveBeenCalledWith('/(app)/(tabs)/groups');
+  });
+
+  // The answer is not in yet, and "no groups" is what an unanswered query
+  // looks like. Diverting on it would send someone who has groups to the
+  // wrong place for as long as the query takes.
+  it('still opens the create sheet while the groups query is in flight', async () => {
+    mockGroups = { groups: [], hasGroups: false, loading: true };
+    await render(<TabBar {...makeProps()} />);
+
+    await fireEvent.press(screen.getByTestId('tab-create'));
+    expect(mockNavigate).toHaveBeenCalledWith('/(app)/plan/create');
   });
 
   // PLA-40: the tabs cleared 44 on their icon and label alone, which made the
