@@ -24,7 +24,7 @@ const MIN_PASSWORD = 6;
  */
 function tokensFromUrl(url: string) {
   const parts: Record<string, string> = {};
-  for (const chunk of [url.split('#')[1], url.split('#')[0].split('?')[1]]) {
+  for (const chunk of [url.split('#')[1], url.split('#')[0]?.split('?')[1]]) {
     if (!chunk) continue;
     for (const pair of chunk.split('&')) {
       const [rawKey, rawValue] = pair.split('=');

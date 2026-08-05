@@ -45,7 +45,7 @@ export default function GroupsScreen() {
         .eq('user_id', user!.id);
       if (error) throw error;
 
-      const groupIds = (memberships ?? []).map((m) => m.group_id);
+      const groupIds = memberships.map((m) => m.group_id);
       if (groupIds.length === 0) return [];
 
       const [countsRes, plansRes] = await Promise.all([
@@ -64,12 +64,12 @@ export default function GroupsScreen() {
       if (plansRes.error) throw plansRes.error;
 
       const memberCount: Record<string, number> = {};
-      (countsRes.data ?? []).forEach((c) => {
+      countsRes.data.forEach((c) => {
         memberCount[c.group_id] = (memberCount[c.group_id] ?? 0) + 1;
       });
 
       const needsCount: Record<string, number> = {};
-      (plansRes.data ?? []).forEach((plan: any) => {
+      plansRes.data.forEach((plan: any) => {
         const { availabilities } = flattenNestedOptions(plan.plan_date_options);
         const needs = needsUserResponse(
           {
@@ -83,7 +83,7 @@ export default function GroupsScreen() {
         if (needs) needsCount[plan.group_id] = (needsCount[plan.group_id] ?? 0) + 1;
       });
 
-      return (memberships ?? [])
+      return memberships
         .map((m: any) => ({
           id: m.group_id,
           role: m.role,

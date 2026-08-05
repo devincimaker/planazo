@@ -55,7 +55,7 @@ export function usePlanPhotos(planId: string, opts: { enabled?: boolean } = {}) 
         .eq('plan_id', planId)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return (data ?? []) as unknown as PhotoRow[];
+      return data as unknown as PhotoRow[];
     },
   });
 

@@ -331,7 +331,7 @@ export async function signPhotos<T extends { storage_path: string; thumb_path: s
     if (error) throw error;
 
     const expiresAtMs = now + SIGNED_URL_TTL_SECONDS * 1000;
-    for (const entry of data ?? []) {
+    for (const entry of data) {
       if (!entry.signedUrl || entry.error || !entry.path) continue;
       // First write wins. A concurrent caller (the card and the album screen
       // are mounted together) may have filled this path while our request was
@@ -388,7 +388,7 @@ export async function listOwnedPhotoPaths(userId: string): Promise<string[]> {
     .select('storage_path, thumb_path')
     .eq('uploaded_by', userId);
   if (error) throw error;
-  return (data ?? []).flatMap(photoObjectPaths);
+  return data.flatMap(photoObjectPaths);
 }
 
 /**

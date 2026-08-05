@@ -178,7 +178,7 @@ describe('ProfileSheet', () => {
     await fireEvent.press(screen.getByTestId('sign-out'));
     expect(alertSpy).toHaveBeenCalled();
 
-    const buttons = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    const buttons = alertSpy.mock.calls[0]![2] as { text: string; onPress?: () => void }[];
     const confirm = buttons.find((b) => b.text === 'Sign out');
     await confirm?.onPress?.();
 
@@ -196,7 +196,7 @@ describe('ProfileSheet', () => {
     await renderSheet();
 
     await fireEvent.press(screen.getByTestId('sign-out'));
-    const buttons = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    const buttons = alertSpy.mock.calls[0]![2] as { text: string; onPress?: () => void }[];
     await buttons.find((b) => b.text === 'Sign out')?.onPress?.();
 
     await waitFor(() => {
@@ -229,11 +229,11 @@ describe('ProfileSheet', () => {
 
     await fireEvent.press(screen.getByTestId('delete-account'));
 
-    const first = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    const first = alertSpy.mock.calls[0]![2] as { text: string; onPress?: () => void }[];
     await first.find((b) => b.text === 'Delete')?.onPress?.();
     expect(supabase.rpc).not.toHaveBeenCalled();
 
-    const second = alertSpy.mock.calls[1][2] as { text: string; onPress?: () => void }[];
+    const second = alertSpy.mock.calls[1]![2] as { text: string; onPress?: () => void }[];
     await second.find((b) => b.text === 'Delete for good')?.onPress?.();
 
     await waitFor(() => {
@@ -248,13 +248,13 @@ describe('ProfileSheet', () => {
     await renderSheet();
 
     await fireEvent.press(screen.getByTestId('delete-account'));
-    const first = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    const first = alertSpy.mock.calls[0]![2] as { text: string; onPress?: () => void }[];
     await first.find((b) => b.text === 'Cancel')?.onPress?.();
 
     await fireEvent.press(screen.getByTestId('delete-account'));
-    const reopened = alertSpy.mock.calls[1][2] as { text: string; onPress?: () => void }[];
+    const reopened = alertSpy.mock.calls[1]![2] as { text: string; onPress?: () => void }[];
     await reopened.find((b) => b.text === 'Delete')?.onPress?.();
-    const second = alertSpy.mock.calls[2][2] as { text: string; onPress?: () => void }[];
+    const second = alertSpy.mock.calls[2]![2] as { text: string; onPress?: () => void }[];
     await second.find((b) => b.text === 'Keep my account')?.onPress?.();
 
     expect(supabase.rpc).not.toHaveBeenCalled();
@@ -269,9 +269,9 @@ describe('ProfileSheet', () => {
     await renderSheet();
 
     await fireEvent.press(screen.getByTestId('delete-account'));
-    const first = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    const first = alertSpy.mock.calls[0]![2] as { text: string; onPress?: () => void }[];
     await first.find((b) => b.text === 'Delete')?.onPress?.();
-    const second = alertSpy.mock.calls[1][2] as { text: string; onPress?: () => void }[];
+    const second = alertSpy.mock.calls[1]![2] as { text: string; onPress?: () => void }[];
     await second.find((b) => b.text === 'Delete for good')?.onPress?.();
 
     await waitFor(() => {
@@ -298,9 +298,9 @@ describe('ProfileSheet', () => {
     await renderSheet();
 
     await fireEvent.press(screen.getByTestId('delete-account'));
-    const first = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    const first = alertSpy.mock.calls[0]![2] as { text: string; onPress?: () => void }[];
     await first.find((b) => b.text === 'Delete')?.onPress?.();
-    const second = alertSpy.mock.calls[1][2] as { text: string; onPress?: () => void }[];
+    const second = alertSpy.mock.calls[1]![2] as { text: string; onPress?: () => void }[];
     await second.find((b) => b.text === 'Delete for good')?.onPress?.();
 
     // Once the account is gone the session can no longer satisfy the storage
@@ -317,9 +317,9 @@ describe('ProfileSheet', () => {
     await renderSheet();
 
     await fireEvent.press(screen.getByTestId('delete-account'));
-    const first = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    const first = alertSpy.mock.calls[0]![2] as { text: string; onPress?: () => void }[];
     await first.find((b) => b.text === 'Delete')?.onPress?.();
-    const second = alertSpy.mock.calls[1][2] as { text: string; onPress?: () => void }[];
+    const second = alertSpy.mock.calls[1]![2] as { text: string; onPress?: () => void }[];
     await second.find((b) => b.text === 'Delete for good')?.onPress?.();
 
     await waitFor(() => {
@@ -337,9 +337,9 @@ describe('ProfileSheet', () => {
     await renderSheet();
 
     await fireEvent.press(screen.getByTestId('delete-account'));
-    const first = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    const first = alertSpy.mock.calls[0]![2] as { text: string; onPress?: () => void }[];
     await first.find((b) => b.text === 'Delete')?.onPress?.();
-    const second = alertSpy.mock.calls[1][2] as { text: string; onPress?: () => void }[];
+    const second = alertSpy.mock.calls[1]![2] as { text: string; onPress?: () => void }[];
     await second.find((b) => b.text === 'Delete for good')?.onPress?.();
 
     await waitFor(() => {

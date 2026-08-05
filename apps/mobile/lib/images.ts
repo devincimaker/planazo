@@ -49,7 +49,7 @@ export async function pickManyFromLibrary(limit: number): Promise<PickedImage[]>
     quality: 1,
   });
   if (result.canceled) return [];
-  return result.assets.map((a) => ({ uri: a.uri, width: a.width ?? 0, height: a.height ?? 0 }));
+  return result.assets.map((a) => ({ uri: a.uri, width: a.width, height: a.height }));
 }
 
 export async function takePhoto(): Promise<string | null> {

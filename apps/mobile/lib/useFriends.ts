@@ -27,7 +27,7 @@ export function useFriends() {
         .or(`requester_id.eq.${user?.id},addressee_id.eq.${user?.id}`);
       if (error) throw error;
 
-      return (data ?? [])
+      return data
         .map((f: any) => (f.requester_id === user?.id ? f.addressee : f.requester))
         .filter(Boolean)
         .map((p: any) => ({

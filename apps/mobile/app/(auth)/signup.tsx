@@ -142,7 +142,7 @@ export default function SignupScreen() {
 
       setSession(data.session);
 
-      if (avatarUri && data.session.user) {
+      if (avatarUri) {
         const avatarUrl = await uploadAvatar(data.session.user.id);
         if (avatarUrl) {
           await supabase
@@ -152,16 +152,14 @@ export default function SignupScreen() {
         }
       }
 
-      if (data.session.user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', data.session.user.id)
-          .single();
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', data.session.user.id)
+        .single();
 
-        if (profile) {
-          setProfile(profile);
-        }
+      if (profile) {
+        setProfile(profile);
       }
 
       router.replace('/(app)/(tabs)');

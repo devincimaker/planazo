@@ -49,7 +49,7 @@ export default function FindPeopleScreen() {
       if (error) throw error;
       const outgoing = new Set<string>();
       const incoming = new Set<string>();
-      (data ?? []).forEach((f: any) => {
+      data.forEach((f: any) => {
         if (f.requester_id === user?.id) outgoing.add(f.addressee_id);
         else incoming.add(f.requester_id);
       });
@@ -72,7 +72,7 @@ export default function FindPeopleScreen() {
       if (error) throw error;
 
       const seen = new Map<string, PersonRow>();
-      (data ?? []).forEach((row: any) => {
+      data.forEach((row: any) => {
         (row.groups?.group_members ?? []).forEach((m: any) => {
           const p = m.profile;
           if (!p || p.id === user?.id || seen.has(p.id)) return;

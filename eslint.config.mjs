@@ -244,6 +244,14 @@ export default tseslint.config(
           ],
         },
       ],
+
+      // A guard the types call dead is either noise or a sign the type is
+      // lying. `noUncheckedIndexedAccess` (turned on with this rule) keeps
+      // the types honest about index access, so what this rule flags really
+      // is unreachable. When it fires on a Supabase payload, suspect the
+      // type before deleting the guard: generated types are routinely more
+      // confident than the data (PLA-66 has the war story).
+      '@typescript-eslint/no-unnecessary-condition': 'error',
     },
   },
 

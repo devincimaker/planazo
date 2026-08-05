@@ -17,7 +17,8 @@ interface AvatarProps {
 export function colorForName(name: string): string {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0;
-  return groupColors[Math.abs(hash) % groupColors.length];
+  // The modulo keeps the index in range; the compiler cannot see that.
+  return groupColors[Math.abs(hash) % groupColors.length]!;
 }
 
 export function Avatar({ name, bg, dark = false, size = 26, imageUrl, testID }: AvatarProps) {

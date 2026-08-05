@@ -19,7 +19,7 @@ export async function deleteOwnRsvp(planId: string, userId: string): Promise<voi
     .select('plan_id');
 
   if (error) throw error;
-  if (!data || data.length === 0) {
+  if (data.length === 0) {
     throw new Error("Your answer couldn't be changed. The plan may have been called off.");
   }
 }

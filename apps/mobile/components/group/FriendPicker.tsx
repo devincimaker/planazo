@@ -21,7 +21,7 @@ interface Props {
  */
 export function FriendPicker({ picks, onToggle }: Props) {
   const { friends } = useFriends();
-  const selected = (friends ?? []).filter((f) => picks.includes(f.id));
+  const selected = friends.filter((f) => picks.includes(f.id));
 
   return (
     <View style={styles.section}>
@@ -56,14 +56,14 @@ export function FriendPicker({ picks, onToggle }: Props) {
         </View>
       ) : null}
 
-      {(friends ?? []).length === 0 ? (
+      {friends.length === 0 ? (
         <ThemedText variant="sub">
           Friends you add on Planazo show up here. You can also invite people once the group
           exists.
         </ThemedText>
       ) : (
         <Card padded={false}>
-          {(friends ?? []).map((f, i) => {
+          {friends.map((f, i) => {
             const picked = picks.includes(f.id);
             return (
               <Pressable

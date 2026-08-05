@@ -55,7 +55,7 @@ export default function FeedScreen() {
         .eq('user_id', user?.id);
 
       if (memberError) throw memberError;
-      const groupIds = (memberships ?? []).map((m) => m.group_id);
+      const groupIds = memberships.map((m) => m.group_id);
       if (groupIds.length === 0) return [];
 
       const { data, error } = await supabase
@@ -77,7 +77,7 @@ export default function FeedScreen() {
         .limit(1, { referencedTable: 'plan_polls' });
 
       if (error) throw error;
-      return data ?? [];
+      return data;
     },
     enabled: !!user,
   });
@@ -171,7 +171,7 @@ export default function FeedScreen() {
         const options = sortedOptions.map((o: any) => ({
           id: o.id as string,
           label: o.label as string,
-          votes: counts[o.id],
+          votes: counts[o.id] ?? 0,
           mine: myVote?.option_id === o.id,
         }));
         const myPick = options.find((o) => o.mine);

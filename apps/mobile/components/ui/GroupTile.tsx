@@ -59,7 +59,7 @@ export function GroupTile({ name, color, imageUrl, size = 46, testID }: GroupTil
         <Image
           testID={testID ? `${testID}-image` : undefined}
           source={{ uri: imageUrl }}
-          onError={() => setFailedUrl(imageUrl ?? null)}
+          onError={() => setFailedUrl(imageUrl)}
           style={styles.fill}
         />
       ) : (

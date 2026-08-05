@@ -49,7 +49,10 @@ export function TabBar({ state, navigation }: TabBarProps) {
   const router = useRouter();
   const { count: pendingCount } = usePendingInvites();
 
-  const renderTab = (route: { key: string; name: string }, index: number) => {
+  // `undefined` is accepted so callers can index `state.routes` directly; a
+  // missing route renders nothing rather than crashing the whole tab bar.
+  const renderTab = (route: { key: string; name: string } | undefined, index: number) => {
+    if (!route) return null;
     const focused = state.index === index;
     const color = focused ? colors.accent : colors.tabInactive;
     const label = LABELS[route.name] ?? route.name;

@@ -69,7 +69,7 @@ export default function CreatePlanScreen() {
         .select('groups:group_id (id, name, color)')
         .eq('user_id', user!.id);
       if (error) throw error;
-      return (data ?? [])
+      return data
         .map((row) => row.groups as unknown as { id: string; name: string; color: string | null } | null)
         .filter(Boolean) as { id: string; name: string; color: string | null }[];
     },

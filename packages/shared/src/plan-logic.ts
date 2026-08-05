@@ -53,8 +53,9 @@ export function countAvailabilityByDate(
   });
 
   availabilities.forEach((a) => {
-    if (countByDate[a.date_option_id]) {
-      countByDate[a.date_option_id].count++;
+    const entry = countByDate[a.date_option_id];
+    if (entry) {
+      entry.count++;
     }
   });
 
@@ -342,7 +343,8 @@ export function countPollVotes(
     counts[o.id] = 0;
   });
   votes.forEach((v) => {
-    if (v.option_id in counts) counts[v.option_id]++;
+    const current = counts[v.option_id];
+    if (current !== undefined) counts[v.option_id] = current + 1;
   });
   return counts;
 }
