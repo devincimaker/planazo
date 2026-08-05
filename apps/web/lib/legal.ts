@@ -8,12 +8,12 @@ import { CONTACT_EMAIL } from './links';
  * carries the legal pages with it. The App Store listing links to /privacy —
  * Apple rejects a submission whose privacy URL 404s or is a placeholder.
  *
- * Everything claimed here is checked against the schema in supabase/migrations
- * and lib/push.ts. If the app starts storing something new, this file changes
- * in the same commit.
+ * Everything claimed here is checked against the schema in supabase/migrations,
+ * lib/push.ts and lib/sentry.ts. If the app starts storing something new, this
+ * file changes in the same commit.
  */
 
-export const LAST_UPDATED = { en: '1 August 2026', es: '1 de agosto de 2026' };
+export const LAST_UPDATED = { en: '5 August 2026', es: '5 de agosto de 2026' };
 
 export interface Section {
   heading: string;
@@ -65,6 +65,11 @@ export const PRIVACY: Record<Lang, LegalDoc> = {
               'The message you write, the app version and device model it came from, and a screenshot if you attach one. Only what you deliberately send.',
           },
           {
+            term: 'Crash reports',
+            detail:
+              'If the app crashes, a report is sent automatically so we can fix it: where in the code it failed, the app version, the device model and operating system, and your account id. It never includes what you were writing or looking at, and it is deleted on its own after 90 days.',
+          },
+          {
             term: 'Reports and blocks',
             detail:
               'If you report a plan, a group or a person, we keep the reason, anything you wrote, and what you reported so we can act on it. If you block someone, we keep that so it sticks across your devices. Nobody is ever told who reported or blocked them.',
@@ -99,7 +104,7 @@ export const PRIVACY: Record<Lang, LegalDoc> = {
       },
       {
         heading: 'Who else handles it',
-        paras: ['Planazo uses two processors, and no others.'],
+        paras: ['Planazo uses three processors, and no others.'],
         bullets: [
           {
             term: 'Supabase',
@@ -110,6 +115,11 @@ export const PRIVACY: Record<Lang, LegalDoc> = {
             term: 'Expo and Apple push notification services',
             detail:
               'They deliver notifications to your device. They receive a device token and the text of the notification, for example that a plan you are in has reached its minimum.',
+          },
+          {
+            term: 'Sentry',
+            detail:
+              'Crash reporting, hosted in the United States. It receives the crash reports described above and nothing else.',
           },
         ],
       },
@@ -125,7 +135,7 @@ export const PRIVACY: Record<Lang, LegalDoc> = {
       {
         heading: 'How long it is kept',
         paras: [
-          'For as long as your account exists. Delete the account and the data above goes with it, apart from anything our provider holds in encrypted backups, which roll off within 30 days.',
+          'For as long as your account exists. Delete the account and the data above goes with it, apart from crash reports, which are deleted on their own schedule within 90 days, and anything our provider holds in encrypted backups, which roll off within 30 days.',
         ],
       },
       {
@@ -187,6 +197,11 @@ export const PRIVACY: Record<Lang, LegalDoc> = {
               'El mensaje que escribís, la versión de la app y el modelo del dispositivo, y una captura si la adjuntás. Solo lo que mandás a propósito.',
           },
           {
+            term: 'Reportes de fallos',
+            detail:
+              'Si la app falla, se manda un reporte automático para que podamos arreglarlo: en qué parte del código falló, la versión de la app, el modelo del dispositivo y su sistema operativo, y el id de tu cuenta. Nunca incluye lo que estabas escribiendo ni mirando, y se borra solo a los 90 días.',
+          },
+          {
             term: 'Reportes y bloqueos',
             detail:
               'Si reportás un plan, un grupo o una persona, guardamos el motivo, lo que hayas escrito y qué reportaste, para poder actuar. Si bloqueás a alguien, lo guardamos para que se mantenga en todos tus dispositivos. A nadie se le avisa nunca quién lo reportó o lo bloqueó.',
@@ -220,7 +235,7 @@ export const PRIVACY: Record<Lang, LegalDoc> = {
       },
       {
         heading: 'Quién más los procesa',
-        paras: ['Planazo usa dos proveedores, y ninguno más.'],
+        paras: ['Planazo usa tres proveedores, y ninguno más.'],
         bullets: [
           {
             term: 'Supabase',
@@ -231,6 +246,11 @@ export const PRIVACY: Record<Lang, LegalDoc> = {
             term: 'Servicios de notificaciones de Expo y Apple',
             detail:
               'Entregan los avisos a tu teléfono. Reciben un token del dispositivo y el texto del aviso: por ejemplo, que un plan tuyo llegó al mínimo.',
+          },
+          {
+            term: 'Sentry',
+            detail:
+              'Reporte de fallos, alojado en Estados Unidos. Recibe los reportes de fallos de arriba y nada más.',
           },
         ],
       },
@@ -246,7 +266,7 @@ export const PRIVACY: Record<Lang, LegalDoc> = {
       {
         heading: 'Cuánto tiempo se guardan',
         paras: [
-          'Mientras exista tu cuenta. Si la borrás, se van con ella, salvo lo que nuestro proveedor tenga en copias de seguridad cifradas, que se descartan en un plazo de 30 días.',
+          'Mientras exista tu cuenta. Si la borrás, se van con ella, salvo los reportes de fallos, que se borran solos dentro de los 90 días, y lo que nuestro proveedor tenga en copias de seguridad cifradas, que se descartan en un plazo de 30 días.',
         ],
       },
       {
