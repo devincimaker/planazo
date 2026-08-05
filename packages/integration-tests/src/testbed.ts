@@ -29,25 +29,44 @@ export function ok<T>(res: { data: T; error: { message: string } | null }): NonN
 
 /**
  * Per-file factory for users/groups that tracks what it created and tears it
- * all down in dispose(). Every actor is a real signed-up user holding its own
- * authenticated client — the service role is for setup/teardown only.
+ * all down in dispose(). Every actor holds its own authenticated client, signed
+ * in with a real password — the service role creates the account and tears it
+ * down, and does nothing on an actor's behalf in between.
  */
 export class TestBed {
   readonly service: Client = newClient(resolveStack().serviceRoleKey);
   private users: TestUser[] = [];
   private groupIds: string[] = [];
 
+  /**
+   * Deliberately not signUp: that returns a session only while email
+   * confirmation is off, which would tie the whole suite to the product's
+   * email policy (PLA-71). Creating the account pre-confirmed and then signing
+   * in works either way. What is under test is unaffected — the trigger on
+   * auth.users fires the same on an admin insert, so the profile and handle
+   * are built exactly as a real signup builds them.
+   */
   async createUser(name?: string): Promise<TestUser> {
     const email = `it-${randomUUID()}@example.com`;
     const client = newClient(resolveStack().anonKey);
-    const { data, error } = await client.auth.signUp({
+    const { data, error } = await this.service.auth.admin.createUser({
       email,
       password: PASSWORD,
-      options: name ? { data: { display_name: name } } : undefined,
+      email_confirm: true,
+      user_metadata: name ? { display_name: name } : undefined,
     });
-    if (error || !data.user || !data.session) {
+    if (error || !data.user) {
       throw new Error(
-        `signUp failed for ${email}: ${error?.message ?? 'no session (are confirmations enabled?)'}`,
+        `admin.createUser failed for ${email}: ${error?.message ?? 'no user returned'}`,
+      );
+    }
+    const { data: signIn, error: signInError } = await client.auth.signInWithPassword({
+      email,
+      password: PASSWORD,
+    });
+    if (signInError || !signIn.session) {
+      throw new Error(
+        `sign-in failed for ${email}: ${signInError?.message ?? 'no session returned'}`,
       );
     }
     const user = { id: data.user.id, email, name: name ?? email.split('@')[0], client };
