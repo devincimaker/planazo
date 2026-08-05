@@ -217,7 +217,7 @@ describe('uploadPhotos', () => {
     primeSigner();
     mockUploadJpeg.mockResolvedValue(undefined);
 
-    const outcome = await uploadPhotos('plan-1', 'u1', [bigPhoto]);
+    const outcome = await uploadPhotos({ planId: 'plan-1', userId: 'u1', photos: [bigPhoto] });
 
     expect(outcome).toEqual({ added: 1, failed: 0 });
     const [values] = inserted;
@@ -225,11 +225,11 @@ describe('uploadPhotos', () => {
     expect(values.thumb_path).toBe(String(values.storage_path).replace(/\.jpg$/, '_thumb.jpg'));
 
     expect(mockUploadJpeg).toHaveBeenCalledTimes(2);
-    expect(mockUploadJpeg.mock.calls[0][1]).toBe(values.thumb_path);
+    expect(mockUploadJpeg.mock.calls[0][0].path).toBe(values.thumb_path);
     // The rendition is cut from the prepared 2048 image, not the original.
-    expect(mockUploadJpeg.mock.calls[0][2]).toBe('file:///pick/a.jpg#2048#512');
-    expect(mockUploadJpeg.mock.calls[1][1]).toBe(values.storage_path);
-    expect(mockUploadJpeg.mock.calls[1][2]).toBe('file:///pick/a.jpg#2048');
+    expect(mockUploadJpeg.mock.calls[0][0].uri).toBe('file:///pick/a.jpg#2048#512');
+    expect(mockUploadJpeg.mock.calls[1][0].path).toBe(values.storage_path);
+    expect(mockUploadJpeg.mock.calls[1][0].uri).toBe('file:///pick/a.jpg#2048');
 
     // Both scratch renditions are collected; the picked original is not ours.
     expect(mockDeleteAsync.mock.calls.map((c) => c[0]).sort()).toEqual([
@@ -243,7 +243,11 @@ describe('uploadPhotos', () => {
     primeSigner();
     mockUploadJpeg.mockResolvedValue(undefined);
 
-    await uploadPhotos('plan-1', 'u1', [{ uri: 'file:///pick/small.jpg', width: 400, height: 300 }]);
+    await uploadPhotos({
+      planId: 'plan-1',
+      userId: 'u1',
+      photos: [{ uri: 'file:///pick/small.jpg', width: 400, height: 300 }],
+    });
 
     expect(inserted[0].thumb_path).toBeNull();
     expect(mockUploadJpeg).toHaveBeenCalledTimes(1);
@@ -257,7 +261,7 @@ describe('uploadPhotos', () => {
       .mockResolvedValueOnce(undefined) // the rendition makes it up
       .mockRejectedValueOnce(new Error('network died'));
 
-    const outcome = await uploadPhotos('plan-1', 'u1', [bigPhoto]);
+    const outcome = await uploadPhotos({ planId: 'plan-1', userId: 'u1', photos: [bigPhoto] });
 
     expect(outcome).toEqual({ added: 0, failed: 1 });
     expect(deleteEq).toHaveBeenCalledWith('id', 'row-1');

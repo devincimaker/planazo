@@ -144,12 +144,13 @@ export interface UploadOutcome {
  * should stop having spent as little as possible, and eight concurrent
  * uploads on a phone tend to make each other time out.
  */
-export async function uploadPhotos(
-  planId: string,
-  userId: string,
-  photos: PickedImage[],
-  onProgress?: (done: number, total: number) => void,
-): Promise<UploadOutcome> {
+export async function uploadPhotos(opts: {
+  planId: string;
+  userId: string;
+  photos: PickedImage[];
+  onProgress?: (done: number, total: number) => void;
+}): Promise<UploadOutcome> {
+  const { planId, userId, photos, onProgress } = opts;
   let added = 0;
   let failed = 0;
 
@@ -201,10 +202,10 @@ export async function uploadPhotos(
       // null a thumb_path later), so on a connection that is going to die,
       // dying after 30KB beats dying after 500.
       if (thumb) {
-        await uploadJpeg(PHOTO_BUCKET, thumb.path, thumb.uri);
+        await uploadJpeg({ bucket: PHOTO_BUCKET, path: thumb.path, uri: thumb.uri });
         uploadedThumb = thumb.path;
       }
-      await uploadJpeg(PHOTO_BUCKET, path, prepared.uri);
+      await uploadJpeg({ bucket: PHOTO_BUCKET, path, uri: prepared.uri });
 
       added += 1;
       insertedId = null;
