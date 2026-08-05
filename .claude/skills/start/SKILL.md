@@ -68,6 +68,17 @@ full database decision and every guard refusal it can produce.
 5. Read `.env.worktree` and `apps/mobile/.env` (AGENTS.md requires this) and report the
    slot in one line: Metro port, simulator name, DB mode, and which database URL is live.
    Never assume main's.
+6. **Name the session after the work.** Several of these run at once, and a tab list of
+   identical titles is how you end up typing into the wrong worktree. There is no tool for
+   this, so end the setup narration with the line ready to paste:
+
+   ```
+   /rename pla-49 founder invite code
+   ```
+
+   Three to five words, lowercase, the issue id then what it is about. Take the words from
+   the issue's subject, not its slug: what the work *is*, short enough to survive a narrow
+   tab. Not `pla-49`, which says nothing at a glance, and not the whole title.
 
 ## Phase 4 — Simulator, only if Phase 2 said so
 
