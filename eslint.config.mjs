@@ -205,6 +205,24 @@ export default tseslint.config(
       // something the types already say, or worse, a stale claim from an old
       // shape that nobody removed.
       '@typescript-eslint/no-unnecessary-type-assertion': 'error',
+
+      // A promise handed to something expecting void is a rejection nobody
+      // will ever see. JSX attributes are carved out: `onPress={async ...}`
+      // is the standard React Native idiom, and the event system ignores the
+      // return value by contract, so the rule would only generate wrappers.
+      '@typescript-eslint/no-misused-promises': [
+        'error',
+        { checksVoidReturn: { attributes: false } },
+      ],
+
+      // Comparing an enum to a bare literal keeps compiling after the enum
+      // member is renamed; comparing to the member does not.
+      '@typescript-eslint/no-unsafe-enum-comparison': 'error',
+
+      // An async function with no await still returns a promise, so every
+      // caller pays the wrapper for nothing and the signature lies about
+      // there being asynchrony inside.
+      '@typescript-eslint/require-await': 'error',
     },
   },
 

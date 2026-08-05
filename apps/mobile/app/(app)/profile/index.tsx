@@ -76,25 +76,25 @@ export default function ProfileSheet() {
     onError: (error: Error) => Alert.alert('Error', error.message),
   });
 
+  const signOut = async () => {
+    if (await signOutOfAccount(user?.id, queryClient)) {
+      router.replace('/(auth)/login');
+      return;
+    }
+    // The credentials would not delete. Sending them to the login screen
+    // now would just sign them back in on the next launch (PLA-36).
+    Alert.alert(
+      "Couldn't sign out",
+      'Your account is still signed in on this device. Check your connection and try again.'
+    );
+  };
+
   const confirmSignOut = () => {
     Alert.alert('Sign out', 'You can sign back in any time.', [
       { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign out',
-        style: 'destructive',
-        onPress: async () => {
-          if (await signOutOfAccount(user?.id, queryClient)) {
-            router.replace('/(auth)/login');
-            return;
-          }
-          // The credentials would not delete. Sending them to the login screen
-          // now would just sign them back in on the next launch (PLA-36).
-          Alert.alert(
-            "Couldn't sign out",
-            'Your account is still signed in on this device. Check your connection and try again.'
-          );
-        },
-      },
+      // Not fire-and-forget in spirit: signOut owns its own failure dialog,
+      // so there is nothing left for this press handler to await.
+      { text: 'Sign out', style: 'destructive', onPress: () => void signOut() },
     ]);
   };
 

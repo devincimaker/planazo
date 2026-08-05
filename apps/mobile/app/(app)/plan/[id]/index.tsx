@@ -561,12 +561,15 @@ export default function PlanDetailScreen() {
   // that has already ended or been called off (PLA-31).
   const showMenu = () => {
     const rows: { label: string; action: () => void; destructive?: boolean }[] = [
-      { label: 'Copy invite link', action: copyLink },
+      // Fire-and-forget: writing to the clipboard has no failure mode worth a
+      // dialog, and the toast is the confirmation.
+      { label: 'Copy invite link', action: () => void copyLink() },
     ];
     if (plan.status === 'open' && !d.isPast && d.unanswered > 0) {
       rows.push({
         label: `Nudge the ${d.unanswered} who ${d.unanswered === 1 ? "hasn't" : "haven't"} answered`,
-        action: nudge,
+        // Fire-and-forget: the share sheet's outcome is the OS's business.
+        action: () => void nudge(),
       });
     }
     if (d.isHost && !d.isCancelled && !d.isPast) {
