@@ -1,6 +1,3 @@
-/* eslint-disable max-lines -- 1161 lines of code against a 400 cap.
-   Splitting this screen is tracked in PLA-58; the cap binds on everything
-   else from the day it went in (PLA-57). Remove this line with the split. */
 import { useMemo, useState } from 'react';
 import {
   View,
@@ -8,85 +5,42 @@ import {
   StyleSheet,
   Pressable,
   ActivityIndicator,
-  ActionSheetIOS,
   Alert,
-  Platform,
   RefreshControl,
   Share,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Animated, { FadeInDown, FadeOutUp, LinearTransition } from 'react-native-reanimated';
-import * as Clipboard from 'expo-clipboard';
-import {
-  canVoteOnPolls,
-  countAvailabilityByDate,
-  getYesCount,
-  isPlanFull,
-  isPlanPast,
-  planLastDate,
-  pollPeopleIn,
-  waitlistPosition,
-  type DateCount,
-} from '@planazo/shared';
+import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
+import { canVoteOnPolls, pollPeopleIn } from '@planazo/shared';
 import { PhotoAlbumCard } from '../../../../components/PhotoAlbumCard';
 import { PlanPolls } from '../../../../components/PlanPolls';
-import { spellCount } from '../../../../lib/words';
-import { supabase } from '../../../../lib/supabase';
-import { deleteOwnRsvp, offerWaitingList, waitingLabel } from '../../../../lib/rsvp';
-import { actionErrorCopy, errorCopy, isNotFoundError } from '../../../../lib/queryErrors';
+import { PlanTopBar } from '../../../../components/plan/PlanTopBar';
+import { PlanStatusCard } from '../../../../components/plan/PlanStatusCard';
+import { DateVoteList } from '../../../../components/plan/DateVoteList';
+import { PlanPeopleSections } from '../../../../components/plan/PlanPeopleSections';
+import { PlanDetailFooter } from '../../../../components/plan/PlanDetailFooter';
+import { fmtDay, fmtTime } from '../../../../lib/dates';
+import { errorCopy, isNotFoundError } from '../../../../lib/queryErrors';
 import { usePullToRefresh } from '../../../../lib/usePullToRefresh';
-import { MIN_TOUCH_TARGET } from '../../../../lib/a11y';
+import { usePlanDetail } from '../../../../lib/usePlanDetail';
+import { derivePlanDetail } from '../../../../lib/planDerived';
 import { useAuthStore } from '../../../../stores/authStore';
 import {
   ThemedText,
   Card,
   Badge,
-  Avatar,
-  AnswerFooter,
   Button,
-  ButtonRow,
-  SlotBar,
   ListRow,
   ErrorState,
   colorForName,
-  showToast,
 } from '../../../../components/ui';
-import { colors, fonts, radii, spacing } from '../../../../theme/tokens';
-
-const fmtDay = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-const fmtTime = (iso: string) =>
-  new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-
-// "Cancelled Thursday, 18:20" — weekday while it's fresh, full date after a week
-const fmtStamp = (iso: string) => {
-  const d = new Date(iso);
-  const days = (Date.now() - d.getTime()) / 86400000;
-  const day = days < 6.5 ? d.toLocaleDateString('en-GB', { weekday: 'long' }) : fmtDay(iso);
-  return `${day}, ${fmtTime(iso)}`;
-};
-
-// "Two short on the night" (19c) spells small counts out, capitalised because
-// it opens the sentence. The words themselves live in lib/words.ts.
-const countWord = (n: number) => {
-  const word = spellCount(n);
-  return word.charAt(0).toUpperCase() + word.slice(1);
-};
-
-// A failed write is never "Error: <raw postgres message>". actionErrorCopy
-// names the cases worth naming — a full plan above all (PLA-20).
-const alertActionError = (error: unknown) => {
-  const { title, body } = actionErrorCopy(error);
-  Alert.alert(title, body);
-};
+import { colors, spacing } from '../../../../theme/tokens';
 
 export default function PlanDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { user } = useAuthStore();
-  const queryClient = useQueryClient();
   // null = not editing dates; array = local picks being edited.
   //
   // Stamped with the plan they were made on. A deep link — a push tap, a shared
@@ -108,389 +62,40 @@ export default function PlanDetailScreen() {
   // actually is.
   const [footerHeight, setFooterHeight] = useState(0);
 
-  const { data: plan, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['plan', id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('plans')
-        .select(
-          '*, creator:profiles!plans_created_by_fkey(display_name), canceller:profiles!plans_cancelled_by_fkey(display_name), groups(id, name, color)'
-        )
-        .eq('id', id)
-        .single();
-      if (error) throw error;
-      return data as any;
-    },
-    enabled: !!id,
-  });
+  const {
+    plan,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    rsvps,
+    dateOptions,
+    availabilities,
+    membership,
+    memberIds,
+    answerRsvp,
+    clearRsvp,
+    sendDates,
+    declineAll,
+    lockPlan,
+    reopenPlan,
+    restorePlan,
+  } = usePlanDetail(id, { onDatesCommitted: () => setEditingPicks(null) });
   const { refreshing, onRefresh } = usePullToRefresh(refetch);
 
-  const { data: rsvps } = useQuery({
-    queryKey: ['plan-rsvps', id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('rsvps')
-        .select('*, profile:profiles(display_name)')
-        .eq('plan_id', id);
-      if (error) throw error;
-      return data as any[];
-    },
-    enabled: !!id,
-  });
-
-  const { data: dateOptions } = useQuery({
-    queryKey: ['plan-date-options', id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('plan_date_options')
-        .select('*')
-        .eq('plan_id', id)
-        .order('date', { ascending: true });
-      if (error) throw error;
-      return data as any[];
-    },
-    enabled: !!id && plan?.plan_type === 'flexible',
-  });
-
-  const { data: availabilities } = useQuery({
-    queryKey: ['plan-availabilities', id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('date_availability')
-        .select('*, profile:profiles(display_name)')
-        .eq('plan_id', id);
-      if (error) throw error;
-      return data as any[];
-    },
-    enabled: !!id && plan?.plan_type === 'flexible',
-  });
-
-  const { data: membership } = useQuery({
-    queryKey: ['plan-membership', plan?.group_id, user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('group_members')
-        .select('role')
-        .eq('group_id', plan!.group_id)
-        .eq('user_id', user!.id)
-        .single();
-      return data;
-    },
-    enabled: !!plan?.group_id && !!user,
-  });
-
-  // Everyone in the circle — the menu's nudge count and 19c's "never
-  // answered" line are both "members minus anyone who responded".
-  const { data: memberIds } = useQuery({
-    queryKey: ['plan-group-member-ids', plan?.group_id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('group_members')
-        .select('user_id')
-        .eq('group_id', plan!.group_id);
-      if (error) throw error;
-      return (data as { user_id: string }[]).map((m) => m.user_id);
-    },
-    enabled: !!plan?.group_id,
-  });
-
-  const invalidateAll = () => {
-    queryClient.invalidateQueries({ queryKey: ['plan', id] });
-    queryClient.invalidateQueries({ queryKey: ['plan-rsvps', id] });
-    queryClient.invalidateQueries({ queryKey: ['plan-availabilities', id] });
-    queryClient.invalidateQueries({ queryKey: ['home-plans'] });
-    if (plan?.group_id) {
-      queryClient.invalidateQueries({ queryKey: ['group-plans', plan.group_id] });
-    }
-  };
-
-  const answerRsvp = useMutation({
-    mutationFn: async (response: 'yes' | 'no' | 'pending') => {
-      const { error } = await supabase.from('rsvps').upsert(
-        { plan_id: id, user_id: user?.id, response },
-        { onConflict: 'plan_id,user_id' }
-      );
-      if (error) throw error;
-    },
-    onSuccess: invalidateAll,
-    // The plan can fill between the render and the tap. Rather than a dead end,
-    // offer the thing that now exists (PLA-37).
-    onError: (error) => offerWaitingList(error, () => answerRsvp.mutate('pending')),
-  });
-
-  const clearRsvp = useMutation({
-    mutationFn: () => deleteOwnRsvp(id, user!.id),
-    onSuccess: invalidateAll,
-    onError: alertActionError,
-  });
-
-  const sendDates = useMutation({
-    mutationFn: async (picked: string[]) => {
-      const mine = (availabilities ?? []).filter((a) => a.user_id === user?.id);
-      const removed = mine.filter((a) => !picked.includes(a.date_option_id)).map((a) => a.id);
-
-      if (picked.length > 0) {
-        const rows = picked.map((optionId) => ({
-          plan_id: id,
-          user_id: user?.id,
-          date_option_id: optionId,
-          available: true,
-        }));
-        const { error } = await supabase
-          .from('date_availability')
-          .upsert(rows, { onConflict: 'plan_id,user_id,date_option_id' });
-        if (error) throw error;
-      }
-      if (removed.length > 0) {
-        const { error } = await supabase.from('date_availability').delete().in('id', removed);
-        if (error) throw error;
-      }
-      // Sending dates supersedes a previous "no". Scoped and unconditional:
-      // the server decides from its own state, not the cached rsvps — the
-      // cache can lose the race with this screen turning interactive, and a
-      // reopened plan's seeded "yes" is a held seat that voting again must
-      // never surrender (only withdrawing may). Zero rows gone is the normal
-      // first-vote case, so no deleteOwnRsvp-style assertion here.
-      const { error: rsvpError } = await supabase
-        .from('rsvps')
-        .delete()
-        .eq('plan_id', id)
-        .eq('user_id', user?.id)
-        .eq('response', 'no');
-      if (rsvpError) throw rsvpError;
-    },
-    onSuccess: () => {
-      setEditingPicks(null);
-      invalidateAll();
-    },
-    onError: alertActionError,
-  });
-
-  const declineAll = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from('rsvps').upsert(
-        { plan_id: id, user_id: user?.id, response: 'no' },
-        { onConflict: 'plan_id,user_id' }
-      );
-      if (error) throw error;
-      const mine = (availabilities ?? []).filter((a) => a.user_id === user?.id);
-      if (mine.length > 0) {
-        const { error: availError } = await supabase
-          .from('date_availability')
-          .delete()
-          .in('id', mine.map((a) => a.id));
-        if (availError) throw availError;
-      }
-    },
-    onSuccess: () => {
-      setEditingPicks(null);
-      invalidateAll();
-    },
-    onError: alertActionError,
-  });
-
-  const lockPlan = useMutation({
-    mutationFn: async (dateOptionId: string) => {
-      const { data, error } = await supabase.rpc('lock_plan', {
-        p_plan_id: id,
-        p_date_option_id: dateOptionId,
-      });
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: invalidateAll,
-    onError: alertActionError,
-  });
-
-  const reopenPlan = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.rpc('reopen_plan', { p_plan_id: id });
-      if (error) throw error;
-    },
-    onSuccess: invalidateAll,
-    onError: alertActionError,
-  });
-
-  // Un-cancel (19b). The RPC restores locked/open, keeps everyone in, and
-  // tells them it's back on.
-  const restorePlan = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.rpc('restore_plan', { p_plan_id: id });
-      if (error) throw error;
-    },
-    onSuccess: invalidateAll,
-    onError: alertActionError,
-  });
-
-  const derived = useMemo(() => {
-    if (!plan) return null;
-    const isFlexible = plan.plan_type === 'flexible';
-    const isLocked = plan.status === 'locked';
-    const isCancelled = plan.status === 'cancelled';
-    const isOpenFlexible = isFlexible && plan.status === 'open';
-
-    const yesCount = getYesCount(rsvps);
-    const countByDate: Record<string, DateCount> = countAvailabilityByDate(
-      (dateOptions ?? []).map((o) => ({ id: o.id, date: o.date })),
-      (availabilities ?? []).map((a) => ({ date_option_id: a.date_option_id, user_id: a.user_id }))
-    );
-
-    // Leading option: most availability, ties to the earlier date
-    const lead = Object.entries(countByDate).sort(
-      (a, b) =>
-        b[1].count - a[1].count ||
-        new Date(a[1].date).getTime() - new Date(b[1].date).getTime()
-    )[0];
-    const leadCount = lead?.[1].count ?? 0;
-
-    const going = isOpenFlexible ? leadCount : yesCount;
-    const confirmed = !isCancelled && (isLocked || going >= plan.min_people);
-    const gap = plan.min_people - going;
-
-    // Endings (19a–19c): past = the end of the plan's last possible day has
-    // gone by. Expired ("didn't happen") = past without reaching the minimum.
-    // A past plan that reached it simply happened — detail stays as-is (MVP).
-    const optionDates = (dateOptions ?? []).map((o) => o.date);
-    const isPast = isPlanPast(plan, optionDates);
-    const isExpired = isPast && !isCancelled && !confirmed;
-    const isEnded = isCancelled || isExpired;
-    const lastDate = planLastDate(plan, optionDates);
-
-    let headline: string;
-    if (isCancelled) headline = 'Called off';
-    else if (isExpired) headline = `${countWord(gap)} short on the night`;
-    else if (confirmed) headline = "It's on";
-    else if (isOpenFlexible && lead && leadCount > 0)
-      headline = `${gap} more on ${fmtDay(lead[1].date)}`;
-    else headline = `${gap} more and it's on`;
-
-    // Room is counted off `going`, the very number rendered beside it — NOT
-    // off the yes-RSVPs the cap is actually enforced on. On an open flexible
-    // plan `going` is availability on the leading date, so mixing the two
-    // populations reads as a contradiction: "4 in · room for 6 more" on a cap
-    // of 6, because nobody has a yes yet.
-    //
-    // "room for 0 more" was the old wording once a capped plan filled up —
-    // technically true, and a strange way to say the door is shut (PLA-20).
-    const room = plan.max_people ? Math.max(plan.max_people - going, 0) : null;
-    const capLine = isExpired
-      ? 'The date passed before it reached its minimum'
-      : plan.max_people
-        ? confirmed
-          ? room === 0
-            ? `${going} in · that's everyone`
-            : `${going} in · room for ${room} more`
-          : `Happens with ${plan.min_people} · caps at ${plan.max_people}`
-        : `Happens with ${plan.min_people}`;
-
-    const myAvail = (availabilities ?? []).filter((a) => a.user_id === user?.id);
-    const userRsvp = (rsvps ?? []).find((r) => r.user_id === user?.id);
-
-    const goingPeople: { id: string; name: string }[] = [];
-    const seen = new Set<string>();
-    const pushPerson = (uid: string, name: string) => {
-      if (uid === user?.id || seen.has(uid)) return;
-      seen.add(uid);
-      goingPeople.push({ id: uid, name });
-    };
-    if (isOpenFlexible) {
-      (availabilities ?? []).forEach((a) => pushPerson(a.user_id, a.profile?.display_name ?? '?'));
-    } else {
-      (rsvps ?? [])
-        .filter((r) => r.response === 'yes')
-        .forEach((r) => pushPerson(r.user_id, r.profile?.display_name ?? '?'));
-    }
-    const youIn = isOpenFlexible ? myAvail.length > 0 : userRsvp?.response === 'yes';
-
-    const outCount = (rsvps ?? []).filter((r) => r.response === 'no').length;
-
-    // A confirmed no is a name, not just a number (PLA-29). Built exactly like
-    // goingPeople so the two sections read the same way: you are pulled out
-    // into your own chip, everyone else keeps the order the rows came in.
-    // Its own `seen` set — a person cannot hold a yes and a no at once, but
-    // sharing goingPeople's would silently swallow anyone who did.
-    const notGoingPeople: { id: string; name: string }[] = [];
-    const seenOut = new Set<string>();
-    (rsvps ?? [])
-      .filter((r) => r.response === 'no')
-      .forEach((r) => {
-        if (r.user_id === user?.id || seenOut.has(r.user_id)) return;
-        seenOut.add(r.user_id);
-        notGoingPeople.push({ id: r.user_id, name: r.profile?.display_name ?? '?' });
-      });
-    const youOut = userRsvp?.response === 'no';
-
-    // Members who never engaged at all — the nudge target (20a) and the
-    // "4 never answered" line on 19c.
-    const answeredIds = new Set<string>();
-    (rsvps ?? []).forEach((r) => {
-      if (r.response) answeredIds.add(r.user_id);
-    });
-    (availabilities ?? []).forEach((a) => answeredIds.add(a.user_id));
-    const unanswered = (memberIds ?? []).filter((uid) => !answeredIds.has(uid)).length;
-
-    const isHost = plan.created_by === user?.id || membership?.role === 'admin';
-    const viableLead = lead && leadCount >= plan.min_people ? { id: lead[0], ...lead[1] } : null;
-
-    // Every place taken (PLA-20). Only meaningful where a yes is what's being
-    // asked for — on an open flexible plan you're voting on dates, and the
-    // seats aren't handed out until the lock.
-    const isFull = !isOpenFlexible && isPlanFull({ max_people: plan.max_people, rsvps });
-
-    // Only you see your own place in the queue (PLA-37). Counted from the rows
-    // already fetched, so it costs nothing.
-    const waitPosition = waitlistPosition(rsvps, user?.id);
-
-    // PLA-32. The album opens when the night does and never closes again.
-    // Mirrors can_add_plan_photo() in 20260803000001: the start is the locked
-    // date if a flexible plan has one, otherwise the fixed date. A flexible
-    // plan nobody has locked has neither, and no album, because the night does
-    // not exist yet.
-    const albumStart = plan.locked_date ?? plan.event_date;
-    // A snapshot on purpose. The album opening is a once-per-plan threshold
-    // hours wide, not something anyone watches tick over, so reading the clock
-    // here costs a stale render nobody can perceive and saves a timer.
-    // eslint-disable-next-line react-hooks/purity
-    const albumOpen = !!albumStart && new Date(albumStart).getTime() <= Date.now();
-
-    // Looking is for the group, adding is for the people who were there. The
-    // database enforces this; here it only decides whether to draw the button,
-    // and a yes is a yes rather than availability on a flexible plan.
-    const canAddPhotos =
-      albumOpen && !isCancelled && (isHost || userRsvp?.response === 'yes');
-
-    return {
-      albumOpen,
-      canAddPhotos,
-      waitPosition,
-      isFlexible,
-      isLocked,
-      isCancelled,
-      isOpenFlexible,
-      confirmed,
-      headline,
-      capLine,
-      isFull,
-      going,
-      yesCount,
-      countByDate,
-      leadId: lead?.[0] ?? null,
-      myAvail,
-      userRsvp,
-      goingPeople,
-      youIn,
-      outCount,
-      notGoingPeople,
-      youOut,
-      unanswered,
-      isHost,
-      viableLead,
-      isPast,
-      isExpired,
-      isEnded,
-      lastDate,
-    };
-  }, [plan, rsvps, dateOptions, availabilities, membership, memberIds, user?.id]);
+  const derived = useMemo(
+    () =>
+      derivePlanDetail({
+        plan,
+        rsvps,
+        dateOptions,
+        availabilities,
+        membership,
+        memberIds,
+        userId: user?.id,
+      }),
+    [plan, rsvps, dateOptions, availabilities, membership, memberIds, user?.id]
+  );
 
   const goBack = () =>
     router.canGoBack() ? router.back() : router.replace('/(app)/(tabs)');
@@ -537,11 +142,11 @@ export default function PlanDetailScreen() {
   // on "You can't make it" — picks that could never be sent (PLA-17). Send
   // commits the picks and clears the "no" (sendDates); leaving keeps it.
   const editing =
-    d.isOpenFlexible && (activePicks !== null || (d.myAvail.length === 0 && !d.userRsvp));
-  const picked = activePicks ?? d.myAvail.map((a) => a.date_option_id);
+    d.isOpenFlexible && (activePicks !== null || (d.myPickIds.length === 0 && !d.userRsvp));
+  const picked = activePicks ?? d.myPickIds;
 
   const togglePick = (optionId: string) => {
-    const base = activePicks ?? d.myAvail.map((a) => a.date_option_id);
+    const base = activePicks ?? d.myPickIds;
     setEditingPicks({
       planId: id,
       picks: base.includes(optionId) ? base.filter((x) => x !== optionId) : [...base, optionId],
@@ -550,57 +155,6 @@ export default function PlanDetailScreen() {
 
   const nudge = () =>
     Share.share({ message: `"${plan.title}" needs answers on Planazo: planazo://plan/${plan.id}` });
-
-  const copyLink = async () => {
-    await Clipboard.setStringAsync(`planazo://plan/${plan.id}`);
-    showToast('Link copied');
-  };
-
-  // 20a: the host menu. Guests get it minus the two host rows — editing and
-  // calling it off share one guard, because both are meaningless on a plan
-  // that has already ended or been called off (PLA-31).
-  const showMenu = () => {
-    const rows: { label: string; action: () => void; destructive?: boolean }[] = [
-      { label: 'Copy invite link', action: copyLink },
-    ];
-    if (plan.status === 'open' && !d.isPast && d.unanswered > 0) {
-      rows.push({
-        label: `Nudge the ${d.unanswered} who ${d.unanswered === 1 ? "hasn't" : "haven't"} answered`,
-        action: nudge,
-      });
-    }
-    if (d.isHost && !d.isCancelled && !d.isPast) {
-      rows.push({
-        label: 'Edit the details',
-        action: () => router.push(`/plan/${id}/edit`),
-      });
-      rows.push({
-        label: 'Call it off',
-        action: () => router.push(`/plan/${id}/cancel`),
-        destructive: true,
-      });
-    }
-    if (Platform.OS === 'ios') {
-      const destructive = rows.findIndex((r) => r.destructive);
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: [...rows.map((r) => r.label), 'Cancel'],
-          cancelButtonIndex: rows.length,
-          destructiveButtonIndex: destructive >= 0 ? destructive : undefined,
-        },
-        (i) => rows[i]?.action()
-      );
-    } else {
-      Alert.alert('Plan options', undefined, [
-        ...rows.map((r) => ({
-          text: r.label,
-          style: r.destructive ? ('destructive' as const) : undefined,
-          onPress: r.action,
-        })),
-        { text: 'Close', style: 'cancel' as const },
-      ]);
-    }
-  };
 
   const tryAgain = () =>
     router.push({
@@ -622,157 +176,9 @@ export default function PlanDetailScreen() {
         ? { label: 'Confirmed', tone: 'confirmed' as const }
         : { label: 'Open', tone: 'open' as const };
 
-  const renderFooter = () => {
-    // 19b: reopen lives on the host's cancelled screen only, and only while
-    // the date is still ahead. Everyone else gets no footer at all — the
-    // screen is purely a record.
-    if (d.isCancelled) {
-      if (d.isHost && !d.isPast) {
-        return (
-          <View style={styles.footerEnded}>
-            <Button
-              label="Reopen this plan"
-              variant="accentOutline"
-              onPress={() => restorePlan.mutate()}
-              testID="restore"
-            />
-            <ThemedText variant="caption" color={colors.textMuted} style={styles.footerNote}>
-              Everyone who was in stays in. They just get told it's back on. Only you see this
-              {d.lastDate ? `, and only until ${fmtDay(d.lastDate)}` : ''}.
-            </ThemedText>
-          </View>
-        );
-      }
-      return null;
-    }
-
-    // 19c: anyone in the circle can try again — a copy, not a handover.
-    if (d.isExpired) {
-      return (
-        <View style={styles.footerEnded}>
-          <Button
-            label="Try again with a new date"
-            variant="accentOutline"
-            onPress={tryAgain}
-            testID="try-again"
-          />
-          <ThemedText variant="caption" color={colors.textMuted} style={styles.footerNote}>
-            Opens a fresh plan with the same title, place and minimum.
-          </ThemedText>
-        </View>
-      );
-    }
-
-    if (!d.isOpenFlexible) {
-      // Fixed plans and locked flexible plans: a plain yes/no
-      if (d.userRsvp?.response === 'pending') {
-        return (
-          <View style={styles.footerWaiting}>
-            <AnswerFooter
-              answered="pending"
-              answerLabel={waitingLabel(d.waitPosition)}
-              onChange={() => clearRsvp.mutate()}
-            />
-            <ThemedText variant="caption" color={colors.textMuted} style={styles.footerNote}>
-              If a spot opens, it's yours. We'll tell you.
-            </ThemedText>
-          </View>
-        );
-      }
-      if (d.userRsvp?.response === 'yes' || d.userRsvp?.response === 'no') {
-        return (
-          <AnswerFooter answered={d.userRsvp.response} onChange={() => clearRsvp.mutate()} />
-        );
-      }
-      return (
-        <AnswerFooter
-          full={d.isFull}
-          onYes={() => answerRsvp.mutate('yes')}
-          onNo={() => answerRsvp.mutate('no')}
-          onWait={() => answerRsvp.mutate('pending')}
-        />
-      );
-    }
-
-    // Open flexible: date voting
-    if (!editing) {
-      if (d.userRsvp?.response === 'no') {
-        return <AnswerFooter answered="no" onChange={() => clearRsvp.mutate()} />;
-      }
-      return (
-        <AnswerFooter
-          answered="yes"
-          answerLabel={`You sent ${d.myAvail.length} date${d.myAvail.length === 1 ? '' : 's'}`}
-          onChange={() =>
-            setEditingPicks({ planId: id, picks: d.myAvail.map((a) => a.date_option_id) })
-          }
-        />
-      );
-    }
-
-    return (
-      <ButtonRow
-        secondary={{
-          label: 'None of them',
-          variant: 'secondary',
-          onPress: () => declineAll.mutate(),
-          testID: 'decline-all',
-        }}
-        primary={
-          picked.length === 0
-            ? {
-                label: 'Tap the dates you can do',
-                variant: 'secondary',
-                disabled: true,
-                haptic: false,
-              }
-            : {
-                label:
-                  d.myAvail.length > 0
-                    ? 'Update your dates'
-                    : `Send ${picked.length} date${picked.length === 1 ? '' : 's'}`,
-                onPress: () => sendDates.mutate(picked),
-              }
-        }
-      />
-    );
-  };
-
-  // 19a: the footer bar is removed, not emptied — no bar at all when there
-  // is nothing to press.
-  const footerContent = renderFooter();
-
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
-      <View style={styles.topBar}>
-        {/* Deep links (push, QA) mount this as the first screen — fall back
-            to where the label points */}
-        <Pressable
-          onPress={() =>
-            router.canGoBack()
-              ? router.back()
-              : router.replace(plan.group_id ? `/(app)/group/${plan.group_id}` : '/(app)/(tabs)')
-          }
-          accessibilityRole="button"
-          testID="back"
-          style={styles.navAction}
-        >
-          <ThemedText variant="bodyStrong" color={colors.accent}>
-            ‹ {groupName}
-          </ThemedText>
-        </Pressable>
-        <Pressable
-          onPress={showMenu}
-          accessibilityRole="button"
-          accessibilityLabel="Plan options"
-          testID="plan-menu"
-          style={[styles.navAction, styles.navActionEnd]}
-        >
-          <ThemedText variant="bodyStrong" color={colors.textMuted} style={styles.dots}>
-            ···
-          </ThemedText>
-        </Pressable>
-      </View>
+      <PlanTopBar planId={plan.id} groupId={plan.group_id} d={d} groupName={groupName} onNudge={nudge} />
 
       <ScrollView
         style={styles.scroll}
@@ -808,129 +214,17 @@ export default function PlanDetailScreen() {
           ) : null}
         </View>
 
-        {d.isCancelled ? (
-          // 19a/19b: the count is gone — a flat stone card carries the two
-          // facts that matter: it's off, and why.
-          <Card style={styles.endedCard}>
-            <View style={styles.endedCardInner}>
-              <ThemedText variant="statusHeadline" color={colors.textPrimary}>
-                {plan.cancelled_by === user?.id
-                  ? 'You called this off'
-                  : `${plan.canceller?.display_name ?? plan.creator?.display_name ?? 'The host'} called this off`}
-              </ThemedText>
-              {plan.cancel_reason ? (
-                <ThemedText variant="body" color={colors.textSecondary}>
-                  “{plan.cancel_reason}”
-                </ThemedText>
-              ) : null}
-              {plan.cancelled_at ? (
-                <ThemedText variant="caption" color={colors.textMuted} style={styles.stamp}>
-                  {plan.cancelled_by === user?.id
-                    ? fmtStamp(plan.cancelled_at)
-                    : `Cancelled ${fmtStamp(plan.cancelled_at)}`}
-                </ThemedText>
-              ) : null}
-            </View>
-          </Card>
-        ) : d.isExpired ? (
-          // 19c: the slot bar stays, frozen — here the count is the explanation.
-          <Card style={styles.endedCard}>
-            <View style={styles.statusTop}>
-              <ThemedText variant="statusHeadline" color={colors.textPrimary} style={styles.headline}>
-                {d.headline}
-              </ThemedText>
-              <ThemedText variant="caption" color={colors.textMuted}>
-                {d.going} of {plan.min_people}
-              </ThemedText>
-            </View>
-            <View style={styles.slotWrap}>
-              <SlotBar going={d.going} min={plan.min_people} cap={plan.max_people} frozen />
-            </View>
-            <ThemedText variant="caption" color={colors.textMuted}>
-              {d.capLine}
-            </ThemedText>
-          </Card>
-        ) : (
-          <Card>
-            <View style={styles.statusTop}>
-              <ThemedText
-                variant="statusHeadline"
-                color={d.confirmed ? colors.confirmed : colors.accent}
-                style={styles.headline}
-              >
-                {d.headline}
-              </ThemedText>
-              <ThemedText variant="caption" color={colors.textFaint}>
-                {d.going} in
-              </ThemedText>
-            </View>
-            <View style={styles.slotWrap}>
-              <SlotBar going={d.going} min={plan.min_people} cap={plan.max_people} />
-            </View>
-            <ThemedText variant="caption" color={d.confirmed ? colors.confirmed : colors.textMuted}>
-              {d.capLine}
-            </ThemedText>
-          </Card>
-        )}
+        <PlanStatusCard plan={plan} d={d} />
 
         {d.isOpenFlexible && !d.isPast ? (
-          <Animated.View
-            entering={FadeInDown}
-            exiting={FadeOutUp}
-            layout={LinearTransition}
-            style={styles.section}
-          >
-            <ThemedText variant="sectionLabel">Which days work</ThemedText>
-            {(dateOptions ?? []).map((opt) => {
-              const count = d.countByDate[opt.id]?.count ?? 0;
-              const mine = picked.includes(opt.id);
-              const isLead = opt.id === d.leadId && count > 0;
-              const ratio = Math.min(count / plan.min_people, 1);
-              return (
-                <Pressable
-                  key={opt.id}
-                  onPress={() => togglePick(opt.id)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: mine }}
-                  testID={`vote-${opt.id}`}
-                  style={[styles.dateCard, mine && styles.dateCardMine]}
-                >
-                  <View style={styles.dateTop}>
-                    <View style={styles.dateLabelRow}>
-                      <ThemedText
-                        variant="bodyStrong"
-                        color={mine ? colors.accentPressed : colors.textPrimary}
-                        style={styles.dateLabel}
-                      >
-                        {fmtDay(opt.date)}
-                      </ThemedText>
-                      {isLead ? <Badge label="Leading" tone="muted" uppercase /> : null}
-                    </View>
-                    <View style={styles.dateMetaRow}>
-                      <ThemedText variant="caption" color={mine ? colors.accentPressed : colors.textMuted}>
-                        {count} free
-                      </ThemedText>
-                      <ThemedText variant="bodyStrong" color={colors.accent} style={styles.mark}>
-                        {mine ? '✓' : ''}
-                      </ThemedText>
-                    </View>
-                  </View>
-                  <View style={styles.track}>
-                    <View
-                      style={[
-                        styles.trackFill,
-                        {
-                          width: `${Math.round(ratio * 100)}%`,
-                          backgroundColor:
-                            count >= plan.min_people ? colors.confirmed : colors.accent,
-                        },
-                      ]}
-                    />
-                  </View>
-                </Pressable>
-              );
-            })}
-          </Animated.View>
+          <DateVoteList
+            dateOptions={dateOptions}
+            countByDate={d.countByDate}
+            leadId={d.leadId}
+            picked={picked}
+            minPeople={plan.min_people}
+            onToggle={togglePick}
+          />
         ) : null}
 
         {/* The plan's polls (PLA-47). Below the date vote on purpose: when is
@@ -997,87 +291,7 @@ export default function PlanDetailScreen() {
           </Card>
         </Animated.View>
 
-        <View style={styles.section}>
-          <ThemedText variant="sectionLabel">
-            {d.isCancelled ? 'Was going' : d.isExpired ? 'Were in' : d.isOpenFlexible ? 'In the mix' : 'Going'}
-          </ThemedText>
-          <View style={styles.people}>
-            {d.youIn ? (
-              <View style={[styles.person, d.isEnded ? styles.personEnded : styles.personYou]}>
-                <Avatar name="You" dark size={26} />
-                <ThemedText
-                  variant="bodyStrong"
-                  color={d.isEnded ? colors.textSecondary : colors.accentPressed}
-                >
-                  You
-                </ThemedText>
-              </View>
-            ) : null}
-            {d.goingPeople.map((p) => (
-              <View key={p.id} style={[styles.person, d.isEnded && styles.personEnded]}>
-                <Avatar name={p.name} size={26} />
-                <ThemedText
-                  variant="bodyStrong"
-                  color={d.isEnded ? colors.textSecondary : colors.textPrimary}
-                >
-                  {p.name}
-                </ThemedText>
-              </View>
-            ))}
-          </View>
-          {/* An ended plan keeps its one summary line. Naming the declines
-              there would be a second sunken chip row under a sunken going
-              row, which is two records competing where the screen only owes
-              you a fact. A called-off plan stays silent about them entirely. */}
-          {d.isExpired && (d.unanswered > 0 || d.outCount > 0) ? (
-            <ThemedText variant="caption" color={colors.textMuted}>
-              {[
-                d.unanswered > 0 ? `${d.unanswered} never answered` : null,
-                d.outCount > 0 ? `${d.outCount} couldn't make it` : null,
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-            </ThemedText>
-          ) : null}
-        </View>
-
-        {/* PLA-29: who said no, named. Its own section so it never competes
-            with the going list, and muted throughout so the weight matches
-            what it means. Laid out live, so someone changing their mind while
-            you are looking moves between the two lists. */}
-        {!d.isEnded && (d.youOut || d.notGoingPeople.length > 0) ? (
-          <Animated.View
-            layout={LinearTransition}
-            style={styles.section}
-            testID="declined-section"
-          >
-            {/* Shares its wording with the footer's decline button, which is
-                the point: the heading names the group that button puts you in. */}
-            <ThemedText variant="sectionLabel">Can't make it</ThemedText>
-            <View style={styles.people}>
-              {d.youOut ? (
-                <View style={[styles.person, styles.personOut]}>
-                  <View style={styles.avatarOut}>
-                    <Avatar name="You" dark size={26} />
-                  </View>
-                  <ThemedText variant="bodyStrong" color={colors.textMuted}>
-                    You
-                  </ThemedText>
-                </View>
-              ) : null}
-              {d.notGoingPeople.map((p) => (
-                <View key={p.id} style={[styles.person, styles.personOut]}>
-                  <View style={styles.avatarOut}>
-                    <Avatar name={p.name} size={26} />
-                  </View>
-                  <ThemedText variant="bodyStrong" color={colors.textMuted}>
-                    {p.name}
-                  </ThemedText>
-                </View>
-              ))}
-            </View>
-          </Animated.View>
-        ) : null}
+        <PlanPeopleSections d={d} />
 
         {d.isHost && d.isOpenFlexible && d.viableLead ? (
           <Button
@@ -1151,15 +365,19 @@ export default function PlanDetailScreen() {
         </Pressable>
       </ScrollView>
 
-      {footerContent ? (
-        <View
-          style={styles.footer}
-          onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
-          testID="plan-footer"
-        >
-          {footerContent}
-        </View>
-      ) : null}
+      <PlanDetailFooter
+        d={d}
+        editing={editing}
+        picked={picked}
+        onAnswer={(response) => answerRsvp.mutate(response)}
+        onClearRsvp={() => clearRsvp.mutate()}
+        onStartEdit={() => setEditingPicks({ planId: id, picks: d.myPickIds })}
+        onSendDates={() => sendDates.mutate(picked)}
+        onDeclineAll={() => declineAll.mutate()}
+        onRestore={() => restorePlan.mutate()}
+        onTryAgain={tryAgain}
+        onHeight={setFooterHeight}
+      />
     </SafeAreaView>
   );
 }
@@ -1183,30 +401,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.background,
   },
-  topBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-  },
-  // This bar was already exactly 44 tall (12 + 20 + 12) while the two things
-  // in it were 20 — the clearest case in the app of a target that should have
-  // filled its bar and didn't. Moving the padding onto the buttons changes
-  // nothing visually and makes the whole bar tappable (PLA-40).
-  navAction: {
-    justifyContent: 'center',
-    minHeight: MIN_TOUCH_TARGET,
-  },
-  // "···" is about 30 wide, so the end action needs the width floor too; it
-  // grows leftwards and the glyph stays flush.
-  navActionEnd: {
-    alignItems: 'flex-end',
-    minWidth: MIN_TOUCH_TARGET,
-  },
-  dots: {
-    letterSpacing: 2,
-    fontSize: 19,
-  },
   scroll: {
     flex: 1,
   },
@@ -1229,136 +423,7 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     marginLeft: spacing.xs,
   },
-  statusTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-    gap: spacing.md,
-  },
-  headline: {
-    flexShrink: 1,
-  },
-  slotWrap: {
-    marginVertical: spacing.md,
-  },
-  section: {
-    gap: spacing.sm,
-  },
-  dateCard: {
-    backgroundColor: colors.surface,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    borderRadius: 20,
-    padding: spacing.lg,
-    gap: 9,
-  },
-  dateCardMine: {
-    backgroundColor: colors.accentSoft,
-    borderColor: colors.accent,
-  },
-  dateTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  dateLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  dateLabel: {
-    fontSize: 16,
-  },
-  dateMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  mark: {
-    width: 14,
-    textAlign: 'center',
-  },
-  track: {
-    height: 6,
-    borderRadius: radii.pill,
-    backgroundColor: colors.divider,
-    overflow: 'hidden',
-  },
-  trackFill: {
-    height: 6,
-    borderRadius: radii.pill,
-  },
-  people: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  person: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingVertical: 7,
-    paddingLeft: 7,
-    paddingRight: 13,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1.5,
-    borderColor: colors.borderStrong,
-  },
-  personYou: {
-    backgroundColor: colors.accentSoft,
-    borderColor: colors.accent,
-  },
-  personEnded: {
-    backgroundColor: colors.surfaceSunken,
-    borderColor: colors.endedBorder,
-  },
-  // A no is the same pill with the air let out: sunken fill, the softer of the
-  // two borders, and the name at muted rather than primary (PLA-29).
-  personOut: {
-    backgroundColor: colors.surfaceSunken,
-    borderColor: colors.border,
-  },
-  // The face keeps its colour — it is how you recognise the person — but sits
-  // back so the going list still wins the row.
-  avatarOut: {
-    opacity: 0.75,
-  },
-  endedCard: {
-    backgroundColor: colors.endedCard,
-    borderColor: colors.endedBorder,
-  },
-  endedCardInner: {
-    gap: spacing.sm,
-  },
-  stamp: {
-    paddingTop: spacing.xxs,
-  },
   endedDetails: {
     opacity: 0.7,
-  },
-  footerEnded: {
-    gap: spacing.sm + 1,
-  },
-  footerWaiting: {
-    gap: spacing.sm + 1,
-  },
-  footerNote: {
-    textAlign: 'center',
-    fontFamily: fonts.body,
-    lineHeight: 18,
-  },
-  footer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: colors.tabBarBackground,
-    borderTopWidth: 1,
-    borderTopColor: colors.tabBarBorder,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
-    paddingBottom: 30,
   },
 });
