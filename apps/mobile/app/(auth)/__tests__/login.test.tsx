@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react-native';
 import LoginScreen from '../login';
 import { supabase } from '../../../lib/supabase';
 
@@ -90,11 +90,13 @@ describe('LoginScreen', () => {
   });
 
   /**
-   * Dynamic Type guards. RNTL cannot lay anything out, so these assert the two
-   * style decisions that broke at Accessibility XXXL rather than the pixels:
-   * a `flex: 1` body clamped to the ScrollView height, so overflowing content
-   * was clipped instead of scrollable and the sign-in button sat below the
-   * fold; and a non-wrapping footer row ran off the side of the screen.
+   * Layout guards. RNTL cannot lay anything out, so these assert the style and
+   * structure decisions behind two bugs rather than the pixels: a `flex: 1`
+   * body clamped to the ScrollView height, so overflowing content was clipped
+   * instead of scrollable at Accessibility XXXL; a non-wrapping footer row that
+   * ran off the side of the screen at those sizes; and the footer living inside
+   * the scrolling content, where a raised keyboard pushed it below the fold and
+   * first-timers never found the way to sign up (PLA-69).
    */
   it('lets the form grow past the viewport rather than clamping it', async () => {
     await render(<LoginScreen />);
@@ -109,11 +111,24 @@ describe('LoginScreen', () => {
 
   it('wraps the footer instead of running it off the screen', async () => {
     await render(<LoginScreen />);
-    const footer = StyleSheet.flatten(screen.getByTestId('login-footer').props.style);
+    const row = StyleSheet.flatten(screen.getByTestId('login-footer-row').props.style);
 
-    expect(footer.flexWrap).toBe('wrap');
-    // Pins the footer to the bottom when there is room, yields when there is not.
-    expect(footer.marginTop).toBe('auto');
+    expect(row.flexWrap).toBe('wrap');
+  });
+
+  it('keeps both ways out of the screen clear of the keyboard', async () => {
+    await render(<LoginScreen />);
+
+    // Anything inside the ScrollView can be pushed below the fold once the
+    // keyboard shrinks the viewport. Sign in and the signup link must not be.
+    const scroll = within(screen.getByTestId('login-scroll'));
+    expect(scroll.queryByTestId('login-footer')).toBeNull();
+    expect(scroll.queryByTestId('sign-in')).toBeNull();
+    expect(scroll.queryByTestId('signup-link')).toBeNull();
+
+    const footer = within(screen.getByTestId('login-footer'));
+    expect(footer.getByTestId('sign-in')).toBeTruthy();
+    expect(footer.getByTestId('signup-link')).toBeTruthy();
   });
 
   it('masks the password until the reveal toggle is pressed', async () => {
