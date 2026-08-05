@@ -30,7 +30,9 @@ import { colors } from '../theme/tokens';
 // Before anything else in the app can run and throw.
 initSentry();
 
-SplashScreen.preventAutoHideAsync();
+// Fire-and-forget, as in Expo's own examples: it rejects only when the splash
+// is already gone, which is the outcome being asked for anyway.
+void SplashScreen.preventAutoHideAsync();
 
 // react-query's default focus tracking is web-only, so returning to the app
 // never kicked a stale or stuck query (PLA-15). AppState is the RN equivalent.
@@ -323,7 +325,8 @@ function RootLayout() {
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync();
+      // Same contract as preventAutoHideAsync above: already-hidden is fine.
+      void SplashScreen.hideAsync();
     }
   }, [fontsLoaded, fontError]);
 

@@ -17,7 +17,9 @@ import { useAuthStore } from '../stores/authStore';
 export function useFeedAnswers({ onDatesSent }: { onDatesSent: (planId: string) => void }) {
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['home-plans'] });
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['home-plans'] });
+  };
 
   const answerFixed = useMutation({
     mutationFn: async ({ planId, response }: { planId: string; response: RsvpResponse }) => {

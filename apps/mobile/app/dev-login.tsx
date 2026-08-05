@@ -18,7 +18,9 @@ export default function DevLogin() {
     if (!__DEV__ || !email || !password) return;
     let cancelled = false;
 
-    (async () => {
+    // Failures land in the on-screen status; supabase-js returns errors
+    // rather than throwing, so there is no rejection path left to catch.
+    void (async () => {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (cancelled) return;
       if (error || !data.session) {

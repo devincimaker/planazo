@@ -223,6 +223,27 @@ export default tseslint.config(
       // caller pays the wrapper for nothing and the signature lies about
       // there being asynchrony inside.
       '@typescript-eslint/require-await': 'error',
+
+      // A dropped promise is a dropped failure. `invalidateQueries` is the
+      // one call exempted by name: its promise resolves when the refetches
+      // land, a rejection there surfaces through each query's own error UI,
+      // and this codebase never has a reason to wait for it. Everything else
+      // says what it does with the failure, with `void` reserved for calls
+      // whose comment can say why the failure does not matter.
+      '@typescript-eslint/no-floating-promises': [
+        'error',
+        {
+          allowForKnownSafeCalls: [
+            {
+              // Declared in query-core, which is where the specifier has to
+              // point even though the app imports @tanstack/react-query.
+              from: 'package',
+              package: '@tanstack/query-core',
+              name: 'invalidateQueries',
+            },
+          ],
+        },
+      ],
     },
   },
 
