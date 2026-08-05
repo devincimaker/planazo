@@ -200,7 +200,12 @@ export default tseslint.config(
         tsconfigRootDir: import.meta.dirname,
       },
     },
-    rules: {},
+    rules: {
+      // An `as X` the compiler can prove is a no-op is a reader being told
+      // something the types already say, or worse, a stale claim from an old
+      // shape that nobody removed.
+      '@typescript-eslint/no-unnecessary-type-assertion': 'error',
+    },
   },
 
   {

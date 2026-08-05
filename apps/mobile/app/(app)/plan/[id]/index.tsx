@@ -119,7 +119,7 @@ export default function PlanDetailScreen() {
         .eq('id', id)
         .single();
       if (error) throw error;
-      return data as any;
+      return data;
     },
     enabled: !!id,
   });
@@ -133,7 +133,7 @@ export default function PlanDetailScreen() {
         .select('*, profile:profiles(display_name)')
         .eq('plan_id', id);
       if (error) throw error;
-      return data as any[];
+      return data;
     },
     enabled: !!id,
   });
@@ -147,7 +147,7 @@ export default function PlanDetailScreen() {
         .eq('plan_id', id)
         .order('date', { ascending: true });
       if (error) throw error;
-      return data as any[];
+      return data;
     },
     enabled: !!id && plan?.plan_type === 'flexible',
   });
@@ -160,7 +160,7 @@ export default function PlanDetailScreen() {
         .select('*, profile:profiles(display_name)')
         .eq('plan_id', id);
       if (error) throw error;
-      return data as any[];
+      return data;
     },
     enabled: !!id && plan?.plan_type === 'flexible',
   });

@@ -154,7 +154,7 @@ export function useRealtimeCacheSync(): void {
           { event: '*', schema: 'public', table },
           (payload) => {
             const record = payload.eventType === 'DELETE' ? payload.old : payload.new;
-            queue(keysForChange(table, record as Record<string, unknown>));
+            queue(keysForChange(table, record));
           },
         );
       }

@@ -41,7 +41,7 @@ export default function CancelPlanScreen() {
         .eq('id', id)
         .single();
       if (error) throw error;
-      return data as any;
+      return data;
     },
     enabled: !!id,
   });
@@ -54,7 +54,7 @@ export default function CancelPlanScreen() {
         .select('*, profile:profiles(display_name)')
         .eq('plan_id', id);
       if (error) throw error;
-      return data as any[];
+      return data;
     },
     enabled: !!id,
   });
@@ -67,7 +67,7 @@ export default function CancelPlanScreen() {
         .select('*, profile:profiles(display_name)')
         .eq('plan_id', id);
       if (error) throw error;
-      return data as any[];
+      return data;
     },
     enabled: !!id && plan?.plan_type === 'flexible',
   });

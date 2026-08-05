@@ -118,7 +118,7 @@ export default function FindPeopleScreen() {
         p_addressee: personId,
       });
       if (error) throw error;
-      return { personId, status: (data as any)?.status };
+      return { personId, status: data?.status };
     },
     onSuccess: ({ personId, status }) => {
       // The one status that should not flip Add to Requested: the block is the
