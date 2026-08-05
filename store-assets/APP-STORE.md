@@ -100,8 +100,8 @@ plans,friends,group,rsvp,meetup,poll,dates,availability,hangout,invite,organise,
 ## 3. Privacy nutrition labels
 
 Answer the App Privacy questionnaire like this. Every row is checked against
-`supabase/migrations` and `apps/mobile/lib/push.ts` — if the app starts storing
-something else, this section changes with it.
+`supabase/migrations`, `apps/mobile/lib/push.ts` and `apps/mobile/lib/sentry.ts`
+— if the app starts storing something else, this section changes with it.
 
 **Used to track you: No.** No ad identifiers, no third-party analytics SDKs, no
 data shared with data brokers.
@@ -115,6 +115,7 @@ data shared with data brokers.
 | User Content → Customer Support | Yes | Yes | App Functionality |
 | Identifiers → User ID | Yes | Yes | App Functionality |
 | Identifiers → Device ID | Yes | Yes | App Functionality |
+| Diagnostics → Crash Data | Yes | Yes | App Functionality |
 | Diagnostics → Other Diagnostic Data | Yes | Yes | App Functionality |
 
 Notes for each, if asked:
@@ -133,8 +134,16 @@ Notes for each, if asked:
   notifications on. Expo's own documentation describes it as identifying the
   recipient device, so it is declared here rather than folded into User ID.
   Cleared when you turn notifications off, and on sign-out.
-- **Diagnostics** — app version and device model, attached only to feedback you
-  deliberately send.
+- **Crash Data** — Sentry crash reports, sent automatically when a release
+  build crashes (`initSentry()` runs at module scope in `app/_layout.tsx`, and
+  both EAS profiles carry a live DSN). A report is the stack trace, app
+  version, device model and OS version, plus the account id (`setSentryUser`),
+  which is what makes it Linked. Never email, display name or user content:
+  `sendDefaultPii` is off, `beforeSend` strips the user object to the id, and
+  `beforeBreadcrumb` drops console lines and query strings
+  (`apps/mobile/lib/sentry.ts`).
+- **Other Diagnostic Data** — app version and device model, attached only to
+  feedback you deliberately send.
 
 ---
 
