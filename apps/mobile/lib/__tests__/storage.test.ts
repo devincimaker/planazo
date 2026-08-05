@@ -85,7 +85,7 @@ describe('purgeOwnedFiles', () => {
     expect(shots.files).toEqual([]);
     expect(shots.remove).toHaveBeenCalledTimes(3);
     expect(shots.remove.mock.calls.flatMap(([paths]) => paths)).toHaveLength(250);
-    expect(shots.remove.mock.calls[0][0][0]).toBe('u1/shot-0.jpg');
+    expect(shots.remove.mock.calls[0]![0]![0]).toBe('u1/shot-0.jpg');
   });
 
   it('names the bucket when the listing fails', async () => {

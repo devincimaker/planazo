@@ -55,8 +55,8 @@ describe('countAvailabilityByDate', () => {
 
     const result = countAvailabilityByDate(dateOptions, availabilities);
 
-    expect(result['date-1'].count).toBe(2);
-    expect(result['date-2'].count).toBe(1);
+    expect(result['date-1']!.count).toBe(2);
+    expect(result['date-2']!.count).toBe(1);
   });
 
   it('ignores availabilities for unknown date options', () => {
@@ -68,7 +68,7 @@ describe('countAvailabilityByDate', () => {
 
     const result = countAvailabilityByDate(dateOptions, availabilities);
 
-    expect(result['date-1'].count).toBe(1);
+    expect(result['date-1']!.count).toBe(1);
     expect(result['unknown-date']).toBeUndefined();
   });
 
@@ -113,9 +113,9 @@ describe('findViableDates', () => {
 
     const result = findViableDates(countByDate, 1);
 
-    expect(result[0][0]).toBe('date-2');
-    expect(result[1][0]).toBe('date-3');
-    expect(result[2][0]).toBe('date-1');
+    expect(result[0]![0]).toBe('date-2');
+    expect(result[1]![0]).toBe('date-3');
+    expect(result[2]![0]).toBe('date-1');
   });
 
   it('includes dates exactly at minimum threshold', () => {
@@ -126,7 +126,7 @@ describe('findViableDates', () => {
     const result = findViableDates(countByDate, 3);
 
     expect(result).toHaveLength(1);
-    expect(result[0][1].count).toBe(3);
+    expect(result[0]![1].count).toBe(3);
   });
 
   it('handles empty input', () => {

@@ -122,11 +122,11 @@ describe('FeedbackScreen', () => {
     await fireEvent.press(screen.getByTestId('send'));
 
     await waitFor(() => {
-      expect(mockUpload).toHaveBeenCalledWith(
-        'feedback-screenshots',
-        expect.stringMatching(/^me\/\d+\.jpg$/),
-        'file:///shot.jpg'
-      );
+      expect(mockUpload).toHaveBeenCalledWith({
+        bucket: 'feedback-screenshots',
+        path: expect.stringMatching(/^me\/\d+\.jpg$/),
+        uri: 'file:///shot.jpg',
+      });
       expect(feedbackInsert).toHaveBeenCalledWith(
         expect.objectContaining({
           kind: 'broken',

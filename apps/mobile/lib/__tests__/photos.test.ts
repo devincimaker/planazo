@@ -83,15 +83,15 @@ describe('signPhotos', () => {
     const signed = await signPhotos(photos);
 
     expect(createSignedUrls).toHaveBeenCalledTimes(1);
-    expect(createSignedUrls.mock.calls[0][0]).toEqual([
+    expect(createSignedUrls.mock.calls[0]![0]).toEqual([
       'plan-1/u1/a.jpg',
       'plan-1/u1/a_thumb.jpg',
       'plan-1/u1/b.jpg',
     ]);
-    expect(signed[0].url).toBe('https://signed/plan-1/u1/a.jpg');
-    expect(signed[0].thumbUrl).toBe('https://signed/plan-1/u1/a_thumb.jpg');
+    expect(signed[0]!.url).toBe('https://signed/plan-1/u1/a.jpg');
+    expect(signed[0]!.thumbUrl).toBe('https://signed/plan-1/u1/a_thumb.jpg');
     // No rendition means the tile draws the original, not a broken image.
-    expect(signed[1].thumbUrl).toBe(signed[1].url);
+    expect(signed[1]!.thumbUrl).toBe(signed[1]!.url);
   });
 
   it('falls back to the original when only the rendition is missing', async () => {
@@ -100,7 +100,7 @@ describe('signPhotos', () => {
     const signed = await signPhotos([row({})]);
 
     expect(signed).toHaveLength(1);
-    expect(signed[0].thumbUrl).toBe(signed[0].url);
+    expect(signed[0]!.thumbUrl).toBe(signed[0]!.url);
   });
 
   it('drops the photo when the original is missing, rendition or not', async () => {
@@ -121,8 +121,8 @@ describe('signPhotos cache', () => {
     const second = await signPhotos([row({})]);
 
     expect(createSignedUrls).toHaveBeenCalledTimes(1);
-    expect(second[0].url).toBe(first[0].url);
-    expect(second[0].thumbUrl).toBe(first[0].thumbUrl);
+    expect(second[0]!.url).toBe(first[0]!.url);
+    expect(second[0]!.thumbUrl).toBe(first[0]!.thumbUrl);
   });
 
   it('signs only what it does not hold when the album grows', async () => {
@@ -133,7 +133,7 @@ describe('signPhotos cache', () => {
     const signed = await signPhotos([added, row({})]);
 
     expect(createSignedUrls).toHaveBeenCalledTimes(2);
-    expect(createSignedUrls.mock.calls[1][0]).toEqual(['plan-1/u1/b.jpg', 'plan-1/u1/b_thumb.jpg']);
+    expect(createSignedUrls.mock.calls[1]![0]).toEqual(['plan-1/u1/b.jpg', 'plan-1/u1/b_thumb.jpg']);
     expect(signed).toHaveLength(2);
   });
 
@@ -182,8 +182,8 @@ describe('signPhotos cache', () => {
     const [a, b] = await Promise.all([signPhotos([row({})]), signPhotos([row({})])]);
 
     expect(createSignedUrls).toHaveBeenCalledTimes(2);
-    expect(b[0].url).toBe(a[0].url);
-    expect(b[0].thumbUrl).toBe(a[0].thumbUrl);
+    expect(b[0]!.url).toBe(a[0]!.url);
+    expect(b[0]!.thumbUrl).toBe(a[0]!.thumbUrl);
   });
 });
 
@@ -217,19 +217,19 @@ describe('uploadPhotos', () => {
     primeSigner();
     mockUploadJpeg.mockResolvedValue(undefined);
 
-    const outcome = await uploadPhotos('plan-1', 'u1', [bigPhoto]);
+    const outcome = await uploadPhotos({ planId: 'plan-1', userId: 'u1', photos: [bigPhoto] });
 
     expect(outcome).toEqual({ added: 1, failed: 0 });
-    const [values] = inserted;
+    const values = inserted[0]!;
     expect(values.storage_path).toMatch(/^plan-1\/u1\/\w+\.jpg$/);
     expect(values.thumb_path).toBe(String(values.storage_path).replace(/\.jpg$/, '_thumb.jpg'));
 
     expect(mockUploadJpeg).toHaveBeenCalledTimes(2);
-    expect(mockUploadJpeg.mock.calls[0][1]).toBe(values.thumb_path);
+    expect(mockUploadJpeg.mock.calls[0]![0].path).toBe(values.thumb_path);
     // The rendition is cut from the prepared 2048 image, not the original.
-    expect(mockUploadJpeg.mock.calls[0][2]).toBe('file:///pick/a.jpg#2048#512');
-    expect(mockUploadJpeg.mock.calls[1][1]).toBe(values.storage_path);
-    expect(mockUploadJpeg.mock.calls[1][2]).toBe('file:///pick/a.jpg#2048');
+    expect(mockUploadJpeg.mock.calls[0]![0].uri).toBe('file:///pick/a.jpg#2048#512');
+    expect(mockUploadJpeg.mock.calls[1]![0].path).toBe(values.storage_path);
+    expect(mockUploadJpeg.mock.calls[1]![0].uri).toBe('file:///pick/a.jpg#2048');
 
     // Both scratch renditions are collected; the picked original is not ours.
     expect(mockDeleteAsync.mock.calls.map((c) => c[0]).sort()).toEqual([
@@ -243,9 +243,13 @@ describe('uploadPhotos', () => {
     primeSigner();
     mockUploadJpeg.mockResolvedValue(undefined);
 
-    await uploadPhotos('plan-1', 'u1', [{ uri: 'file:///pick/small.jpg', width: 400, height: 300 }]);
+    await uploadPhotos({
+      planId: 'plan-1',
+      userId: 'u1',
+      photos: [{ uri: 'file:///pick/small.jpg', width: 400, height: 300 }],
+    });
 
-    expect(inserted[0].thumb_path).toBeNull();
+    expect(inserted[0]!.thumb_path).toBeNull();
     expect(mockUploadJpeg).toHaveBeenCalledTimes(1);
     expect(mockManipulate).not.toHaveBeenCalled();
   });
@@ -257,13 +261,13 @@ describe('uploadPhotos', () => {
       .mockResolvedValueOnce(undefined) // the rendition makes it up
       .mockRejectedValueOnce(new Error('network died'));
 
-    const outcome = await uploadPhotos('plan-1', 'u1', [bigPhoto]);
+    const outcome = await uploadPhotos({ planId: 'plan-1', userId: 'u1', photos: [bigPhoto] });
 
     expect(outcome).toEqual({ added: 0, failed: 1 });
     expect(deleteEq).toHaveBeenCalledWith('id', 'row-1');
     // An object whose row is gone is invisible to the account purge, so the
     // rendition cannot be left behind.
-    expect(remove).toHaveBeenCalledWith([inserted[0].thumb_path]);
+    expect(remove).toHaveBeenCalledWith([inserted[0]!.thumb_path]);
   });
 });
 

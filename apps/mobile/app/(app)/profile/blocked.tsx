@@ -42,7 +42,7 @@ export default function BlockedPeopleScreen() {
         .in('id', ids);
       if (profilesError) throw profilesError;
 
-      const byId = new Map((profiles ?? []).map((p) => [p.id, p]));
+      const byId = new Map(profiles.map((p) => [p.id, p]));
       return ids.flatMap((id) => {
         const p = byId.get(id);
         return p

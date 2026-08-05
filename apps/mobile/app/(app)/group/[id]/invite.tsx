@@ -39,7 +39,7 @@ export default function InviteToGroupSheet() {
       if (invitesRes.error) throw invitesRes.error;
       return {
         ...(groupRes.data as any),
-        pendingInviteeIds: (invitesRes.data ?? []).map((i: any) => i.invitee_id),
+        pendingInviteeIds: invitesRes.data.map((i: any) => i.invitee_id),
       };
     },
     enabled: !!id,

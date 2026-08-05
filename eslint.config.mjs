@@ -48,6 +48,14 @@ const emDashWithText = [
 
 export default tseslint.config(
   {
+    // A disable comment whose rule no longer fires is debt that paid itself
+    // off but kept sitting on the books. Erroring on it makes the file-level
+    // suppressions AGENTS.md tracks self-cleaning: the moment one stops being
+    // needed, CI says so.
+    linterOptions: { reportUnusedDisableDirectives: 'error' },
+  },
+
+  {
     // Not ours to lint: build output, dependencies, generated types.
     ignores: [
       '**/node_modules/**',
@@ -69,6 +77,18 @@ export default tseslint.config(
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
     rules: {
+      // --- Structure guards (PLA-66) -----------------------------------------
+      // All zero-hit when enabled. They cost nothing today and stop the
+      // classic agent-written slop: pyramids of nesting, argument lists that
+      // should be an options object, `let` that never reassigns, an `else`
+      // after a return.
+      'max-depth': 'error',
+      'max-params': 'error',
+      'no-else-return': 'error',
+      'no-lonely-if': 'error',
+      'prefer-const': 'error',
+      'no-unreachable': 'error',
+
       // --- Off, with reasons -------------------------------------------------
 
       // 148 hits. Turning this on is a decision about how strictly the codebase
@@ -149,8 +169,89 @@ export default tseslint.config(
     ],
     rules: {
       'max-lines': 'off',
+      // A test helper threading five fixtures is a flat list of inputs, not
+      // the tangled signature max-params exists to catch.
+      'max-params': 'off',
       'no-restricted-syntax': 'off',
       '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
+
+  {
+    /**
+     * Type-aware rules (PLA-66): the bug class that typecheck, review and
+     * tests all miss. Scoped to the mobile app's own code, where the payloads
+     * come from Supabase and a wrong assumption about null ships a crash.
+     * Tests and their helpers are excluded: jest mocks hand promises around
+     * loosely by design, and the rules would fight the mocking idiom, not
+     * find bugs. The whole type-aware pass adds ~4s, measured, so cost is not
+     * a reason to trim it.
+     */
+    files: ['apps/mobile/**/*.{ts,tsx}'],
+    ignores: [
+      'apps/mobile/**/__tests__/**',
+      'apps/mobile/**/*.test.{ts,tsx}',
+      'apps/mobile/**/__mocks__/**',
+      'apps/mobile/lib/testing/**',
+    ],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
+      // An `as X` the compiler can prove is a no-op is a reader being told
+      // something the types already say, or worse, a stale claim from an old
+      // shape that nobody removed.
+      '@typescript-eslint/no-unnecessary-type-assertion': 'error',
+
+      // A promise handed to something expecting void is a rejection nobody
+      // will ever see. JSX attributes are carved out: `onPress={async ...}`
+      // is the standard React Native idiom, and the event system ignores the
+      // return value by contract, so the rule would only generate wrappers.
+      '@typescript-eslint/no-misused-promises': [
+        'error',
+        { checksVoidReturn: { attributes: false } },
+      ],
+
+      // Comparing an enum to a bare literal keeps compiling after the enum
+      // member is renamed; comparing to the member does not.
+      '@typescript-eslint/no-unsafe-enum-comparison': 'error',
+
+      // An async function with no await still returns a promise, so every
+      // caller pays the wrapper for nothing and the signature lies about
+      // there being asynchrony inside.
+      '@typescript-eslint/require-await': 'error',
+
+      // A dropped promise is a dropped failure. `invalidateQueries` is the
+      // one call exempted by name: its promise resolves when the refetches
+      // land, a rejection there surfaces through each query's own error UI,
+      // and this codebase never has a reason to wait for it. Everything else
+      // says what it does with the failure, with `void` reserved for calls
+      // whose comment can say why the failure does not matter.
+      '@typescript-eslint/no-floating-promises': [
+        'error',
+        {
+          allowForKnownSafeCalls: [
+            {
+              // Declared in query-core, which is where the specifier has to
+              // point even though the app imports @tanstack/react-query.
+              from: 'package',
+              package: '@tanstack/query-core',
+              name: 'invalidateQueries',
+            },
+          ],
+        },
+      ],
+
+      // A guard the types call dead is either noise or a sign the type is
+      // lying. `noUncheckedIndexedAccess` (turned on with this rule) keeps
+      // the types honest about index access, so what this rule flags really
+      // is unreachable. When it fires on a Supabase payload, suspect the
+      // type before deleting the guard: generated types are routinely more
+      // confident than the data (PLA-66 has the war story).
+      '@typescript-eslint/no-unnecessary-condition': 'error',
     },
   },
 

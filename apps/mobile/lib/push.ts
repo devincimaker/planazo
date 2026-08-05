@@ -9,12 +9,13 @@ let registeredFor: string | null = null;
 /** Foreground pushes show as a banner; the in-app feed is the noisy surface. */
 export function initNotificationPresentation(): void {
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: false,
-      shouldSetBadge: false,
-    }),
+    handleNotification: () =>
+      Promise.resolve({
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: false,
+        shouldSetBadge: false,
+      }),
   });
 }
 
@@ -37,10 +38,10 @@ export async function registerPushToken(userId: string): Promise<void> {
   if (!projectId) return;
 
   let { status } = await Notifications.getPermissionsAsync();
-  if (status !== 'granted') {
+  if (status !== Notifications.PermissionStatus.GRANTED) {
     ({ status } = await Notifications.requestPermissionsAsync());
   }
-  if (status !== 'granted') return;
+  if (status !== Notifications.PermissionStatus.GRANTED) return;
 
   const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
   const { error } = await supabase

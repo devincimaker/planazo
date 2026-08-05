@@ -26,7 +26,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   setSession: (session) => {
     // Every session change flows through here, so this is the one place the
     // Sentry identity (Supabase id only) tracks who events belong to.
-    setSentryUser(session?.user?.id ?? null);
+    setSentryUser(session?.user.id ?? null);
     set({ session, user: session?.user ?? null });
   },
   setUser: (user) => set({ user }),

@@ -23,7 +23,7 @@ export interface CreatePlanInput {
 
 /** Local wall-clock date from a YYYY-MM-DD day (plus optional time). */
 const localDate = (iso: string, h = 0, m = 0) => {
-  const [y, mo, d] = iso.split('-').map(Number);
+  const [y = 0, mo = 1, d = 1] = iso.split('-').map(Number);
   return new Date(y, mo - 1, d, h, m);
 };
 
@@ -67,7 +67,7 @@ export function useCreatePlan() {
           description: notes.trim() || null,
           location: location.trim() || null,
           plan_type: fixed ? 'fixed' : 'flexible',
-          event_date: fixed ? localDate(dates[0], h, m).toISOString() : null,
+          event_date: fixed ? localDate(dates[0]!, h, m).toISOString() : null,
           min_people: min,
           max_people: cap,
           status: 'open',
@@ -88,7 +88,7 @@ export function useCreatePlan() {
           .select();
         if (datesError) throw datesError;
         const { error: availError } = await supabase.from('date_availability').insert(
-          (options ?? []).map((o) => ({
+          options.map((o) => ({
             plan_id: plan.id,
             user_id: user.id,
             date_option_id: o.id,

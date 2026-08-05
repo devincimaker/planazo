@@ -18,6 +18,7 @@ jest.mock('expo-notifications', () => ({
   getPermissionsAsync: jest.fn(),
   requestPermissionsAsync: jest.fn(),
   getExpoPushTokenAsync: jest.fn(),
+  PermissionStatus: { GRANTED: 'granted', DENIED: 'denied', UNDETERMINED: 'undetermined' },
 }));
 
 jest.mock('expo-constants', () => ({

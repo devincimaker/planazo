@@ -178,7 +178,7 @@ function PollSection({
         <>
           {options.map((opt) => {
             const mine = opt.id === myOptionId;
-            const count = counts[opt.id];
+            const count = counts[opt.id] ?? 0;
             const names = namesFor(opt.id);
             const ratio = peopleIn > 0 ? Math.min(count / peopleIn, 1) : 0;
             return (

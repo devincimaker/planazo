@@ -18,11 +18,16 @@ export default function DevLogin() {
     if (!__DEV__ || !email || !password) return;
     let cancelled = false;
 
-    (async () => {
+    // Failures land in the on-screen status; supabase-js returns errors
+    // rather than throwing, so there is no rejection path left to catch.
+    void (async () => {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      // The cleanup below flips `cancelled` on unmount; TS cannot see an
+      // assignment on the other side of an await (microsoft/TypeScript#9998).
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       if (cancelled) return;
-      if (error || !data.session) {
-        setMessage(error?.message ?? 'No session returned');
+      if (error) {
+        setMessage(error.message);
         setStatus('failed');
         return;
       }
@@ -32,6 +37,7 @@ export default function DevLogin() {
         .select('*')
         .eq('id', data.session.user.id)
         .single();
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- same await/closure blind spot as above
       if (cancelled) return;
       if (profile) setProfile(profile);
       setStatus('done');

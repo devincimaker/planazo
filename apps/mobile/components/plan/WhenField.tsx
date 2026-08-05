@@ -42,7 +42,7 @@ export function WhenField({ dates, onToggleDay, time, onTimeChange }: Props) {
   // native picker can disagree on the UTC offset of a parsed date-time,
   // which showed up as the wheel sitting an hour off the pill.
   const timeAsDate = () => {
-    const [h, m] = time.split(':').map(Number);
+    const [h = 0, m = 0] = time.split(':').map(Number);
     const d = new Date();
     d.setHours(h, m, 0, 0);
     return d;
@@ -61,7 +61,7 @@ export function WhenField({ dates, onToggleDay, time, onTimeChange }: Props) {
     dates.length === 0
       ? 'Pick a date, or a few, and let them vote.'
       : dates.length === 1
-        ? `Fixed date · ${fmtLong(dates[0])}`
+        ? `Fixed date · ${fmtLong(dates[0]!)}`
         : `${dates.length} options · everyone ticks what works`;
 
   return (

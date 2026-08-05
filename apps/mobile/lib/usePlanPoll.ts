@@ -55,7 +55,7 @@ export function usePlanPolls(planId: string) {
         .eq('plan_id', planId)
         .order('created_at', { ascending: true });
       if (error) throw error;
-      return (data ?? []) as unknown as PlanPollRow[];
+      return data as unknown as PlanPollRow[];
     },
   });
 }

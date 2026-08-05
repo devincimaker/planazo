@@ -30,7 +30,9 @@ import { colors } from '../theme/tokens';
 // Before anything else in the app can run and throw.
 initSentry();
 
-SplashScreen.preventAutoHideAsync();
+// Fire-and-forget, as in Expo's own examples: it rejects only when the splash
+// is already gone, which is the outcome being asked for anyway.
+void SplashScreen.preventAutoHideAsync();
 
 // react-query's default focus tracking is web-only, so returning to the app
 // never kicked a stale or stuck query (PLA-15). AppState is the RN equivalent.
@@ -64,6 +66,10 @@ function InitialLayout() {
   // Plan id from a tapped push, held until the navigator can take us there.
   const [pushedPlanId, setPushedPlanId] = useState<string | null>(null);
   const router = useRouter();
+  // expo-router types the state as always present, but it delegates to
+  // react-navigation's getState(), which is undefined until the navigator
+  // mounts. That window is what navReady exists to bridge.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   const navReady = !!useRootNavigationState()?.key;
 
   const isMounted = useRef(true);
@@ -222,7 +228,7 @@ function InitialLayout() {
     // Both the warm-tap listener and the cold-start check land in state; the
     // effect below navigates once auth and the navigator are ready.
     const grab = (response: Notifications.NotificationResponse | null) => {
-      const planId = response?.notification.request.content.data?.plan_id;
+      const planId = response?.notification.request.content.data.plan_id;
       if (typeof planId === 'string') {
         setPushedPlanId(planId);
       }
@@ -323,7 +329,8 @@ function RootLayout() {
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync();
+      // Same contract as preventAutoHideAsync above: already-hidden is fine.
+      void SplashScreen.hideAsync();
     }
   }, [fontsLoaded, fontError]);
 

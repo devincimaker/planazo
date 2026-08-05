@@ -53,6 +53,9 @@ export function createTimeoutFetch(baseFetch: typeof fetch = fetch): typeof fetc
     try {
       return await baseFetch(input, { ...init, signal: controller.signal });
     } catch (error) {
+      // The timeout closure above flips this before aborting; TS cannot see
+      // an assignment on the other side of an await (microsoft/TypeScript#9998).
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       if (timedOut) {
         throw new RequestTimeoutError(timeoutMs);
       }

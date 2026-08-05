@@ -93,7 +93,7 @@ export async function fetchBlockedIds(): Promise<string[]> {
     .select('blocked_id')
     .order('created_at', { ascending: false });
   if (error) throw error;
-  return (data ?? []).map((row) => row.blocked_id);
+  return data.map((row) => row.blocked_id);
 }
 
 /** Query key for the block list, so every screen invalidates the same cache. */

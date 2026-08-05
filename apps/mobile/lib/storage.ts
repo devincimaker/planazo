@@ -54,7 +54,7 @@ async function stillPresent(bucket: string, paths: string[]): Promise<string[]> 
   if (!paths.length) return [];
   const { data, error } = await supabase.storage.from(bucket).createSignedUrls(paths, 60);
   if (error) throw error;
-  return (data ?? [])
+  return data
     .filter((entry) => entry.signedUrl && !entry.error && entry.path)
     .map((entry) => entry.path as string);
 }
@@ -69,7 +69,7 @@ async function listAll(bucket: string, userId: string): Promise<string[]> {
       .list(userId, { limit: PAGE_SIZE, offset });
 
     if (error) throw error;
-    if (!data?.length) break;
+    if (!data.length) break;
 
     paths.push(...data.map((file) => `${userId}/${file.name}`));
     if (data.length < PAGE_SIZE) break;

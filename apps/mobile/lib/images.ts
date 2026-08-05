@@ -49,7 +49,7 @@ export async function pickManyFromLibrary(limit: number): Promise<PickedImage[]>
     quality: 1,
   });
   if (result.canceled) return [];
-  return result.assets.map((a) => ({ uri: a.uri, width: a.width ?? 0, height: a.height ?? 0 }));
+  return result.assets.map((a) => ({ uri: a.uri, width: a.width, height: a.height }));
 }
 
 export async function takePhoto(): Promise<string | null> {
@@ -66,7 +66,13 @@ export async function takePhoto(): Promise<string | null> {
   return result.canceled ? null : (result.assets[0]?.uri ?? null);
 }
 
-export async function uploadJpeg(bucket: string, path: string, uri: string, upsert = false): Promise<void> {
+export async function uploadJpeg(opts: {
+  bucket: string;
+  path: string;
+  uri: string;
+  upsert?: boolean;
+}): Promise<void> {
+  const { bucket, path, uri, upsert = false } = opts;
   const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
   const { error } = await supabase.storage
     .from(bucket)
@@ -83,7 +89,7 @@ export async function uploadJpeg(bucket: string, path: string, uri: string, upse
  * `?t=` suffix rather than a bare storage path.
  */
 export async function uploadPublicPhoto(bucket: string, path: string, uri: string): Promise<string> {
-  await uploadJpeg(bucket, path, uri, true);
+  await uploadJpeg({ bucket, path, uri, upsert: true });
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);
   return `${data.publicUrl}?t=${Date.now()}`;
 }

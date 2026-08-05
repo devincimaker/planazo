@@ -46,16 +46,14 @@ export default function LoginScreen() {
 
       setSession(data.session);
 
-      if (data.session?.user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', data.session.user.id)
-          .single();
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', data.session.user.id)
+        .single();
 
-        if (profile) {
-          setProfile(profile);
-        }
+      if (profile) {
+        setProfile(profile);
       }
 
       router.replace('/(app)/(tabs)');

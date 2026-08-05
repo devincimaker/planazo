@@ -51,7 +51,12 @@ export function PhotoAlbumCard({ planId, userId, albumOpen, canAdd }: Props) {
       if (!picked.length) return null;
 
       setProgress({ done: 0, total: picked.length });
-      return uploadPhotos(planId, userId, picked, (done, of) => setProgress({ done, total: of }));
+      return uploadPhotos({
+        planId,
+        userId,
+        photos: picked,
+        onProgress: (done, of) => setProgress({ done, total: of }),
+      });
     },
     onSuccess: (result) => {
       setProgress(null);

@@ -252,5 +252,5 @@ export const shadows = {
     },
     android: { elevation: 2 },
     default: {},
-  })!,
+  }),
 } as const;

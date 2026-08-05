@@ -61,7 +61,7 @@ export function GroupPhotoField({
         if (picked) onPick(picked);
       },
     },
-    ...(uri ? [{ label: 'Use the letter instead', run: async () => onRemove() }] : []),
+    ...(uri ? [{ label: 'Use the letter instead', run: () => onRemove() }] : []),
   ];
 
   const openPhotoOptions = () => {

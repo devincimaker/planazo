@@ -62,7 +62,7 @@ export default function FeedbackScreen() {
       let screenshotPath: string | null = null;
       if (attachment) {
         screenshotPath = `${user.id}/${Date.now()}.jpg`;
-        await uploadJpeg('feedback-screenshots', screenshotPath, attachment);
+        await uploadJpeg({ bucket: 'feedback-screenshots', path: screenshotPath, uri: attachment });
       }
       const { error } = await supabase.from('feedback').insert({
         user_id: user.id,

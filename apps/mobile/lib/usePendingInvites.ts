@@ -64,7 +64,7 @@ export function usePendingInvites() {
 
       // person id -> name of a group we share, for "both in X" on requests
       const sharedGroupOf: Record<string, string> = {};
-      (myGroupsRes.data ?? []).forEach((row: any) => {
+      myGroupsRes.data.forEach((row: any) => {
         (row.groups?.group_members ?? []).forEach((m: any) => {
           if (m.user_id !== user!.id && !sharedGroupOf[m.user_id]) {
             sharedGroupOf[m.user_id] = row.groups.name;
@@ -72,7 +72,7 @@ export function usePendingInvites() {
         });
       });
 
-      const groupInvites: PendingGroupInvite[] = (invitesRes.data ?? []).map((i: any) => ({
+      const groupInvites: PendingGroupInvite[] = invitesRes.data.map((i: any) => ({
         id: i.id,
         createdAt: i.created_at,
         groupId: i.group_id,
@@ -85,7 +85,7 @@ export function usePendingInvites() {
           .filter(Boolean),
       }));
 
-      const friendRequests: PendingFriendRequest[] = (requestsRes.data ?? []).map((r: any) => ({
+      const friendRequests: PendingFriendRequest[] = requestsRes.data.map((r: any) => ({
         id: r.id,
         createdAt: r.created_at,
         personId: r.requester?.id,

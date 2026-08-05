@@ -34,7 +34,7 @@ export function useCancelNotices() {
         .order('created_at', { ascending: false });
       if (error) throw error;
       const planIds = [
-        ...new Set((notes ?? []).map((n: any) => n.data?.plan_id).filter(Boolean)),
+        ...new Set(notes.map((n: any) => n.data?.plan_id).filter(Boolean)),
       ];
       if (planIds.length === 0) return [];
       const { data: cancelledPlans, error: planError } = await supabase
@@ -44,8 +44,8 @@ export function useCancelNotices() {
         )
         .in('id', planIds);
       if (planError) throw planError;
-      const byId = new Map((cancelledPlans ?? []).map((p: any) => [p.id, p]));
-      return (notes ?? [])
+      const byId = new Map(cancelledPlans.map((p: any) => [p.id, p]));
+      return notes
         .map((n: any) => ({ noticeId: n.id as string, plan: byId.get(n.data?.plan_id) }))
         // A restored plan takes its notice with it
         .filter((n: any) => n.plan && n.plan.status === 'cancelled');

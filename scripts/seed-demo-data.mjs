@@ -439,7 +439,8 @@ async function insertPlans(planDefinitions, groupsByKey, primary) {
   }));
 }
 
-async function insertFixedPlanRsvps(planDefinitions, plansByKey, primary, peopleByHandle) {
+async function insertFixedPlanRsvps(planDefinitions, plansByKey, people) {
+  const { primary, peopleByHandle } = people;
   const rows = [];
 
   for (const definition of planDefinitions.filter((plan) => plan.plan_type === 'fixed')) {
@@ -469,7 +470,8 @@ async function insertFixedPlanRsvps(planDefinitions, plansByKey, primary, people
   if (error) throw error;
 }
 
-async function insertFlexiblePlanData(planDefinitions, plansByKey, primary, peopleByHandle) {
+async function insertFlexiblePlanData(planDefinitions, plansByKey, people) {
+  const { primary, peopleByHandle } = people;
   const flexiblePlans = planDefinitions.filter((plan) => plan.plan_type === 'flexible');
   const optionRows = [];
 
@@ -611,8 +613,8 @@ async function main() {
 
   const planDefinitions = makePlanDefinitions();
   const plansByKey = await insertPlans(planDefinitions, groupsByKey, primary);
-  await insertFixedPlanRsvps(planDefinitions, plansByKey, primary, peopleByHandle);
-  await insertFlexiblePlanData(planDefinitions, plansByKey, primary, peopleByHandle);
+  await insertFixedPlanRsvps(planDefinitions, plansByKey, { primary, peopleByHandle });
+  await insertFlexiblePlanData(planDefinitions, plansByKey, { primary, peopleByHandle });
   await insertNotifications(primary, plansByKey);
 
   console.log('Demo seed complete.');

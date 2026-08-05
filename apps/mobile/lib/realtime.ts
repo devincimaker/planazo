@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { useQueryClient, QueryKey } from '@tanstack/react-query';
-import type { RealtimeChannel } from '@supabase/supabase-js';
+import { REALTIME_SUBSCRIBE_STATES, type RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { useAuthStore } from '../stores/authStore';
 
@@ -154,12 +154,15 @@ export function useRealtimeCacheSync(): void {
           { event: '*', schema: 'public', table },
           (payload) => {
             const record = payload.eventType === 'DELETE' ? payload.old : payload.new;
-            queue(keysForChange(table, record as Record<string, unknown>));
+            queue(keysForChange(table, record));
           },
         );
       }
       next.subscribe((status) => {
-        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        if (
+          status === REALTIME_SUBSCRIBE_STATES.CHANNEL_ERROR ||
+          status === REALTIME_SUBSCRIBE_STATES.TIMED_OUT
+        ) {
           // supabase-js reconnects with backoff on its own; stale data in the
           // meantime is what focus refetch already handles.
           console.warn(`Realtime cache sync reported ${status}; retrying in the background.`);

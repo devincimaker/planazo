@@ -55,7 +55,7 @@ export default function EditPlanScreen() {
         .eq('id', id)
         .single();
       if (error) throw error;
-      return data as any;
+      return data;
     },
     enabled: !!id,
   });
@@ -101,7 +101,7 @@ export default function EditPlanScreen() {
       // write that never happened. That silence is what made "Change" a dead
       // button on every answered plan (PLA-16). Asking for the row back is
       // what turns "you're not the host any more" into something visible.
-      if (!data || data.length === 0) {
+      if (data.length === 0) {
         throw new Error(
           "That didn't save. You're not the host of this plan any more, or it was called off while you had this open."
         );
