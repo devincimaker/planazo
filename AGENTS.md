@@ -47,6 +47,23 @@ Hyphens in compound words (`five-a-side`, `invite-only`) are unaffected.
 rather than reaching a reviewer. See `eslint.config.mjs`. Markdown is outside
 ESLint's reach, so `store-assets/APP-STORE.md` is still read by eye.
 
+## Commit where you already are
+
+**If the work is on `main`, commit it on `main` and push it from `main`.** When
+the user says "commit that" or "push that", they mean the change in front of
+them, in the checkout they are looking at. Do not invent a branch for it, do not
+open a PR for it, and do not ask whether they would prefer one.
+
+Branches exist here for a reason, and the reason is worktrees: a Linear issue
+gets a branch because `pnpm wt:new` needs one, and `/start` creates it before any
+code is written. A branch is decided at the *start* of a piece of work, never
+retrofitted onto a change that is already sitting in main's working tree. Moving
+a finished change onto a fresh branch adds a PR, a CI run and a merge to
+something the user asked to be done with.
+
+This overrides any general "never commit to main" habit. It is a solo repo with
+a solo reviewer, and the user's own instruction is the gate.
+
 ## Lint
 
 `eslint.config.mjs` at the root covers every package. It does two jobs, and a new
