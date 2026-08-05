@@ -84,7 +84,7 @@ export default function LoginScreen() {
             <BrandMark size={52} />
 
             <ThemedText variant="screenTitle" style={styles.title}>
-              Good to see you
+              Welcome back
             </ThemedText>
 
             <View style={styles.fields}>
@@ -135,26 +135,36 @@ export default function LoginScreen() {
               </View>
             ) : null}
 
-            <Button
-              label={loading ? 'Signing in…' : 'Sign in'}
-              onPress={handleLogin}
-              disabled={loading}
-              style={styles.submit}
-              testID="sign-in"
-            />
-
-            <View style={styles.footer} testID="login-footer">
-              <ThemedText variant="sub">First time here?</ThemedText>
-              <Link href="/(auth)/signup" asChild>
-                <Pressable accessibilityRole="button" hitSlop={LINK_HIT_SLOP} testID="signup-link">
-                  <ThemedText variant="sub" color={colors.accentText} style={styles.footerLink}>
-                    Make your account
-                  </ThemedText>
-                </Pressable>
-              </Link>
-            </View>
           </View>
         </ScrollView>
+
+        {/*
+          Outside the ScrollView, inside the KeyboardAvoidingView, so both ways
+          out of this screen survive the keyboard opening. They used to sit at
+          the end of the scrolling content, where a raised keyboard pushed them
+          below the fold — and a first-timer who never found "Make your account"
+          typed their details into this form instead (PLA-69). Same structure as
+          signup.tsx.
+        */}
+        <View style={styles.footer} testID="login-footer">
+          <Button
+            label={loading ? 'Signing in…' : 'Sign in'}
+            onPress={handleLogin}
+            disabled={loading}
+            testID="sign-in"
+          />
+
+          <View style={styles.footerRow} testID="login-footer-row">
+            <ThemedText variant="sub">First time here?</ThemedText>
+            <Link href="/(auth)/signup" asChild>
+              <Pressable accessibilityRole="button" hitSlop={LINK_HIT_SLOP} testID="signup-link">
+                <ThemedText variant="sub" color={colors.accentText} style={styles.footerLink}>
+                  Make your account
+                </ThemedText>
+              </Pressable>
+            </Link>
+          </View>
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -174,17 +184,25 @@ const styles = StyleSheet.create({
   body: {
     // flexGrow, not flex. `flex: 1` clamps this to the ScrollView's height, so
     // at large text sizes the content overflowed instead of making the view
-    // scrollable — the sign-in button ended up below the fold, unreachable.
+    // scrollable, and the bottom of the form became unreachable.
     flexGrow: 1,
     paddingHorizontal: spacing.xl,
-    paddingTop: 34,
+    // This, `title.marginTop` and `fields.marginTop` were all tightened
+    // together, and are deliberately smaller than they look like they should
+    // be. The pinned footer takes ~110pt off the scrolling area; with a
+    // keyboard up as well, this spacing is what keeps "Forgot your password?"
+    // from falling under the footer on a normal phone. Round any of the three
+    // up to the nearest token and it slides back under. On smaller phones it
+    // scrolls instead, which is fine: the two actions that matter are pinned.
+    paddingTop: 22,
+    paddingBottom: spacing.lg,
   },
   title: {
-    marginTop: 26,
+    marginTop: 18,
   },
   fields: {
     gap: 18,
-    marginTop: spacing.xxxl,
+    marginTop: spacing.xxl,
   },
   forgotRow: {
     flexDirection: 'row',
@@ -197,10 +215,16 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
   },
-  submit: {
-    marginTop: 26,
-  },
   footer: {
+    backgroundColor: colors.tabBarBackground,
+    borderTopWidth: 1,
+    borderTopColor: colors.tabBarBorder,
+    paddingHorizontal: spacing.xl,
+    paddingTop: 14,
+    paddingBottom: spacing.lg,
+    gap: spacing.md,
+  },
+  footerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -208,12 +232,6 @@ const styles = StyleSheet.create({
     // fit side by side; wrapping stacks them instead of running off-screen.
     flexWrap: 'wrap',
     gap: 6,
-    // Replaces a flex:1 spacer View. Same effect when there is room to spare,
-    // but this one yields once the content is taller than the screen instead
-    // of fighting it.
-    marginTop: 'auto',
-    paddingTop: spacing.xxl,
-    paddingBottom: 34,
   },
   footerLink: {
     fontFamily: fonts.bodyBold,
