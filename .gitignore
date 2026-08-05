@@ -6,6 +6,10 @@ dist
 .DS_Store
 .env
 .env.local
+# Hand-kept copies of a real environment. Untracked is not enough: EAS uploads
+# every non-ignored file into the build tarball, and these carry the service
+# role key and the database password.
+.env.*-backup
 # A worktree's own slot — Metro port, simulator, database mode. Tracking it
 # would hand one worktree's resources to the next checkout that reads it.
 .env.worktree
