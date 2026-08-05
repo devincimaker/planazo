@@ -28,7 +28,9 @@ export function PlanTopBar({ planId, groupId, d, groupName, onNudge }: Props) {
   // that has already ended or been called off (PLA-31).
   const showMenu = () => {
     const rows: { label: string; action: () => void; destructive?: boolean }[] = [
-      { label: 'Copy invite link', action: copyLink },
+      // Fire-and-forget: writing to the clipboard has no failure mode worth a
+      // dialog, and the toast is the confirmation.
+      { label: 'Copy invite link', action: () => void copyLink() },
     ];
     if (d.isOpen && !d.isPast && d.unanswered > 0) {
       rows.push({
