@@ -283,8 +283,8 @@ export default function PlanDetailScreen() {
                 // created_by goes null when the person who posted it deleted
                 // their account — the plan outlives them, the name does not.
                 d.isEnded
-                  ? `${plan.created_by === user?.id ? 'You' : plan.creator?.display_name ?? 'Someone who left'} set this up`
-                  : `Hosted by ${d.isHost ? 'you' : plan.creator?.display_name ?? 'someone who left'}`
+                  ? `${d.youCreated ? 'You' : plan.creator?.display_name ?? 'Someone who left'} set this up`
+                  : `Hosted by ${d.youCreated ? 'you' : plan.creator?.display_name ?? 'someone who left'}`
               }
               divider={!!plan.location || !!plan.event_date || (d.isLocked && !!plan.locked_date)}
             />

@@ -84,7 +84,10 @@ const demoGroups = [
   },
 ];
 
-function futureDate(daysFromNow, hour = 19, minute = 0) {
+/** A date relative to whenever the seed is run. Negative days are the point,
+ *  not a mistake: without a night that has already happened there is no album
+ *  in the demo data at all. */
+function demoDate(daysFromNow, hour = 19, minute = 0) {
   const date = new Date();
   date.setDate(date.getDate() + daysFromNow);
   date.setHours(hour, minute, 0, 0);
@@ -100,7 +103,7 @@ function makePlanDefinitions() {
       description: 'Easy pace, snacks at the top, and coffee afterwards.',
       location: 'Cerro Arco trailhead',
       plan_type: 'fixed',
-      event_date: futureDate(6, 8),
+      event_date: demoDate(6, 8),
       min_people: 3,
       max_people: 8,
       status: 'open',
@@ -116,7 +119,7 @@ function makePlanDefinitions() {
       description: 'Trying the new sourdough pizza place and splitting a few pies.',
       location: 'Terraza Centro',
       plan_type: 'fixed',
-      event_date: futureDate(8, 20, 30),
+      event_date: demoDate(8, 20, 30),
       min_people: 4,
       max_people: 10,
       status: 'open',
@@ -132,7 +135,7 @@ function makePlanDefinitions() {
       description: 'Small spot, limited seats, probably worth booking early.',
       location: 'Noodle Lab',
       plan_type: 'fixed',
-      event_date: futureDate(10, 19, 30),
+      event_date: demoDate(10, 19, 30),
       min_people: 3,
       max_people: 6,
       status: 'open',
@@ -148,13 +151,33 @@ function makePlanDefinitions() {
       description: 'Pinball, racing games, and a low-stakes leaderboard.',
       location: 'Pixel Bar',
       plan_type: 'fixed',
-      event_date: futureDate(14, 18),
+      event_date: demoDate(14, 18),
       min_people: 4,
       max_people: null,
       status: 'open',
       rsvps: {
         yes: ['alex', 'bianca', 'diego', 'maya'],
         no: [],
+      },
+    },
+    // The only night that has already happened, and so the only plan with an
+    // album (PLA-32). Demo Explorer is an admin of Weekend Crew and said no to
+    // this one, which is the pair of facts PLA-55 was about: adding belongs to
+    // the people who were there, and being an admin is not being there.
+    {
+      key: 'lake-sunday',
+      groupKey: 'weekend',
+      title: 'Sunday at the lake',
+      description: 'Swimming, a long lunch, and nobody in a hurry.',
+      location: 'Lago del Dique',
+      plan_type: 'fixed',
+      event_date: demoDate(-2, 11),
+      min_people: 3,
+      max_people: null,
+      status: 'open',
+      rsvps: {
+        yes: ['primary', 'alex', 'bianca', 'maya'],
+        no: ['demo', 'sam'],
       },
     },
     {
@@ -164,7 +187,7 @@ function makePlanDefinitions() {
       description: 'Cancelled because the venue moved the date.',
       location: 'Parque Central',
       plan_type: 'fixed',
-      event_date: futureDate(12, 21),
+      event_date: demoDate(12, 21),
       min_people: 3,
       max_people: null,
       status: 'cancelled',
@@ -180,7 +203,7 @@ function makePlanDefinitions() {
       description: 'Pick the night that works for the most people.',
       location: 'Maya apartment',
       plan_type: 'flexible',
-      dateOptions: [futureDate(3, 20), futureDate(4, 20), futureDate(5, 20)],
+      dateOptions: [demoDate(3, 20), demoDate(4, 20), demoDate(5, 20)],
       min_people: 3,
       max_people: 8,
       status: 'open',
@@ -200,7 +223,7 @@ function makePlanDefinitions() {
       description: 'Checking weather and choosing the best slot.',
       location: 'Potrerillos',
       plan_type: 'flexible',
-      dateOptions: [futureDate(12, 10), futureDate(13, 10), futureDate(19, 10)],
+      dateOptions: [demoDate(12, 10), demoDate(13, 10), demoDate(19, 10)],
       min_people: 4,
       max_people: 7,
       status: 'open',
@@ -220,7 +243,7 @@ function makePlanDefinitions() {
       description: 'Short gallery visit, then coffee or vermouth nearby.',
       location: 'Museo Municipal',
       plan_type: 'flexible',
-      dateOptions: [futureDate(7, 18), futureDate(9, 18), futureDate(11, 18)],
+      dateOptions: [demoDate(7, 18), demoDate(9, 18), demoDate(11, 18)],
       min_people: 2,
       max_people: 6,
       status: 'open',
@@ -238,7 +261,7 @@ function makePlanDefinitions() {
       description: 'Make pasta from scratch and vote on the best sauce.',
       location: 'Nina kitchen',
       plan_type: 'flexible',
-      dateOptions: [futureDate(16, 19), futureDate(17, 19), futureDate(18, 19)],
+      dateOptions: [demoDate(16, 19), demoDate(17, 19), demoDate(18, 19)],
       min_people: 3,
       max_people: 6,
       status: 'open',

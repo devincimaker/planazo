@@ -1,7 +1,8 @@
-import { render, screen, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PhotoAlbumCard } from '../PhotoAlbumCard';
 import { usePlanAlbumCard } from '../../lib/usePlanPhotos';
+import { pickPhotos, uploadPhotos, type UploadOutcome } from '../../lib/photos';
 
 // photos.ts reaches the supabase client through lib/images, which reads env
 // at import time. The card never touches it in these tests.
@@ -140,5 +141,43 @@ describe('PhotoAlbumCard', () => {
     renderCard();
     await waitFor(() => expect(screen.queryByText('Nothing here yet.')).toBeNull());
     expect(screen.getByText('Photos')).toBeTruthy();
+  });
+
+  // PLA-55. The button should no longer reach anyone the database will refuse,
+  // but a race can still land one there, and what it said then was "0 added.
+  // 5 didn't upload." over a button offering to try again.
+  describe('a batch the database refuses', () => {
+    async function tapAdd(outcome: UploadOutcome) {
+      prime({ total: 3, uploaders: 2, name: 'Alex' });
+      (pickPhotos as jest.Mock).mockResolvedValue([{ uri: 'file://a.jpg', width: 100, height: 100 }]);
+      (uploadPhotos as jest.Mock).mockResolvedValue(outcome);
+      renderCard();
+      await waitFor(() => expect(screen.getByTestId('add-photos')).toBeTruthy());
+      await fireEvent.press(screen.getByTestId('add-photos'));
+    }
+
+    it('says why, instead of counting it as an upload that did not happen', async () => {
+      await tapAdd({ added: 0, failed: 0, refused: true });
+      await waitFor(() =>
+        expect(
+          screen.getByText("You weren't in this plan, so you can't add to its album."),
+        ).toBeTruthy(),
+      );
+    });
+
+    it('stops offering a retry that cannot succeed', async () => {
+      await tapAdd({ added: 0, failed: 0, refused: true });
+      await waitFor(() => expect(screen.getByTestId('add-photos').props.accessibilityState)
+        .toMatchObject({ disabled: true }));
+    });
+
+    // A dropped connection is the opposite case and keeps its retry.
+    it('still offers one for photos that only failed', async () => {
+      await tapAdd({ added: 1, failed: 2, refused: false });
+      await waitFor(() => expect(screen.getByText("1 added. 2 didn't upload.")).toBeTruthy());
+      expect(screen.getByTestId('add-photos').props.accessibilityState).not.toMatchObject({
+        disabled: true,
+      });
+    });
   });
 });

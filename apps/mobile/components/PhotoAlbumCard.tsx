@@ -148,9 +148,11 @@ export function PhotoAlbumCard({ planId, userId, albumOpen, canAdd }: Props) {
             <ThemedText variant="body" style={styles.summaryText}>
               {progress
                 ? `Adding ${progress.done} of ${progress.total}`
-                : batch?.failed
-                  ? `${batch.added} added. ${batch.failed} didn't upload.`
-                  : albumSummary(summary ?? { total: 0, uploaders: 0 })}
+                : batch?.refused
+                  ? "You weren't in this plan, so you can't add to its album."
+                  : batch?.failed
+                    ? `${batch.added} added. ${batch.failed} didn't upload.`
+                    : albumSummary(summary ?? { total: 0, uploaders: 0 })}
             </ThemedText>
             {total > 1 && !uploading ? (
               <ThemedText variant="body" color={colors.textFaint}>
@@ -167,7 +169,10 @@ export function PhotoAlbumCard({ planId, userId, albumOpen, canAdd }: Props) {
               label={actionLabel({ batch, planFull, youFull, uploading })}
               variant="accentOutline"
               onPress={() => upload.mutate()}
-              disabled={uploading || planFull || youFull}
+              // A refusal is the one outcome retrying cannot change (PLA-55).
+              // The button stays visible so the card does not rearrange itself
+              // under the person's thumb, but it stops inviting the tap.
+              disabled={uploading || planFull || youFull || !!batch?.refused}
               style={styles.button}
               testID="add-photos"
             />

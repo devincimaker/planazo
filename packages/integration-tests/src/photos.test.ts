@@ -3,6 +3,7 @@
 // and that is the thing worth testing against a real database: RLS deciding
 // what is countable, per caller, including blocks.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { canAddPhotos } from '@planazo/shared';
 import { TestBed, TestUser, ok, daysFromNow } from './testbed';
 
 const bed = new TestBed();
@@ -11,6 +12,10 @@ let host: TestUser;
 let guest: TestUser;
 /** In the group, never in the plan. May look, may not add. */
 let bystander: TestUser;
+/** In the group and asked, said no. */
+let refuser: TestUser;
+/** Admin of the group, never in the plan. The person PLA-55 is about. */
+let admin: TestUser;
 /** Not in the group at all. */
 let outsider: TestUser;
 let planId: string;
@@ -36,14 +41,21 @@ async function addPhoto(as: TestUser, key: string, opts: { thumb?: boolean; at: 
 }
 
 beforeAll(async () => {
-  [host, guest, bystander, outsider] = await Promise.all([
+  [host, guest, bystander, refuser, admin, outsider] = await Promise.all([
     bed.createUser('Album Host'),
     bed.createUser('Album Guest'),
     bed.createUser('Album Bystander'),
+    bed.createUser('Album Refuser'),
+    bed.createUser('Album Admin'),
     bed.createUser('Album Outsider'),
   ]);
   const group = await bed.createGroup(host);
-  await Promise.all([bed.join(group.id, guest), bed.join(group.id, bystander)]);
+  await Promise.all([
+    bed.join(group.id, guest),
+    bed.join(group.id, bystander),
+    bed.join(group.id, refuser),
+    bed.join(group.id, admin, 'admin'),
+  ]);
 
   // Last night's plan: the album is open, and who may add is decided by the
   // rsvps exactly as production decides it.
@@ -63,6 +75,11 @@ beforeAll(async () => {
       .single(),
   ).id;
   ok(await guest.client.from('rsvps').insert({ plan_id: planId, user_id: guest.id, response: 'yes' }));
+  ok(
+    await refuser.client
+      .from('rsvps')
+      .insert({ plan_id: planId, user_id: refuser.id, response: 'no' }),
+  );
 
   // Five photos, newest last: h1, h2, g1, g2, g3. g1 predates thumbnails.
   await addPhoto(host, 'h1', { at: '2026-08-03T20:00:00Z' });
@@ -141,5 +158,66 @@ describe('plan_album_card', () => {
 
     // The guest, who did the blocking, keeps seeing the whole album.
     expect(ok(await card(guest)).total).toBe(5);
+  });
+});
+
+// PLA-55. The rule about who may add was written twice, in two languages, and
+// the two disagreed about exactly one person: a group admin who never said yes.
+// The client showed them a button whose every insert RLS refused. These tests
+// ask both sides the same question about the same rows and require one answer.
+describe('can_add_plan_photo agrees with canAddPhotos', () => {
+  /** The real columns, fetched once, rather than the ones the setup meant to
+   *  write. A test that reconstructs its own fixture can only ever agree with
+   *  itself. */
+  let plan: { status: string; created_by: string; event_date: string | null; locked_date: string | null };
+  let rsvps: { user_id: string; response: string | null }[];
+
+  beforeAll(async () => {
+    plan = ok(
+      await host.client
+        .from('plans')
+        .select('status, created_by, event_date, locked_date')
+        .eq('id', planId)
+        .single(),
+    );
+    rsvps = ok(await host.client.from('rsvps').select('user_id, response').eq('plan_id', planId));
+  });
+
+  async function bothSides(as: TestUser) {
+    const sql = ok(await as.client.rpc('can_add_plan_photo', { p_plan_id: planId }));
+    const ts = canAddPhotos({ ...plan, rsvps }, as.id);
+    return { sql, ts };
+  }
+
+  it.each([
+    ['the creator', () => host, true],
+    ['someone who said yes', () => guest, true],
+    ['someone who said no', () => refuser, false],
+    ['someone who never answered', () => bystander, false],
+    // The bug itself: admin of the group, never in the plan.
+    ['an admin who skipped the night', () => admin, false],
+  ])('%s: both sides say %s', async (_who, user, expected) => {
+    const { sql, ts } = await bothSides(user());
+    expect(sql).toBe(expected);
+    expect(ts).toBe(expected);
+  });
+
+  // The one case the client cannot mirror, and must not: group membership is
+  // the server's to check, and an outsider never holds the plan row to ask
+  // about in the first place.
+  it('refuses a non-member, which only the database can know', async () => {
+    expect(ok(await outsider.client.rpc('can_add_plan_photo', { p_plan_id: planId }))).toBe(false);
+  });
+
+  // What the admin actually hit, and the reason uploadPhotos now tells a
+  // refusal apart from a failure: RLS answers 42501, not a network error.
+  it('refuses the admin at the insert, with the code the client keys on', async () => {
+    const { error } = await admin.client.from('plan_photos').insert({
+      plan_id: planId,
+      uploaded_by: admin.id,
+      storage_path: `${planId}/${admin.id}/nope.jpg`,
+    });
+
+    expect(error?.code).toBe('42501');
   });
 });
