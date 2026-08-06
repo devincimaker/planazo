@@ -12,7 +12,7 @@ import { Link, useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { LINK_HIT_SLOP, useAnnounce } from '../../lib/a11y';
 import { useAuthStore } from '../../stores/authStore';
-import { BrandMark, Button, FormField, ThemedText } from '../../components/ui';
+import { BrandMark, Button, FooterBar, FormField, ThemedText } from '../../components/ui';
 import { colors, fonts, spacing } from '../../theme/tokens';
 
 export default function LoginScreen() {
@@ -67,7 +67,8 @@ export default function LoginScreen() {
         setProfile(profile);
       }
 
-      router.replace('/(app)/(tabs)');
+      // Index, not the tabs: it owns the first-run gate (PLA-75).
+      router.replace('/');
     } catch (err) {
       setError(
         err instanceof Error
@@ -157,7 +158,7 @@ export default function LoginScreen() {
           typed their details into this form instead (PLA-69). Same structure as
           signup.tsx.
         */}
-        <View style={styles.footer} testID="login-footer">
+        <FooterBar testID="login-footer">
           <Button
             label={loading ? 'Signing in…' : 'Sign in'}
             onPress={handleLogin}
@@ -175,7 +176,7 @@ export default function LoginScreen() {
               </Pressable>
             </Link>
           </View>
-        </View>
+        </FooterBar>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -225,15 +226,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
-  },
-  footer: {
-    backgroundColor: colors.tabBarBackground,
-    borderTopWidth: 1,
-    borderTopColor: colors.tabBarBorder,
-    paddingHorizontal: spacing.xl,
-    paddingTop: 14,
-    paddingBottom: spacing.lg,
-    gap: spacing.md,
   },
   footerRow: {
     flexDirection: 'row',

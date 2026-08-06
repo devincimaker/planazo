@@ -2,7 +2,7 @@ import { View, StyleSheet } from 'react-native';
 import { fmtDay } from '../../lib/dates';
 import { waitingLabel } from '../../lib/rsvp';
 import type { PlanDerived } from '../../lib/planDerived';
-import { ThemedText, Button, ButtonRow, AnswerFooter } from '../ui';
+import { ThemedText, Button, ButtonRow, AnswerFooter, FooterBar } from '../ui';
 import { colors, fonts, spacing } from '../../theme/tokens';
 
 type Props = {
@@ -156,13 +156,13 @@ export function PlanDetailFooter({
   if (!content) return null;
 
   return (
-    <View
-      style={styles.footer}
+    <FooterBar
+      pinned
       onLayout={(e) => onHeight(e.nativeEvent.layout.height)}
       testID="plan-footer"
     >
       {content}
-    </View>
+    </FooterBar>
   );
 }
 
@@ -177,17 +177,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontFamily: fonts.body,
     lineHeight: 18,
-  },
-  footer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: colors.tabBarBackground,
-    borderTopWidth: 1,
-    borderTopColor: colors.tabBarBorder,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
-    paddingBottom: 30,
   },
 });

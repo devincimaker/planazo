@@ -17,7 +17,7 @@
     "assets:brand": "node scripts/build-brand-assets.mjs",
     "assets:screenshots": "node scripts/build-store-screenshots.mjs",
     "test": "turbo test",
-    "test:integration": "pnpm --filter @planazo/integration-tests test",
+    "test:integration": "pnpm --filter @planazo/integration-tests test:integration",
     "wt:new": "bash scripts/worktree-create.sh",
     "wt:db:reset": "bash scripts/worktree-db-reset.sh",
     "wt:setup": "bash scripts/worktree-setup.sh",

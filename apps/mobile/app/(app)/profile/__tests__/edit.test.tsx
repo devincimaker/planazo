@@ -27,10 +27,6 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, back: mockBack }),
 }));
 
-jest.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
-  SafeAreaView: ({ children }: { children: React.ReactNode }) => children,
-}));
 
 jest.mock('react-native-reanimated', () => {
   const { View } = require('react-native');

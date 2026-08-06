@@ -1,5 +1,11 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  // Root files that change a task's verdict without living in any package.
+  // Turbo hashes the root package.json and the lockfile by default, but not
+  // these: editing eslint.config.mjs left every package's lint hash untouched,
+  // so `turbo lint` served a cached green for rules that no longer existed.
+  // The cache is on locally today, so this was a live bug, not a future one.
+  "globalDependencies": ["eslint.config.mjs", "knip.jsonc"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

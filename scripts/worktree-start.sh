@@ -29,6 +29,14 @@ port=$(wt_read_value "$metadata" "PLANAZO_METRO_PORT")
 udid=$(wt_read_value "$metadata" "PLANAZO_SIM_UDID")
 sim_name=$(wt_read_value "$metadata" "PLANAZO_SIM_NAME")
 db_mode=$(wt_read_value "$metadata" "PLANAZO_DB_MODE")
+sim_mode=$(wt_read_value "$metadata" "PLANAZO_SIM_MODE" 2>/dev/null || true)
+
+# Set up with --no-sim, so there is nothing to boot. Say which command fixes it
+# rather than failing on an empty UDID three steps later.
+[ "${sim_mode:-device}" != "none" ] || wt_die \
+  "This worktree was set up with --no-sim, so it has no simulator to start.
+If the change turned out to be visible after all:  pnpm wt:setup --sim"
+
 [ -n "$port" ] && [ -n "$udid" ] || wt_die "Incomplete .env.worktree. Run: pnpm wt:setup"
 
 # A shared-DB worktree writing migrations is editing MAIN's schema — and every

@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { AuthError, Session } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
 import { LINK_HIT_SLOP, useAnnounce } from '../../lib/a11y';
-import { Button, FormField, ThemedText } from '../ui';
+import { Button, FooterBar, FormField, ThemedText } from '../ui';
 import { colors, fonts, radii, spacing } from '../../theme/tokens';
 
 const CODE_LENGTH = 6;
@@ -230,7 +230,7 @@ export function ConfirmEmailStep({ email, autoSend = false, onVerified, onBack }
           ) : null}
         </ScrollView>
 
-        <View style={styles.footer}>
+        <FooterBar>
           <Button
             label={footerLabel()}
             variant={ready ? 'primary' : 'secondary'}
@@ -246,7 +246,7 @@ export function ConfirmEmailStep({ email, autoSend = false, onVerified, onBack }
               </ThemedText>
             </Pressable>
           </View>
-        </View>
+        </FooterBar>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -296,15 +296,6 @@ const styles = StyleSheet.create({
   },
   noticeBoxInfo: {
     backgroundColor: colors.confirmedSoft,
-  },
-  footer: {
-    backgroundColor: colors.tabBarBackground,
-    borderTopWidth: 1,
-    borderTopColor: colors.tabBarBorder,
-    paddingHorizontal: spacing.xl,
-    paddingTop: 14,
-    paddingBottom: spacing.lg,
-    gap: spacing.md,
   },
   footerRow: {
     flexDirection: 'row',

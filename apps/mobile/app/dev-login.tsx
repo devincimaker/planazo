@@ -49,7 +49,9 @@ export default function DevLogin() {
   }, [email, password, setProfile, setSession]);
 
   if (!__DEV__) return <Redirect href="/" />;
-  if (status === 'done') return <Redirect href="/(app)/(tabs)" />;
+  // Index, not the tabs: it owns the first-run gate (PLA-75), and a dev sign-in
+  // that skipped it would be the one entry point that can't reach onboarding.
+  if (status === 'done') return <Redirect href="/" />;
 
   return (
     <View style={styles.container}>

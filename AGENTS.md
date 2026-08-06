@@ -161,15 +161,18 @@ stays the simple single-threaded path.
 ```bash
 pnpm wt:new pla-17          # new worktree, shares main's local DB (UI/JS work)
 pnpm wt:new pla-17 --db     # ...with its own hosted Supabase branch database
+pnpm wt:new pla-17 --no-sim # ...with no simulator, for work with no screen
 pnpm wt:setup --db          # give an existing worktree its own DB, mid-work
+pnpm wt:setup --sim         # give it a simulator, once the diff says it needs one
 pnpm wt:start               # boot its simulator + Metro, connect the app
 pnpm wt:list                # every worktree's slot, plus orphaned branch DBs
 pnpm wt:rm pla-17           # delete branch DB + simulator + worktree
 ```
 
 Worktrees live in `../planazo-worktrees/<slug>`. Each owns exactly three things,
-recorded in its gitignored `.env.worktree`: a **Metro port**, a **simulator**,
-and a **database** (`PLANAZO_DB_MODE` = `shared` or `branch`).
+recorded in its gitignored `.env.worktree`: a **Metro port**, a **simulator**
+(`PLANAZO_SIM_MODE` = `device` or `none`), and a **database**
+(`PLANAZO_DB_MODE` = `shared` or `branch`).
 
 ### Asked to make a worktree for a Linear issue
 
@@ -275,6 +278,35 @@ name. Chasing those costs more than the run you were impatient about.
   full output to a file you can read afterwards.
 - **A suite that took 30s yesterday and 200s today timed out**, it did not
   break. Check what else is running before believing the failure.
+
+## Verification matches the change
+
+Checking costs the user's attention, which is the scarce thing here. Spend it in
+proportion to what could plausibly break, and say which tier you used.
+
+| The change is… | The proof is… |
+| --- | --- |
+| copy, a constant, a comment | the diff. Make the edit and say it is done |
+| logic with nothing on screen | the tests. Name the ones that cover it |
+| anything a user can see | one simulator pass, screenshots in the PR |
+
+The gate (`pnpm turbo typecheck lint test`) belongs to the last two, and to the
+moment before a PR opens. It is not a reflex after every edit: a four-word copy
+change does not earn an app relaunch, a database reset and a full gate run.
+
+Two things this does **not** license:
+
+- **Skipping the simulator on something visual because tests pass.**
+  `fireEvent.press` never hit-tests, so a pressable buried under a transform or
+  an absolutely-positioned sibling passes every jest test and is dead to a real
+  finger. Anything layering pressables gets one real tap.
+- **Silence about what you skipped.** "Tests pass, not run on device" is a fine
+  thing to write. Letting the reader assume otherwise is not.
+
+Decide it twice: once from the issue, when `/start` picks whether to build a
+simulator at all, and again from the finished diff, which is the first time the
+real answer is knowable. `pnpm wt:setup --sim` upgrades a worktree that turned
+out to need one.
 
 ## Every PR ends with "See it working"
 

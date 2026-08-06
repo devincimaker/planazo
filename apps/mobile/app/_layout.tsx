@@ -25,6 +25,7 @@ import { errorCopy, isInvalidSessionError, isOfflineError, retryQuery } from '..
 import { BrandSplash } from '../components/ui';
 import { ErrorState } from '../components/ui/ErrorState';
 import { useAuthStore } from '../stores/authStore';
+import { useNeedsOnboarding } from '../lib/useOnboarding';
 import { colors } from '../theme/tokens';
 
 // Before anything else in the app can run and throw.
@@ -71,6 +72,7 @@ function InitialLayout() {
   // mounts. That window is what navReady exists to bridge.
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   const navReady = !!useRootNavigationState()?.key;
+  const needsOnboarding = useNeedsOnboarding();
 
   const isMounted = useRef(true);
   useEffect(() => {
@@ -238,14 +240,18 @@ function InitialLayout() {
     return () => subscription.remove();
   }, []);
 
+  // Waits on `needsOnboarding` as well: (app)/_layout has no guard of its own,
+  // so a push tapped by an account that has never seen the carousel would race
+  // index's redirect and land the plan on top of it. Holding the intent rather
+  // than dropping it means the plan opens the moment onboarding finishes.
   useEffect(() => {
-    if (!pushedPlanId || isLoading || !session || !navReady) return;
+    if (!pushedPlanId || isLoading || !session || !navReady || needsOnboarding) return;
     // Consuming a one-shot intent: clearing it is what stops the navigation
     // firing twice, so the write is the point rather than a cascade.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPushedPlanId(null);
     router.push(`/(app)/plan/${pushedPlanId}`);
-  }, [pushedPlanId, isLoading, session, navReady, router]);
+  }, [pushedPlanId, isLoading, session, navReady, needsOnboarding, router]);
 
   // Signing out has to say where to go. (app)/_layout has no session guard, so
   // a cold deep link into a plan would otherwise still be sitting there behind
