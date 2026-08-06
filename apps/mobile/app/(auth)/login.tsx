@@ -153,7 +153,7 @@ export default function LoginScreen() {
           Outside the ScrollView, inside the KeyboardAvoidingView, so both ways
           out of this screen survive the keyboard opening. They used to sit at
           the end of the scrolling content, where a raised keyboard pushed them
-          below the fold — and a first-timer who never found "Make your account"
+          below the fold — and a first-timer who never found the way to sign up
           typed their details into this form instead (PLA-69). Same structure as
           signup.tsx.
         */}
@@ -170,7 +170,7 @@ export default function LoginScreen() {
             <Link href="/(auth)/signup" asChild>
               <Pressable accessibilityRole="button" hitSlop={LINK_HIT_SLOP} testID="signup-link">
                 <ThemedText variant="sub" color={colors.accentText} style={styles.footerLink}>
-                  Make your account
+                  Sign up
                 </ThemedText>
               </Pressable>
             </Link>
