@@ -1,7 +1,7 @@
 ---
 name: merge
-description: Land a PR and prove nothing was left open — gate it, merge from inside its worktree so the reap hook fires, watch the production migration deploy, close the Linear issue, then verify each of those actually happened. Use when the user runs /merge or /merge 54, or asks to merge, land or ship the PR they have been working on.
-argument-hint: "[PR number]"
+description: Land a PR and prove nothing was left open — take a simplify pass at the diff while it is still cheap, gate it, merge from inside its worktree so the reap hook fires, watch the production migration deploy, close the Linear issue, then verify each of those actually happened. Use when the user runs /merge or /merge 54, or asks to merge, land or ship the PR they have been working on.
+argument-hint: "[PR number] [--no-simplify]"
 ---
 
 # /merge — land the PR, then prove the work is actually closed
@@ -16,6 +16,9 @@ that returned zero proves nothing on its own.
 
 ## Ground rules
 
+- **The simplify pass comes first, before the gate.** It edits code, so it has to
+  happen while a CI run is still ahead of the merge rather than behind it. Phase
+  2 owns it, and the gate in Phase 3 waits on whatever CI run that pass started.
 - **Merge from inside the worktree.** A PostToolUse hook on `gh pr merge`
   (`.claude/settings.json` → `scripts/worktree-reap.sh`) reclaims *the worktree
   the merge command ran in*. Run `gh pr merge 54` from main and it exits early by
@@ -23,8 +26,8 @@ that returned zero proves nothing on its own.
   If this session is standing in main and the PR belongs to a worktree, `cd` into
   that worktree first, or hand the merge to the session that owns it.
 - **A browser merge skips the hook entirely.** It only fires on the Bash tool
-  call. When you arrive at a PR that is already `MERGED`, skip Phase 3 and do the
-  reclaim by hand (Phase 6 covers it).
+  call. When you arrive at a PR that is already `MERGED`, skip Phases 2 and 4 and
+  do the reclaim by hand (Phase 7 covers it).
 - **The gate runs before the merge, not after.** Half of what makes the reclaim
   fail — a dirty tree, an unpushed commit — is free to see beforehand and
   annoying to unpick afterwards.
@@ -46,21 +49,62 @@ that returned zero proves nothing on its own.
 4. Report in one line: PR, branch, worktree path, DB mode, issue and its status.
    This is the cheap moment to catch "wrong PR".
 
-## Phase 2 — The gate
+## Phase 2 — The simplify pass
+
+This is the last moment the code can be improved without a follow-up PR, and the
+cheapest one: the diff is small, still fresh in this session, and there is a CI
+run between it and production either way.
+
+Invoke the **`simplify`** skill from inside the worktree, scoped to what this
+branch changed — `git diff main...HEAD --stat` is the honest scope, not every
+file those changes happen to live in. It looks for reuse, simplification,
+efficiency and altitude. It is a quality pass and nothing else: it does not hunt
+for bugs, and `/code-review` is the tool for that, earlier, not here.
+
+Then exactly one of two things is true:
+
+- **It changed nothing.** Say so in the narration line and go straight to the
+  gate. A no-op pass is a good outcome, not a wasted one.
+- **It changed something.** Show the user what moved and why, in a couple of
+  lines, before it becomes a commit. Then run the local gates
+  (`pnpm turbo typecheck lint test`, plus `pnpm test:integration` if the pass
+  touched anything the database enforces), commit on the branch, and push.
+  **Phase 3 now waits on the CI run that push started**, not the green one that
+  was already there when you arrived.
+
+Two things a simplify pass must never quietly do here:
+
+- **Change behaviour.** `## See it working` in the PR body is a walkthrough
+  someone will follow tap by tap. If the pass makes any of those steps read
+  false, either revert that part or update the body — a stale walkthrough is
+  worse than none.
+- **Grow the diff.** Extracting a shared component or refactoring adjacent code
+  is a separate PR, not a merge-time flourish. If the pass proposes one, say so
+  and leave it for the user to file.
+
+Skip this phase, and say which reason applied, when:
+
+- the PR is already `MERGED` — nothing left to change;
+- the diff is docs, config or migrations only — there is no code to simplify, and
+  a merged migration is immutable (AGENTS.md);
+- the user asked for a plain merge. `/merge 54 --no-simplify`, or just saying so,
+  is enough. It is their call and it needs no argument.
+
+## Phase 3 — The gate
 
 Every row is a stop, not a warning. Report the whole table, then stop on the
 first failure and say what would fix it.
 
 | Check | How | Stop when |
 | --- | --- | --- |
-| PR is open and mergeable | `gh pr view --json state,isDraft,mergeable,mergeStateStatus` | draft, `CONFLICTING`, or already `MERGED` (→ Phase 6 instead) |
-| Every check passed | `gh pr view --json statusCheckRollup` | anything not `SUCCESS`, including still-running. Pending is a wait, not a pass |
+| PR is open and mergeable | `gh pr view --json state,isDraft,mergeable,mergeStateStatus` | draft, `CONFLICTING`, or already `MERGED` (→ Phase 7 instead) |
+| Every check passed | `gh pr view --json statusCheckRollup` | anything not `SUCCESS`, including still-running. Pending is a wait, not a pass. After a Phase 2 push, confirm the rollup is the run for *your* head SHA and not the previous one |
 | Nothing uncommitted | `git status --short` in the worktree | any output — `wt:rm` refuses a dirty tree, so the reclaim would fail *after* the merge |
 | Nothing unpushed | `git log @{u}.. --oneline` | any commit — you are about to merge without your last change |
 | `## See it working` | the PR body from Phase 1 | missing on a user-visible change (AGENTS.md requires it). Say so; the user decides whether to add it or wave it through |
 | Issue is real and open | Phase 1's `get_issue` | already `Done` (someone closed it early — confirm this is the right issue) |
 
-## Phase 3 — Merge
+## Phase 4 — Merge
 
 From **inside the worktree**:
 
@@ -81,7 +125,7 @@ Then **read the hook's message before doing anything else.** It reports one of:
 
 The last two are yours to finish. The hook never retries itself.
 
-## Phase 4 — Watch what the merge started
+## Phase 5 — Watch what the merge started
 
 Merging pushes to main, which starts CI again. When the PR touched
 `supabase/migrations/`, the `deploy` job pushes those migrations to production
@@ -97,35 +141,36 @@ gh run watch <id> --exit-status            # or poll if you would rather not blo
 ```
 
 Report the verdict. A failed `deploy` is not "the merge worked, but" — it is an
-open incident, and it goes at the top of the Phase 6 report.
+open incident, and it goes at the top of the Phase 7 report.
 
 If the PR touched no migrations, say so and skip: `deploy` is a no-op and waiting
 on it is dead time.
 
-## Phase 5 — Close the Linear issue
+## Phase 6 — Close the Linear issue
 
 `mcp__linear__save_issue` with `state` **Done**
 (`bb97b98d-af58-41e2-887b-cf4e60543009`). Re-resolve with
 `list_issue_statuses` on team `Planazo` rather than trusting that id if the call
 fails.
 
-Do this **after** Phase 4, not before. An issue marked Done while its migration
+Do this **after** Phase 5, not before. An issue marked Done while its migration
 failed to deploy is a false record, and the board is the thing you will trust
 later.
 
-## Phase 6 — Prove it
+## Phase 7 — Prove it
 
 Print the closing list, each line carrying its evidence. Anything you could not
 check is listed as **not verified** — never assumed.
 
 | Closed | Evidence |
 | --- | --- |
+| Simplify pass ran | Phase 2's verdict: the commit it produced, or "no changes", or the reason it was skipped |
 | PR merged, remote branch gone | `gh pr view <n> --json state,headRefName` |
 | Worktree, simulator, branch DB reclaimed | `pnpm wt:list` no longer lists the branch |
 | main has the squash commit | `git log --oneline -1` from the primary checkout |
 | Local migrations applied | the hook said so, or `supabase migration up --local` |
-| CI on main green, `deploy` included | Phase 4's run |
-| Issue is Done | Phase 5's response |
+| CI on main green, `deploy` included | Phase 5's run |
+| Issue is Done | Phase 6's response |
 
 Two follow-ups belong here and nowhere else:
 
@@ -134,17 +179,19 @@ Two follow-ups belong here and nowhere else:
   that runs.
 - **Other worktrees flagged `MERGED`.** Report them, do not reclaim
   them. They belong to other sessions that may still be working, and touching
-  another worktree's simulator or branch DB is the one rule the whole `wt:*`
+  another worktree's simulator or branch database is the one rule the whole `wt:*`
   family is built on. Ask first, every time.
 
 ## When something goes wrong
 
 | Symptom | What it means | Do this |
 | --- | --- | --- |
+| Simplify's changes fail typecheck, lint or tests | the pass broke something, and it is still yours | fix it or revert that part. Never push a red branch to "let CI decide" |
+| CI is green but for the pre-simplify SHA | the rollup was read before the new run registered | re-read `statusCheckRollup` and match it against `gh pr view --json headRefOid`. Pending is a wait, not a pass |
 | Hook said nothing at all | the merge did not run from a worktree (main, or the wrong one) | reclaim by hand: `pnpm wt:rm <branch>` from the primary checkout |
 | "Worktree kept: the PR for '<branch>' is OPEN" | `gh pr merge <n>` merged a *different* PR than this worktree's branch | merge this branch's PR from this worktree, or reclaim by hand |
 | "Could not reclaim … dirty tree" | uncommitted work in the worktree | commit or stash it, then `pnpm wt:rm <branch>` |
-| PR already `MERGED` on arrival | merged in the browser, so no hook fired | skip Phase 3; run Phases 4 to 6, reclaiming by hand |
+| PR already `MERGED` on arrival | merged in the browser, so no hook fired | skip Phases 2 and 4; run Phases 5 to 7, reclaiming by hand |
 | `mergeStateStatus: BLOCKED` | a required check or review is missing | fix the check. Never `--admin` past it |
 | `deploy` job failed | migrations did not reach production | read the run log; fix forward with a new migration. Never `db push` to production by hand |
 | Migration failed locally after the pull | main's new migrations did not apply here | `supabase migration up --local` from the primary checkout |
