@@ -108,8 +108,9 @@ describe('LoginScreen', () => {
     await fireEvent.changeText(screen.getByPlaceholderText('Your password'), 'hunter22');
     await fireEvent.press(screen.getByTestId('sign-in'));
 
+    // Index rather than the tabs: it owns the first-run gate (PLA-75).
     await waitFor(() => {
-      expect(mockReplace).toHaveBeenCalledWith('/(app)/(tabs)');
+      expect(mockReplace).toHaveBeenCalledWith('/');
     });
     expect(mockFrom).toHaveBeenCalledWith('profiles');
   });

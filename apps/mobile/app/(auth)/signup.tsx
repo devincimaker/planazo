@@ -138,7 +138,9 @@ export default function SignupScreen() {
       setProfile(profile);
     }
 
-    router.replace('/(app)/(tabs)');
+    // Index, not the tabs: it owns the first-run gate (PLA-75), and a brand new
+    // account is exactly who that gate exists for.
+    router.replace('/');
   }
 
   async function handleSignup() {

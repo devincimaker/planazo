@@ -67,7 +67,8 @@ export default function LoginScreen() {
         setProfile(profile);
       }
 
-      router.replace('/(app)/(tabs)');
+      // Index, not the tabs: it owns the first-run gate (PLA-75).
+      router.replace('/');
     } catch (err) {
       setError(
         err instanceof Error
