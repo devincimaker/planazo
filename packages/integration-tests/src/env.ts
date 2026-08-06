@@ -87,6 +87,29 @@ function assertAllowed(url: string, root: string): void {
 }
 
 /**
+ * Base URL of the local mail catcher, or null when this stack has none.
+ *
+ * Only a loopback stack runs one: a hosted branch database sends real email
+ * through Supabase's mailer, where nothing can read it back. Tests that need to
+ * see what a user received skip themselves when this returns null, rather than
+ * failing on a machine that was never going to be able to answer.
+ *
+ * The port is read from config.toml rather than hardcoded, because that file is
+ * the thing the CLI actually obeys.
+ */
+export function mailCatcher(): string | null {
+  if (!isLoopback(resolveStack().url)) return null;
+
+  const config = readFileSync(join(repoRoot(), 'supabase', 'config.toml'), 'utf8');
+  // Everything from [inbucket] up to the next section header.
+  const section = config.split(/^\[inbucket\]\s*$/m)[1]?.split(/^\[/m)[0];
+  if (!section || !/^enabled\s*=\s*true/m.test(section)) return null;
+
+  const port = section.match(/^port\s*=\s*(\d+)/m)?.[1];
+  return port ? `http://127.0.0.1:${port}` : null;
+}
+
+/**
  * A shared-mode worktree's database is main's local stack, which carries main's
  * schema. A branch that adds migration files would be testing against a schema
  * it isn't shipping — refuse before it produces a meaningless verdict.

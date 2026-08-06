@@ -63,6 +63,31 @@ describe('LoginScreen', () => {
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
+  /**
+   * The dead end PLA-70 closed. Signing up used to leave the account
+   * unconfirmed and point people at this form, where Supabase's raw "Email not
+   * confirmed" was the only thing that could ever happen.
+   */
+  it('sends an unconfirmed account to the code step instead of the raw error', async () => {
+    mockSignIn.mockResolvedValue({
+      data: {},
+      error: { code: 'email_not_confirmed', message: 'Email not confirmed' },
+    });
+
+    await render(<LoginScreen />);
+    await fireEvent.changeText(screen.getByPlaceholderText('your@email.com'), ' Nacho@Planazo.me ');
+    await fireEvent.changeText(screen.getByPlaceholderText('Your password'), 'hunter22');
+    await fireEvent.press(screen.getByTestId('sign-in'));
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith({
+        pathname: '/(auth)/signup',
+        params: { verify: 'nacho@planazo.me' },
+      });
+    });
+    expect(screen.queryByText('Email not confirmed')).toBeNull();
+  });
+
   it('loads the profile and navigates into the app on success', async () => {
     mockSignIn.mockResolvedValue({
       data: { session: { user: { id: 'user-1' } } },
