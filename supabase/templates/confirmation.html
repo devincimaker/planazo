@@ -1,0 +1,35 @@
+<!--
+  Confirm signup.
+
+  The app asks for the code, so the mail leads with the code. The link Supabase
+  puts here by default is deliberately gone: it bounces through a browser to get
+  back to an app the reader already has open, and mail providers that pre-fetch
+  links to scan them for malware burn the one-time token before a human ever
+  taps it. Six digits cannot be pre-fetched, and they work when the mail is on a
+  laptop and the app is on a phone.
+
+  {{ .Token }} is the 6-digit code, sized by auth.email.otp_length.
+
+  This file only governs the LOCAL stack. Production reads its own copy from the
+  dashboard under Authentication -> Email Templates -> Confirm signup, and
+  nothing syncs the two: changing this one means pasting it there as well.
+-->
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; color: #24201c; max-width: 460px; margin: 0 auto; padding: 32px 24px;">
+  <h1 style="font-size: 22px; font-weight: 700; margin: 0 0 12px;">Your Planazo code</h1>
+
+  <p style="font-size: 16px; line-height: 24px; margin: 0 0 24px; color: #6b6156;">
+    Enter these six digits in the app to finish making your account.
+  </p>
+
+  <p style="font-size: 34px; font-weight: 700; letter-spacing: 8px; margin: 0 0 24px; padding: 18px 20px; background: #f6f1ec; border-radius: 14px; text-align: center;">
+    {{ .Token }}
+  </p>
+
+  <p style="font-size: 14px; line-height: 21px; margin: 0; color: #6b6156;">
+    The code lasts an hour. If you ask for a new one, this one stops working.
+  </p>
+
+  <p style="font-size: 14px; line-height: 21px; margin: 24px 0 0; color: #9b9086;">
+    Didn't sign up for Planazo? Ignore this email and nothing happens.
+  </p>
+</div>

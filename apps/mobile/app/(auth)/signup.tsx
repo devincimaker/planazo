@@ -9,22 +9,18 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Link, useRouter } from 'expo-router';
+import { Link, useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
+import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
 import { captureError } from '../../lib/sentry';
 import { contentViolation } from '../../lib/moderation';
 import { LINK_HIT_SLOP, useAnnounce } from '../../lib/a11y';
 import { useAuthStore } from '../../stores/authStore';
-import {
-  Avatar,
-  Button,
-  ConfirmCard,
-  FormField,
-  ThemedText,
-} from '../../components/ui';
+import { ConfirmEmailStep } from '../../components/auth/ConfirmEmailStep';
+import { Avatar, Button, FormField, ThemedText } from '../../components/ui';
 import { colors, fonts, spacing } from '../../theme/tokens';
 
 const MIN_PASSWORD = 6;
@@ -45,13 +41,19 @@ function nextStep(name: string, email: string, password: string) {
 
 export default function SignupScreen() {
   const router = useRouter();
+  // Sign-in sends anyone with an unconfirmed account here rather than printing
+  // "Email not confirmed" at them (PLA-70). Their address is all we need: the
+  // code they enter is what produces the session.
+  const { verify } = useLocalSearchParams<{ verify?: string }>();
   const { setSession, setProfile } = useAuthStore();
   const [displayName, setDisplayName] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(verify ?? '');
   const [password, setPassword] = useState('');
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [checkInbox, setCheckInbox] = useState(false);
+  const [pending, setPending] = useState<{ email: string; autoSend: boolean } | null>(
+    verify ? { email: verify.trim().toLowerCase(), autoSend: true } : null,
+  );
   const [loading, setLoading] = useState(false);
 
   useAnnounce(error);
@@ -106,6 +108,39 @@ export default function SignupScreen() {
     }
   }
 
+  /**
+   * The one way into the app from this screen, whether the session arrived with
+   * signUp (confirmations off) or with the code (confirmations on).
+   *
+   * The avatar upload living here is what fixes the quiet bug in the old flow:
+   * a photo picked during signup was held in this component's state and thrown
+   * away, because with confirmations on there was never a session to upload it
+   * with and the screen was replaced by a card. The code step keeps us mounted,
+   * so by the time there is a session the photo is still here.
+   */
+  async function enterApp(session: Session) {
+    setSession(session);
+
+    if (avatarUri) {
+      const avatarUrl = await uploadAvatar(session.user.id);
+      if (avatarUrl) {
+        await supabase.from('profiles').update({ avatar_url: avatarUrl }).eq('id', session.user.id);
+      }
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', session.user.id)
+      .single();
+
+    if (profile) {
+      setProfile(profile);
+    }
+
+    router.replace('/(app)/(tabs)');
+  }
+
   async function handleSignup() {
     if (!step.ready) {
       setError(step.label);
@@ -135,34 +170,13 @@ export default function SignupScreen() {
 
       if (!data.session) {
         // Email confirmation is on: the account exists but there is no session
-        // to carry into the app yet.
-        setCheckInbox(true);
+        // yet. The code in the confirmation email is what produces one, and it
+        // gets entered right here rather than on a screen of its own.
+        setPending({ email: email.trim().toLowerCase(), autoSend: false });
         return;
       }
 
-      setSession(data.session);
-
-      if (avatarUri) {
-        const avatarUrl = await uploadAvatar(data.session.user.id);
-        if (avatarUrl) {
-          await supabase
-            .from('profiles')
-            .update({ avatar_url: avatarUrl })
-            .eq('id', data.session.user.id);
-        }
-      }
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', data.session.user.id)
-        .single();
-
-      if (profile) {
-        setProfile(profile);
-      }
-
-      router.replace('/(app)/(tabs)');
+      await enterApp(data.session);
     } catch (err) {
       setError(
         err instanceof Error
@@ -174,24 +188,14 @@ export default function SignupScreen() {
     }
   }
 
-  if (checkInbox) {
+  if (pending) {
     return (
-      <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
-        <View style={styles.noticeBody}>
-          <ConfirmCard title="Your account is made" testID="check-inbox">
-            Confirm it from the link we sent to{' '}
-            <ThemedText variant="bodyStrong">{email.trim().toLowerCase()}</ThemedText>, then sign
-            in. If it hasn&apos;t landed in a minute, check spam.
-          </ConfirmCard>
-          <Button
-            label="Go to sign in"
-            variant="outline"
-            onPress={() => router.replace('/(auth)/login')}
-            style={styles.noticeButton}
-            testID="go-to-login"
-          />
-        </View>
-      </SafeAreaView>
+      <ConfirmEmailStep
+        email={pending.email}
+        autoSend={pending.autoSend}
+        onVerified={enterApp}
+        onBack={() => setPending(null)}
+      />
     );
   }
 
@@ -397,14 +401,5 @@ const styles = StyleSheet.create({
   },
   footerLink: {
     fontFamily: fonts.bodyBold,
-  },
-  noticeBody: {
-    flex: 1,
-    paddingHorizontal: spacing.xl,
-    paddingTop: 70,
-    gap: spacing.xl,
-  },
-  noticeButton: {
-    marginTop: 0,
   },
 });

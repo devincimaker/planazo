@@ -40,6 +40,17 @@ export default function LoginScreen() {
       });
 
       if (signInError) {
+        // Someone who quit signup before entering their code lands here, and
+        // used to get Supabase's raw "Email not confirmed" with nothing to do
+        // about it. Their account exists and we know the address, so send them
+        // to the code step instead, which sends them a fresh one on arrival.
+        if (signInError.code === 'email_not_confirmed') {
+          router.replace({
+            pathname: '/(auth)/signup',
+            params: { verify: email.trim().toLowerCase() },
+          });
+          return;
+        }
         setError(signInError.message);
         return;
       }

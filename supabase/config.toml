@@ -270,6 +270,18 @@ otp_expiry = 3600
 # subject = "You have been invited"
 # content_path = "./supabase/templates/invite.html"
 
+# Signup now ends in a code entered in the app, not a link tapped in a browser
+# (PLA-70), so the mail leads with the code and the link is gone. See the file
+# for why the code beats the link.
+#
+# LOCAL ONLY. The hosted project keeps its own copy under Authentication →
+# Email Templates → Confirm signup, and nothing syncs the two: editing this
+# means pasting the same HTML there by hand, exactly like enable_confirmations
+# above.
+[auth.email.template.confirmation]
+subject = "Your Planazo code"
+content_path = "./supabase/templates/confirmation.html"
+
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]
 # enabled = true
