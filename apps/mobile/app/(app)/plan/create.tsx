@@ -100,16 +100,19 @@ export default function CreatePlanScreen() {
     </View>
   );
 
-  // The "+" already sends a groupless user to Groups instead of here, but
-  // `planazo://plan/create` is a live deep link and nothing guards it. The
-  // form below cannot be completed without a group, so it is not offered:
-  // that empty chip row and its permanently disabled "Post to …" were the
-  // dead end PLA-68 was reported for.
+  // Where the "+" lands for someone in no groups, and where the deep link
+  // lands too. The form below cannot be completed without a group, so it is
+  // not offered: that empty chip row and its permanently disabled
+  // "Post to …" were the dead end PLA-68 was reported for.
   if (!groupsLoading && !hasGroups) {
     return (
       <SafeAreaView style={styles.screen} edges={['top']}>
         {header}
-        <NeedsGroupState dismissFirst testID="create-needs-group" />
+        <NeedsGroupState
+          body="A plan goes to one group, not to everybody. Join one or start one, then come back and post this."
+          dismissFirst
+          testID="create-needs-group"
+        />
       </SafeAreaView>
     );
   }

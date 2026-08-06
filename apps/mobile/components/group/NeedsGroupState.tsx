@@ -11,9 +11,16 @@ import { EmptyState } from '../ui';
  * offers both doors, invite link first.
  */
 export function NeedsGroupState({
+  body = 'A plan goes to one group, not to everybody. Join one or start one, and your plans land here.',
   dismissFirst = false,
   testID,
 }: {
+  /**
+   * The last line is the only part that moves. "Your plans land here" is true
+   * on the feed and wrong inside the create sheet, which is not where plans
+   * land.
+   */
+  body?: string;
   /** Set on a modal: the sheet has to be gone before the tab underneath changes. */
   dismissFirst?: boolean;
   testID?: string;
@@ -43,7 +50,7 @@ export function NeedsGroupState({
   return (
     <EmptyState
       title="Plans need a group first"
-      body="A plan goes to one group, not to everybody. Join one or start one, and your plans land here."
+      body={body}
       ctaLabel="Sort out a group"
       onPress={goToGroups}
       testID={testID}

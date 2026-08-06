@@ -6,7 +6,6 @@ import { ThemedText } from '../ui/ThemedText';
 import { MIN_TOUCH_TARGET } from '../../lib/a11y';
 import { colors, fonts, radii } from '../../theme/tokens';
 import { usePendingInvites } from '../../lib/usePendingInvites';
-import { useMyGroups } from '../../lib/useMyGroups';
 
 // Minimal slice of react-navigation's BottomTabBarProps — typed locally so we
 // don't import from a transitive package.
@@ -49,7 +48,6 @@ export function TabBar({ state, navigation }: TabBarProps) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { count: pendingCount } = usePendingInvites();
-  const { hasGroups, loading: groupsLoading } = useMyGroups();
 
   // `undefined` is accepted so callers can index `state.routes` directly; a
   // missing route renders nothing rather than crashing the whole tab bar.
@@ -93,19 +91,13 @@ export function TabBar({ state, navigation }: TabBarProps) {
     );
   };
 
-  // Only divert once we know, not while we're still asking: `hasGroups` is
-  // false during the first load too, and a "+" that jumps to Groups for a
-  // moment and composes plans thereafter is worse than one that always opens
-  // the sheet. The sheet handles the no-groups case itself either way.
-  const needsGroup = !groupsLoading && !hasGroups;
-
+  // Always the same destination, whatever state the user is in. A "+" that
+  // sometimes composes a plan and sometimes jumps to Groups is a control you
+  // have to learn twice; the sheet explains the missing group instead, which
+  // is where a deep link lands anyway (PLA-68).
   const onCreate = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    // Nothing can be posted until there's a group to post it to, so the "+"
-    // offers the step that's actually available (PLA-68). The Groups tab, not
-    // the new-group form: someone who arrived on an invite needs the paste-a-
-    // link field, which only the tab has.
-    router.navigate(needsGroup ? '/(app)/(tabs)/groups' : '/(app)/plan/create');
+    router.push('/(app)/plan/create');
   };
 
   return (
@@ -113,7 +105,7 @@ export function TabBar({ state, navigation }: TabBarProps) {
       {renderTab(state.routes[0], 0)}
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={needsGroup ? 'Start with a group' : 'New plan'}
+        accessibilityLabel="New plan"
         onPress={onCreate}
         style={styles.createWrap}
         testID="tab-create"
