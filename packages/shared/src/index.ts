@@ -34,6 +34,8 @@ export interface Profile {
   /** The 12b "Notify me" toggle — gates push delivery only, never feed rows. */
   push_enabled: boolean;
   add_to_calendar: boolean;
+  /** When they finished the first-run carousel (PLA-75). Null means never. */
+  onboarded_at: string | null;
   created_at: string;
   updated_at: string;
 }

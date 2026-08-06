@@ -115,8 +115,10 @@ describe('SignupScreen', () => {
     await fill('Nacho', 'nacho@planazo.me', 'hunter22');
     await fireEvent.press(screen.getByTestId('create-account'));
 
+    // Index rather than the tabs: it owns the first-run gate (PLA-75), and a
+    // brand new account is exactly who that gate exists for.
     await waitFor(() => {
-      expect(mockReplace).toHaveBeenCalledWith('/(app)/(tabs)');
+      expect(mockReplace).toHaveBeenCalledWith('/');
     });
   });
 
@@ -178,7 +180,7 @@ describe('SignupScreen', () => {
     await fireEvent.press(screen.getByTestId('confirm-code'));
 
     await waitFor(() => {
-      expect(mockReplace).toHaveBeenCalledWith('/(app)/(tabs)');
+      expect(mockReplace).toHaveBeenCalledWith('/');
     });
     expect(upload).toHaveBeenCalledWith('user-1/avatar.jpg', undefined, {
       upsert: true,
