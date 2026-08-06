@@ -47,6 +47,21 @@ Hyphens in compound words (`five-a-side`, `invite-only`) are unaffected.
 rather than reaching a reviewer. See `eslint.config.mjs`. Markdown is outside
 ESLint's reach, so `store-assets/APP-STORE.md` is still read by eye.
 
+## Explain in fewer words
+
+Lead with the answer. Then add only the reasoning that changes what the user
+does next, and stop.
+
+Cut in this order: restating the question, previewing what you are about to
+say, recapping what you just said, the second and third example, the caveat
+that changes nothing. A heading with one sentence under it did not need to be
+a heading.
+
+Length is earned by the question, not by the work behind it. "How does X work
+today?" is a paragraph. A design trade-off may genuinely need a page. When in
+doubt answer short and offer to go deeper: asking for more costs the user one
+line, wading through too much costs them the whole reply.
+
 ## Commit where you already are
 
 **If the work is on `main`, commit it on `main` and push it from `main`.** When
