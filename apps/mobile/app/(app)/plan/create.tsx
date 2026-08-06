@@ -20,7 +20,7 @@ import { HowManyField } from '../../../components/plan/HowManyField';
 import { NEEDS_GROUP_COPY, NeedsGroupState } from '../../../components/group/NeedsGroupState';
 import { useDismissTo } from '../../../lib/navigation';
 import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
-import { ThemedText, Button, colorForName } from '../../../components/ui';
+import { ThemedText, Button, FooterBar, colorForName } from '../../../components/ui';
 import { colors, fonts, radii, spacing } from '../../../theme/tokens';
 import { type } from '../../../theme/tokens';
 
@@ -230,7 +230,7 @@ export default function CreatePlanScreen() {
             </ScrollView>
           </KeyboardAvoidingView>
 
-          <View style={styles.footer}>
+          <FooterBar pinned>
             <Button
               // Naming the group is the point of this label, so it waits until
               // there is a name: "Post to …" used to flash for everyone while the
@@ -257,7 +257,7 @@ export default function CreatePlanScreen() {
               }
               testID="post-cta"
             />
-          </View>
+          </FooterBar>
         </>
       )}
     </SafeAreaView>
@@ -373,17 +373,5 @@ const styles = StyleSheet.create({
   notes: {
     height: 88,
     textAlignVertical: 'top',
-  },
-  footer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: colors.tabBarBackground,
-    borderTopWidth: 1,
-    borderTopColor: colors.tabBarBorder,
-    paddingHorizontal: spacing.xl,
-    paddingTop: 14,
-    paddingBottom: 30,
   },
 });

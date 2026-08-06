@@ -21,6 +21,7 @@ import { FriendPicker } from '../../../components/group/FriendPicker';
 import {
   ThemedText,
   Button,
+  FooterBar,
   GroupTile,
   GroupPhotoField,
   showToast,
@@ -213,7 +214,7 @@ export default function NewGroupScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <View style={styles.footer}>
+      <FooterBar pinned>
         <Button
           label={ctaLabel}
           variant={named ? 'primary' : 'secondary'}
@@ -222,7 +223,7 @@ export default function NewGroupScreen() {
           onPress={() => createGroup.mutate()}
           testID="create-cta"
         />
-      </View>
+      </FooterBar>
     </SafeAreaView>
   );
 }
@@ -308,17 +309,5 @@ const styles = StyleSheet.create({
     borderColor: colors.borderStrong,
     borderRadius: 18,
     padding: 15,
-  },
-  footer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: colors.tabBarBackground,
-    borderTopWidth: 1,
-    borderTopColor: colors.tabBarBorder,
-    paddingHorizontal: spacing.xl,
-    paddingTop: 14,
-    paddingBottom: 30,
   },
 });

@@ -63,6 +63,9 @@
   "private": true,
   "jest": {
     "preset": "jest-expo",
+    "setupFilesAfterEnv": [
+      "<rootDir>/jest.setup.js"
+    ],
     "transformIgnorePatterns": [
       "node_modules/(?!.*(?:react-native|@react-native|expo|@expo|@expo-google-fonts|react-navigation|@react-navigation|native-base|react-native-svg|react-native-url-polyfill))"
     ]

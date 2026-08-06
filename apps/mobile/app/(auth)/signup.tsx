@@ -20,7 +20,7 @@ import { contentViolation } from '../../lib/moderation';
 import { LINK_HIT_SLOP, useAnnounce } from '../../lib/a11y';
 import { useAuthStore } from '../../stores/authStore';
 import { ConfirmEmailStep } from '../../components/auth/ConfirmEmailStep';
-import { Avatar, Button, FormField, ThemedText } from '../../components/ui';
+import { Avatar, Button, FooterBar, FormField, ThemedText } from '../../components/ui';
 import { colors, fonts, spacing } from '../../theme/tokens';
 
 const MIN_PASSWORD = 6;
@@ -303,7 +303,7 @@ export default function SignupScreen() {
           ) : null}
         </ScrollView>
 
-        <View style={styles.footer}>
+        <FooterBar>
           <Button
             label={loading ? 'Making your account…' : step.label}
             variant={step.ready ? 'primary' : 'secondary'}
@@ -321,7 +321,7 @@ export default function SignupScreen() {
               </Pressable>
             </Link>
           </View>
-        </View>
+        </FooterBar>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -380,15 +380,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
-  },
-  footer: {
-    backgroundColor: colors.tabBarBackground,
-    borderTopWidth: 1,
-    borderTopColor: colors.tabBarBorder,
-    paddingHorizontal: spacing.xl,
-    paddingTop: 14,
-    paddingBottom: spacing.lg,
-    gap: spacing.md,
   },
   footerRow: {
     flexDirection: 'row',

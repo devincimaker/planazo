@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { submitPollDraft, planPollKey } from '../../../../lib/usePlanPoll';
 import { emptyPollDraft, pollDraftValid } from '../../../../lib/pollDraft';
 import { PollOptionsEditor } from '../../../../components/PollComposer';
-import { ThemedText, Button } from '../../../../components/ui';
+import { ThemedText, Button, FooterBar } from '../../../../components/ui';
 import { colors, fonts, spacing, type } from '../../../../theme/tokens';
 
 /**
@@ -125,7 +125,7 @@ export default function NewPollScreen() {
           </View>
         </ScrollView>
 
-        <View style={styles.footer}>
+        <FooterBar insetBottom>
           <Button
             label={add.isPending ? 'Adding…' : 'Add the poll'}
             variant={valid ? 'primary' : 'secondary'}
@@ -134,7 +134,7 @@ export default function NewPollScreen() {
             onPress={() => add.mutate()}
             testID="ask"
           />
-        </View>
+        </FooterBar>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -214,13 +214,5 @@ const styles = StyleSheet.create({
   },
   hint: {
     lineHeight: 19,
-  },
-  footer: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xl,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    backgroundColor: colors.background,
   },
 });
