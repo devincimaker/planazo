@@ -5,9 +5,14 @@ import { TabBar } from '../TabBar';
 
 const mockPush = jest.fn();
 let mockPendingCount = 0;
+let mockGroups = { groups: [], hasGroups: true, loading: false };
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
+}));
+
+jest.mock('../../../lib/useMyGroups', () => ({
+  useMyGroups: () => mockGroups,
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -42,6 +47,7 @@ describe('TabBar', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockPendingCount = 0;
+    mockGroups = { groups: [], hasGroups: true, loading: false };
   });
 
   it('renders both tabs and the create button', async () => {
@@ -74,6 +80,28 @@ describe('TabBar', () => {
   });
 
   it('opens the create sheet from the + button', async () => {
+    await render(<TabBar {...makeProps()} />);
+
+    expect(screen.getByLabelText('New plan')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('tab-create'));
+    expect(mockPush).toHaveBeenCalledWith('/(app)/plan/create');
+  });
+
+  // PLA-68: still a sheet about making a plan, just the one that can be acted
+  // on. A short detent has to be declared before the screen mounts, which is
+  // why the choice lives here and not inside the create screen.
+  it('opens the needs-a-group sheet while the user is in no groups', async () => {
+    mockGroups = { groups: [], hasGroups: false, loading: false };
+    await render(<TabBar {...makeProps()} />);
+
+    await fireEvent.press(screen.getByTestId('tab-create'));
+    expect(mockPush).toHaveBeenCalledWith('/(app)/plan/needs-group');
+  });
+
+  // "No groups" is also what an unanswered query looks like. Guessing would
+  // send someone who has groups to the wrong sheet for as long as it takes.
+  it('falls back to the create sheet while the groups query is in flight', async () => {
+    mockGroups = { groups: [], hasGroups: false, loading: true };
     await render(<TabBar {...makeProps()} />);
 
     await fireEvent.press(screen.getByTestId('tab-create'));

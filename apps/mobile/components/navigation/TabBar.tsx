@@ -6,6 +6,7 @@ import { ThemedText } from '../ui/ThemedText';
 import { MIN_TOUCH_TARGET } from '../../lib/a11y';
 import { colors, fonts, radii } from '../../theme/tokens';
 import { usePendingInvites } from '../../lib/usePendingInvites';
+import { useMyGroups } from '../../lib/useMyGroups';
 
 // Minimal slice of react-navigation's BottomTabBarProps — typed locally so we
 // don't import from a transitive package.
@@ -48,6 +49,7 @@ export function TabBar({ state, navigation }: TabBarProps) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { count: pendingCount } = usePendingInvites();
+  const { hasGroups, loading: groupsLoading } = useMyGroups();
 
   // `undefined` is accepted so callers can index `state.routes` directly; a
   // missing route renders nothing rather than crashing the whole tab bar.
@@ -91,9 +93,18 @@ export function TabBar({ state, navigation }: TabBarProps) {
     );
   };
 
+  // The "+" always opens a sheet about making a plan; which sheet depends on
+  // whether one can be made yet. A short detent needs declaring before the
+  // screen mounts, so the choice has to happen here rather than inside the
+  // create screen (PLA-68).
+  //
+  // Only once we know, though: `hasGroups` is false during the first load
+  // too, and the create screen handles the no-groups case on its own, so the
+  // in-flight case goes there rather than guessing.
   const onCreate = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    router.push('/(app)/plan/create');
+    const needsGroup = !groupsLoading && !hasGroups;
+    router.push(needsGroup ? '/(app)/plan/needs-group' : '/(app)/plan/create');
   };
 
   return (

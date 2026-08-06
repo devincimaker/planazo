@@ -8,6 +8,10 @@ import { supabase } from '../../../../lib/supabase';
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
+const mockNavigate = jest.fn();
+const mockReplace = jest.fn();
+/** False on a cold deep link: the sheet opens with nothing behind it. */
+let mockCanGoBack = true;
 let mockParams: Record<string, string | undefined> = {};
 
 jest.mock('../../../../lib/supabase', () => ({
@@ -15,7 +19,13 @@ jest.mock('../../../../lib/supabase', () => ({
 }));
 
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, back: mockBack, replace: jest.fn() }),
+  useRouter: () => ({
+    push: mockPush,
+    back: mockBack,
+    navigate: mockNavigate,
+    replace: mockReplace,
+    canGoBack: () => mockCanGoBack,
+  }),
   useLocalSearchParams: () => mockParams,
 }));
 
@@ -68,7 +78,7 @@ let availChain: ReturnType<typeof chain>;
 let pollsChain: ReturnType<typeof chain>;
 let pollOptionsChain: ReturnType<typeof chain>;
 
-function primeSupabase() {
+function primeSupabase(memberships: unknown[] = MEMBERSHIPS) {
   plansChain = chain({ data: { id: 'new-plan' }, error: null });
   optionsChain = chain({ data: [{ id: 'd1' }, { id: 'd2' }], error: null });
   rsvpsChain = chain({ error: null });
@@ -76,7 +86,7 @@ function primeSupabase() {
   pollsChain = chain({ data: { id: 'new-poll' }, error: null });
   pollOptionsChain = chain({ error: null });
   mockFrom.mockImplementation((table: string) => {
-    if (table === 'group_members') return chain({ data: MEMBERSHIPS, error: null });
+    if (table === 'group_members') return chain({ data: memberships, error: null });
     if (table === 'plans') return plansChain;
     if (table === 'plan_date_options') return optionsChain;
     if (table === 'rsvps') return rsvpsChain;
@@ -129,6 +139,7 @@ afterAll(() => {
 beforeEach(() => {
   jest.clearAllMocks();
   mockParams = {};
+  mockCanGoBack = true;
   primeSupabase();
   useAuthStore.setState({
     user: { id: 'me' } as any,
@@ -167,6 +178,64 @@ describe('CreatePlanScreen', () => {
     await fireEvent.press(screen.getByTestId('group-g2'));
     expect(screen.getByTestId('group-g2')).toBeSelected();
     expect(screen.getByText('Post to Escapistas')).toBeTruthy();
+  });
+
+  /**
+   * PLA-68, as reported: with no groups the chip row was an empty space under
+   * its own label and the footer read "Post to …", disabled for good. The
+   * screen is reachable by deep link whatever the "+" does, so it has to
+   * answer for this state itself rather than assume a caller checked.
+   */
+  it('offers the way into a group instead of a form that cannot be posted', async () => {
+    primeSupabase([]);
+    await renderCreate();
+
+    await screen.findByText('Plans need a group first');
+    expect(screen.queryByTestId('post-cta')).toBeNull();
+    expect(screen.queryByText("Who's it for")).toBeNull();
+    expect(screen.queryByTestId('title-input')).toBeNull();
+
+    // Cancel still works, so the sheet is never a trap.
+    expect(screen.getByTestId('cancel')).toBeTruthy();
+  });
+
+  it('dismisses the sheet before changing tabs underneath it', async () => {
+    primeSupabase([]);
+    await renderCreate();
+
+    await fireEvent.press(await screen.findByText('Sort out a group'));
+    expect(mockBack).toHaveBeenCalled();
+    // The tab change is deliberately deferred until the sheet is gone. This
+    // suite leaves setTimeout real (see doNotFake above), so it is waited for
+    // rather than advanced.
+    expect(mockNavigate).not.toHaveBeenCalled();
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/(app)/(tabs)/groups'));
+  });
+
+  /**
+   * `planazo://plan/create` on a cold start opens this sheet with nothing
+   * behind it, and back() is a no-op that logs "GO_BACK was not handled by
+   * any navigator". Both ways out used it, so the sheet a deep link opened
+   * could not be left at all.
+   */
+  it('leaves the sheet by replacing it when there is nothing to go back to', async () => {
+    mockCanGoBack = false;
+    primeSupabase([]);
+    await renderCreate();
+
+    await fireEvent.press(await screen.findByText('Sort out a group'));
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockReplace).toHaveBeenCalledWith('/(app)/(tabs)/groups');
+  });
+
+  it('cancels out of a deep-linked sheet that has no screen behind it', async () => {
+    mockCanGoBack = false;
+    await renderCreate();
+
+    await fireEvent.press(await screen.findByTestId('cancel'));
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockReplace).toHaveBeenCalledWith('/(app)/(tabs)');
   });
 
   it('collapses the chip row to one group when opened with groupId', async () => {

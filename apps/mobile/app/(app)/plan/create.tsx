@@ -8,17 +8,17 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown, FadeOutUp } from 'react-native-reanimated';
-import { supabase } from '../../../lib/supabase';
 import { useCreatePlan } from '../../../lib/useCreatePlan';
+import { useMyGroups } from '../../../lib/useMyGroups';
 import { emptyPollDraft, pollDraftTouched, pollDraftValid } from '../../../lib/pollDraft';
 import { PollComposer } from '../../../components/PollComposer';
 import { WhenField } from '../../../components/plan/WhenField';
 import { HowManyField } from '../../../components/plan/HowManyField';
-import { useAuthStore } from '../../../stores/authStore';
+import { NEEDS_GROUP_COPY, NeedsGroupState } from '../../../components/group/NeedsGroupState';
+import { useDismissTo } from '../../../lib/navigation';
 import { MIN_TOUCH_TARGET } from '../../../lib/a11y';
 import { ThemedText, Button, colorForName } from '../../../components/ui';
 import { colors, fonts, radii, spacing } from '../../../theme/tokens';
@@ -39,8 +39,6 @@ export default function CreatePlanScreen() {
     location?: string;
     y?: string;
   }>();
-  const router = useRouter();
-  const { user } = useAuthStore();
 
   const [title, setTitle] = useState(params.title ?? '');
   const [pickedGroupId, setPickedGroupId] = useState<string | null>(null);
@@ -61,26 +59,11 @@ export default function CreatePlanScreen() {
   const [askOpen, setAskOpen] = useState(false);
   const [pollDraft, setPollDraft] = useState(emptyPollDraft());
 
-  const { data: groups } = useQuery({
-    queryKey: ['my-groups', user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('group_members')
-        .select('groups:group_id (id, name, color)')
-        .eq('user_id', user!.id);
-      if (error) throw error;
-      return data
-        .map((row) => row.groups as unknown as { id: string; name: string; color: string | null } | null)
-        .filter(Boolean) as { id: string; name: string; color: string | null }[];
-    },
-    enabled: !!user,
-  });
+  const { groups, hasGroups, loading: groupsLoading } = useMyGroups();
 
   // Opened from a group: that group is settled and the chip row collapses to it.
   const paramGroupId = params.groupId || null;
-  const choices = paramGroupId
-    ? (groups ?? []).filter((g) => g.id === paramGroupId)
-    : (groups ?? []);
+  const choices = paramGroupId ? groups.filter((g) => g.id === paramGroupId) : groups;
   const groupId = paramGroupId ?? pickedGroupId ?? choices[0]?.id ?? null;
   const group = choices.find((g) => g.id === groupId) ?? null;
 
@@ -95,11 +78,21 @@ export default function CreatePlanScreen() {
 
   const createPlan = useCreatePlan();
 
+  // `planazo://plan/create` opens this sheet with nothing behind it, and
+  // back() is a no-op there: Cancel did nothing at all on a cold deep link.
+  const cancel = useDismissTo('/(app)/(tabs)');
+
+  // The form below cannot be completed without a group, so it is not offered:
+  // that empty chip row and its permanently disabled "Post to …" were the dead
+  // end PLA-68 was reported for. The "+" already sends this user to the
+  // needs-group sheet, but this route is a live deep link nothing guards.
+  const needsGroup = !groupsLoading && !hasGroups;
+
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <View style={styles.header}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={cancel}
           accessibilityRole="button"
           testID="cancel"
           style={styles.headerAction}
@@ -112,145 +105,161 @@ export default function CreatePlanScreen() {
         <View style={styles.headerSpacer} />
       </View>
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
-          style={styles.flex}
-          contentContainerStyle={styles.content}
-          contentOffset={params.y ? { x: 0, y: Number(params.y) } : undefined}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.titleBlock}>
-            <TextInput
-              style={styles.titleInput}
-              placeholder="Padel? Paella? Poker?"
-              placeholderTextColor={colors.textFaint}
-              value={title}
-              onChangeText={setTitle}
-              testID="title-input"
-            />
-            <View style={styles.rule} />
-          </View>
-
-          <View style={styles.section}>
-            <ThemedText variant="sectionLabel">Who's it for</ThemedText>
-            <View style={styles.chipWrap}>
-              {choices.map((g) => {
-                const active = g.id === groupId;
-                return (
-                  <Pressable
-                    key={g.id}
-                    onPress={() => setPickedGroupId(g.id)}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: active }}
-                    testID={`group-${g.id}`}
-                    style={[styles.groupChip, active && styles.groupChipActive]}
-                  >
-                    <View style={[styles.groupDot, { backgroundColor: g.color ?? colorForName(g.name) }]} />
-                    <ThemedText
-                      variant="bodyStrong"
-                      style={styles.chipLabel}
-                      color={active ? colors.background : colors.textSecondary}
-                    >
-                      {g.name}
-                    </ThemedText>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          <WhenField dates={dates} onToggleDay={toggleDay} time={time} onTimeChange={setTime} />
-
-          <HowManyField min={min} cap={cap} onMinChange={setMin} onCapChange={setCap} />
-
-          <View style={styles.section}>
-            <Pressable
-              onPress={() => setDetailsOpen((o) => !o)}
-              accessibilityRole="button"
-              testID="details-toggle"
-              style={styles.detailsToggle}
-            >
-              <ThemedText variant="bodyStrong" color={colors.accent}>
-                {detailsOpen ? 'Hide extras' : 'Add place & notes'}
-              </ThemedText>
-              <ThemedText variant="tag" color={colors.accent}>
-                ▾
-              </ThemedText>
-            </Pressable>
-            {detailsOpen ? (
-              <Animated.View entering={FadeInDown} exiting={FadeOutUp} style={styles.detailsFields}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Where's it happening?"
-                  placeholderTextColor={colors.textFaint}
-                  value={location}
-                  onChangeText={setLocation}
-                  testID="location-input"
-                />
-                <TextInput
-                  style={[styles.input, styles.notes]}
-                  placeholder="Anything they should know? Bring cash, wear trainers…"
-                  placeholderTextColor={colors.textFaint}
-                  value={notes}
-                  onChangeText={setNotes}
-                  multiline
-                  testID="notes-input"
-                />
-              </Animated.View>
-            ) : null}
-          </View>
-
-          {/* The one open question (PLA-47): same disclosure pattern as the
-              details, because most plans have no question and this flow must
-              not grow for them. */}
-          <View style={styles.section}>
-            <Pressable
-              onPress={() => setAskOpen((o) => !o)}
-              accessibilityRole="button"
-              testID="poll-toggle"
-              style={styles.detailsToggle}
-            >
-              <ThemedText variant="bodyStrong" color={colors.accent}>
-                {askOpen ? 'Hide the question' : 'Add a question to vote on'}
-              </ThemedText>
-              <ThemedText variant="tag" color={colors.accent}>
-                ▾
-              </ThemedText>
-            </Pressable>
-            {askOpen ? (
-              <Animated.View entering={FadeInDown} exiting={FadeOutUp} style={styles.detailsFields}>
-                <PollComposer draft={pollDraft} onChange={setPollDraft} />
-              </Animated.View>
-            ) : null}
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-
-      <View style={styles.footer}>
-        <Button
-          label={createPlan.isPending ? 'Posting…' : `Post to ${group?.name ?? '…'}`}
-          variant={isValid ? 'primary' : 'secondary'}
-          disabled={!isValid || createPlan.isPending}
-          haptic={isValid}
-          onPress={() =>
-            createPlan.mutate({
-              groupId,
-              title,
-              dates,
-              time,
-              min,
-              cap,
-              location,
-              notes,
-              pollDraft,
-            })
-          }
-          testID="post-cta"
+      {needsGroup ? (
+        <NeedsGroupState
+          body={NEEDS_GROUP_COPY.planBody}
+          dismissFirst
+          testID="create-needs-group"
         />
-      </View>
+      ) : (
+        <>
+          <KeyboardAvoidingView
+            style={styles.flex}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          >
+            <ScrollView
+              style={styles.flex}
+              contentContainerStyle={styles.content}
+              contentOffset={params.y ? { x: 0, y: Number(params.y) } : undefined}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.titleBlock}>
+                <TextInput
+                  style={styles.titleInput}
+                  placeholder="Padel? Paella? Poker?"
+                  placeholderTextColor={colors.textFaint}
+                  value={title}
+                  onChangeText={setTitle}
+                  testID="title-input"
+                />
+                <View style={styles.rule} />
+              </View>
+
+              <View style={styles.section}>
+                <ThemedText variant="sectionLabel">Who's it for</ThemedText>
+                <View style={styles.chipWrap}>
+                  {choices.map((g) => {
+                    const active = g.id === groupId;
+                    return (
+                      <Pressable
+                        key={g.id}
+                        onPress={() => setPickedGroupId(g.id)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active }}
+                        testID={`group-${g.id}`}
+                        style={[styles.groupChip, active && styles.groupChipActive]}
+                      >
+                        <View style={[styles.groupDot, { backgroundColor: g.color ?? colorForName(g.name) }]} />
+                        <ThemedText
+                          variant="bodyStrong"
+                          style={styles.chipLabel}
+                          color={active ? colors.background : colors.textSecondary}
+                        >
+                          {g.name}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <WhenField dates={dates} onToggleDay={toggleDay} time={time} onTimeChange={setTime} />
+
+              <HowManyField min={min} cap={cap} onMinChange={setMin} onCapChange={setCap} />
+
+              <View style={styles.section}>
+                <Pressable
+                  onPress={() => setDetailsOpen((o) => !o)}
+                  accessibilityRole="button"
+                  testID="details-toggle"
+                  style={styles.detailsToggle}
+                >
+                  <ThemedText variant="bodyStrong" color={colors.accent}>
+                    {detailsOpen ? 'Hide extras' : 'Add place & notes'}
+                  </ThemedText>
+                  <ThemedText variant="tag" color={colors.accent}>
+                    ▾
+                  </ThemedText>
+                </Pressable>
+                {detailsOpen ? (
+                  <Animated.View entering={FadeInDown} exiting={FadeOutUp} style={styles.detailsFields}>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Where's it happening?"
+                      placeholderTextColor={colors.textFaint}
+                      value={location}
+                      onChangeText={setLocation}
+                      testID="location-input"
+                    />
+                    <TextInput
+                      style={[styles.input, styles.notes]}
+                      placeholder="Anything they should know? Bring cash, wear trainers…"
+                      placeholderTextColor={colors.textFaint}
+                      value={notes}
+                      onChangeText={setNotes}
+                      multiline
+                      testID="notes-input"
+                    />
+                  </Animated.View>
+                ) : null}
+              </View>
+
+              {/* The one open question (PLA-47): same disclosure pattern as the
+                  details, because most plans have no question and this flow must
+                  not grow for them. */}
+              <View style={styles.section}>
+                <Pressable
+                  onPress={() => setAskOpen((o) => !o)}
+                  accessibilityRole="button"
+                  testID="poll-toggle"
+                  style={styles.detailsToggle}
+                >
+                  <ThemedText variant="bodyStrong" color={colors.accent}>
+                    {askOpen ? 'Hide the question' : 'Add a question to vote on'}
+                  </ThemedText>
+                  <ThemedText variant="tag" color={colors.accent}>
+                    ▾
+                  </ThemedText>
+                </Pressable>
+                {askOpen ? (
+                  <Animated.View entering={FadeInDown} exiting={FadeOutUp} style={styles.detailsFields}>
+                    <PollComposer draft={pollDraft} onChange={setPollDraft} />
+                  </Animated.View>
+                ) : null}
+              </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
+
+          <View style={styles.footer}>
+            <Button
+              // Naming the group is the point of this label, so it waits until
+              // there is a name: "Post to …" used to flash for everyone while the
+              // groups query resolved, and sat there forever for anyone with none
+              // (PLA-68).
+              label={
+                createPlan.isPending ? 'Posting…' : group ? `Post to ${group.name}` : 'Post'
+              }
+              variant={isValid ? 'primary' : 'secondary'}
+              disabled={!isValid || createPlan.isPending}
+              haptic={isValid}
+              onPress={() =>
+                createPlan.mutate({
+                  groupId,
+                  title,
+                  dates,
+                  time,
+                  min,
+                  cap,
+                  location,
+                  notes,
+                  pollDraft,
+                })
+              }
+              testID="post-cta"
+            />
+          </View>
+        </>
+      )}
     </SafeAreaView>
   );
 }
