@@ -49,6 +49,20 @@ export default function AppLayout() {
           }}
         />
         <Stack.Screen name="find-people" options={{ headerShown: false }} />
+        {/* An interruption rather than a destination (PLA-68): the feed stays
+            visible behind it, so a short detent is the whole point. */}
+        <Stack.Screen
+          name="plan/needs-group"
+          options={{
+            presentation: 'formSheet',
+            headerShown: false,
+            sheetAllowedDetents: [sheetDetents.needsGroup],
+            sheetCornerRadius: 30,
+            // There is no header to hint at dragging, and the sheet is meant
+            // to feel dismissable rather than answered.
+            sheetGrabberVisible: true,
+          }}
+        />
         {/* getId: a deep link with different params mounts a fresh sheet instead
             of reusing a stale one (the params preseed sheet state in dev) */}
         <Stack.Screen

@@ -240,6 +240,9 @@ export const radii = {
  */
 export const sheetDetents = {
   invites: 0.78,
+  // Measured against the content, not chosen round: art, three lines of copy
+  // and two buttons, with the home indicator clear underneath.
+  needsGroup: 0.47,
 } as const;
 
 export const shadows = {
