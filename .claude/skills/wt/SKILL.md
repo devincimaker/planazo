@@ -98,6 +98,11 @@ when `wt:rm` objects (a dirty tree, most often). When it refuses it says why,
 and the fix is yours to carry out — it will not retry itself.
 
 Other people's merged worktrees still show up in `pnpm wt:list` flagged
-`MERGED into main` — that is a prompt for whoever owns them, not a to-do list.
-Ask before reclaiming one you did not create; a flagged worktree is often a
-session still working in it.
+`MERGED` — that is a prompt for whoever owns them, not a to-do list. Ask before
+reclaiming one you did not create; a flagged worktree is often a session still
+working in it. A `branch`-mode one says its database is billing, because that
+flag is costing money for as long as it goes unread.
+
+The flag is a merged-PR question, asked of GitHub. If `wt:list` says it could
+not reach GitHub, believe it: nothing is flagged that run, and a finished
+worktree will look exactly like an unfinished one.

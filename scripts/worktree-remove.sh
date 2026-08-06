@@ -132,17 +132,23 @@ fi
 git worktree prune
 wt_info "$target"
 
-# Ancestry answers "is this commit in main", which is the wrong question for a
-# squash merge: it lands a NEW commit on main and the branch's own commit is
-# never an ancestor. Asking ancestry alone told us "not merged" for every PR
-# this repo has ever landed, and left the branch behind every time — so ask
-# GitHub, which is the authority on whether the PR merged.
+# Is deleting this ref safe — would anything be lost? Two different things make
+# it safe, and both are asked, because each is blind where the other sees.
+# Ancestry catches a branch whose commits are already in main, including one
+# that never had a PR at all. wt_branch_has_merged_pr catches the squash merge,
+# where the branch's commit is in main's history nowhere but the work has
+# unquestionably landed. That second question is why this is a shared helper:
+# wt:list has to ask it too, and the two answering differently is the bug that
+# left three branch databases billing.
 merged=""
 if git merge-base --is-ancestor "$branch" main 2>/dev/null; then
   merged="already merged into main"
-elif command -v gh >/dev/null 2>&1 &&
-     [ "$(gh pr list --head "$branch" --state merged --json number --jq 'length' 2>/dev/null || echo 0)" -gt 0 ]; then
-  merged="squash-merged via PR"
+else
+  merged_pr=0
+  wt_branch_has_merged_pr "$branch" || merged_pr=$?
+  if [ "$merged_pr" -eq 0 ]; then
+    merged="squash-merged via PR"
+  fi
 fi
 
 # -D rather than -d precisely because the squash case cannot pass -d's ancestry

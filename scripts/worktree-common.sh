@@ -174,6 +174,69 @@ wt_linked_paths() {
   done
 }
 
+# --- merged branches ---------------------------------------------------------
+# Has this branch's work landed? GitHub is the authority, because git ancestry
+# cannot answer it: a squash merge puts a NEW commit on main, so the branch's
+# own commit is never an ancestor of anything. Every PR this repo has landed was
+# squashed, which made an ancestry-only check answer "not merged" every single
+# time — that is how three finished worktrees kept their branch databases
+# billing for days, until a Supabase invoice email was the thing that noticed.
+#
+# wt:list and wt:rm both ask through here, so the two can never disagree about
+# whether a worktree is finished.
+
+WT_MERGED_HEADS=""        # heads of merged PRs, one per line
+WT_MERGED_HEADS_STATE=""  # "" unfetched | "ok" | "partial" | "unknown"
+WT_MERGED_PR_PAGE=200
+
+# One network call per process: wt:list asks about every worktree it prints, and
+# a round trip per row would make the listing slow enough to stop being run.
+# Subshells inherit the cache, so a caller looping in a pipeline should prime it
+# here first — a command substitution cannot fill it for anyone else.
+wt_load_merged_heads() {
+  [ -z "$WT_MERGED_HEADS_STATE" ] || return 0
+  # Pessimistic until proven otherwise. An unreachable GitHub must never read as
+  # "nothing is merged": that is the answer that leaves a database billing.
+  WT_MERGED_HEADS_STATE="unknown"
+  command -v gh >/dev/null 2>&1 || return 0
+
+  local out count
+  out=$(gh pr list --state merged --limit "$WT_MERGED_PR_PAGE" \
+          --json headRefName --jq '.[].headRefName' 2>/dev/null) || return 0
+  WT_MERGED_HEADS=$out
+
+  # A full page means there are older merged PRs we did not see. Absence from a
+  # truncated list is not proof of anything, so misses get asked about directly.
+  count=$(printf '%s\n' "$out" | awk 'NF' | wc -l | tr -d ' ')
+  if [ "$count" -lt "$WT_MERGED_PR_PAGE" ]; then
+    WT_MERGED_HEADS_STATE="ok"
+  else
+    WT_MERGED_HEADS_STATE="partial"
+  fi
+}
+
+# 0 = a merged PR exists, 1 = provably none, 2 = could not tell.
+# Callers about to destroy something must treat 2 exactly like 1.
+wt_branch_has_merged_pr() {
+  local branch=$1 n
+  [ -n "$branch" ] && [ "$branch" != "(detached)" ] || return 2
+
+  wt_load_merged_heads
+  if printf '%s\n' "$WT_MERGED_HEADS" | grep -Fxq -- "$branch"; then
+    return 0
+  fi
+
+  case "$WT_MERGED_HEADS_STATE" in
+    ok) return 1 ;;
+    partial)
+      n=$(gh pr list --head "$branch" --state merged --json number --jq 'length' 2>/dev/null) || return 2
+      [ "${n:-0}" -gt 0 ] && return 0
+      return 1
+      ;;
+    *) return 2 ;;
+  esac
+}
+
 # Branch name -> filesystem/simulator-safe slug.
 wt_slug() {
   printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr '/ _' '-' | tr -cd '[:alnum:].-' | cut -c1-40

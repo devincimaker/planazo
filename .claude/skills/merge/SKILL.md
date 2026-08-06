@@ -132,7 +132,7 @@ Two follow-ups belong here and nowhere else:
 - **A refused reclaim.** Fix the reason (usually commit or stash), then
   `pnpm wt:rm <branch>` from the primary checkout. A `branch`-mode DB bills until
   that runs.
-- **Other worktrees flagged `MERGED into main`.** Report them, do not reclaim
+- **Other worktrees flagged `MERGED`.** Report them, do not reclaim
   them. They belong to other sessions that may still be working, and touching
   another worktree's simulator or branch DB is the one rule the whole `wt:*`
   family is built on. Ask first, every time.

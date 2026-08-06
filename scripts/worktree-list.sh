@@ -8,6 +8,11 @@ source "$SCRIPT_DIR/worktree-common.sh"
 
 primary=$(wt_primary_path)
 
+# Prime the merged-PR cache here, in the parent shell: the row loop below runs
+# in a pipeline subshell, and a cache filled in there would be thrown away and
+# refetched for every row.
+wt_load_merged_heads
+
 printf '%-26s %-8s %-7s %-22s %s\n' "BRANCH" "DB" "METRO" "SIMULATOR" "PATH"
 
 git worktree list --porcelain | awk '
@@ -32,13 +37,21 @@ git worktree list --porcelain | awk '
   booted=""
   [ -n "$udid" ] && wt_sim_is_booted "$udid" && booted=" [booted]"
 
-  # A worktree whose branch is already contained in origin/main is finished
-  # work still holding a slot — and in branch mode, still billing. Best-effort:
-  # judged against the last-fetched origin/main, no network here.
+  # A worktree whose PR has merged is finished work still holding a slot — and
+  # in branch mode, still costing money every hour it sits here. Deliberately a
+  # merged-PR question and not an ancestry one: ancestry is blind to the squash
+  # merges this repo actually uses, and worse, it fires on a brand-new worktree
+  # sitting at main's HEAD, so the one branch it ever flagged was the one branch
+  # with no work in it at all.
   merged=""
-  if [ "$branch" != "(detached)" ] \
-    && git merge-base --is-ancestor "refs/heads/$branch" origin/main 2>/dev/null; then
-    merged="  <-- MERGED into main; reclaim with: pnpm wt:rm $branch"
+  merged_pr=0
+  wt_branch_has_merged_pr "$branch" || merged_pr=$?
+  if [ "$merged_pr" -eq 0 ]; then
+    if [ "$mode" = "branch" ]; then
+      merged="  <-- MERGED; its branch DB is billing right now. Reclaim: pnpm wt:rm $branch"
+    else
+      merged="  <-- MERGED into main; reclaim with: pnpm wt:rm $branch"
+    fi
   fi
 
   printf '%-26s %-8s %-7s %-22s %s%s\n' "$branch" "$mode" "${port}${running}" "${sim}${booted}" "$path" "$merged"
@@ -46,6 +59,16 @@ done
 
 echo
 echo "* main is intentionally unmanaged by wt:* — its own local stack and simulator."
+
+# Same principle as the orphan check below: a listing that could not ask must
+# say so. Silence here is indistinguishable from "nothing has merged", which is
+# the reading that lets a finished worktree keep billing unnoticed.
+if [ "$WT_MERGED_HEADS_STATE" = "unknown" ]; then
+  echo
+  echo "WARNING: could not ask GitHub which PRs have merged, so finished"
+  echo "worktrees are NOT flagged above. Check by hand:"
+  echo "  gh pr list --state merged --json headRefName"
+fi
 
 # --- leaked branch databases -------------------------------------------------
 # A branch DB with no worktree behind it is billed and forgotten. This is the
