@@ -1,5 +1,8 @@
 import { useRouter } from 'expo-router';
+import { useDismissTo } from '../../lib/navigation';
 import { EmptyState } from '../ui';
+
+const GROUPS_TAB = '/(app)/(tabs)/groups' as const;
 
 /**
  * Said in one place so the feed, the sheet and the create screen cannot drift
@@ -19,27 +22,24 @@ export const NEEDS_GROUP_COPY = {
  * Leaving for the Groups tab from wherever this is shown.
  *
  * `dismissFirst` is for a modal or sheet, which has to be gone before the tab
- * underneath changes. A cold deep link opens one with nothing behind it, and
- * `back()` there is a no-op that logs "GO_BACK was not handled by any
- * navigator" and leaves you sitting on it, so the stack is checked first.
+ * underneath changes.
  */
 export function useGoToGroups(dismissFirst = false) {
   const router = useRouter();
+  const dismiss = useDismissTo(GROUPS_TAB);
 
   return () => {
     if (!dismissFirst) {
-      router.navigate('/(app)/(tabs)/groups');
+      router.navigate(GROUPS_TAB);
       return;
     }
-    if (!router.canGoBack()) {
-      router.replace('/(app)/(tabs)/groups');
-      return;
+    // A dismissal that replaced the route has already arrived at the tab.
+    // One that popped a screen has not, and navigating before the sheet is
+    // gone lands the tab change behind it — the same ordering the new-group
+    // sheet needs after it creates one (group/new.tsx:101).
+    if (dismiss()) {
+      setTimeout(() => router.navigate(GROUPS_TAB), 100);
     }
-    router.back();
-    // Same ordering the new-group sheet needs after it creates one
-    // (group/new.tsx:101): navigating while the sheet is still on screen
-    // lands the tab change behind it.
-    setTimeout(() => router.navigate('/(app)/(tabs)/groups'), 100);
   };
 }
 

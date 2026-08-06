@@ -5,8 +5,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { inviteCodeFrom } from '../../lib/inviteCode';
 import { MIN_TOUCH_TARGET } from '../../lib/a11y';
+import { GroupTiles } from './GroupTiles';
 import { ThemedText, Button } from '../ui';
-import { colors, fonts, radii, spacing, groupColors } from '../../theme/tokens';
+import { colors, fonts, radii, spacing } from '../../theme/tokens';
 
 /**
  * 16a: two ways in, and they're not equal — the link field is real,
@@ -43,11 +44,7 @@ export function GroupsEmptyState() {
 
   return (
     <View style={styles.empty}>
-      <View style={styles.emptyArt}>
-        <View style={[styles.emptyTile, { backgroundColor: groupColors[0] }]} />
-        <View style={[styles.emptyTile, { backgroundColor: colors.border }]} />
-        <View style={[styles.emptyTile, styles.emptyTileDashed]} />
-      </View>
+      <GroupTiles />
       <ThemedText variant="headerTitle" style={styles.emptyTitle}>
         A group is just{'\n'}your group of people
       </ThemedText>
@@ -107,21 +104,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingBottom: 120,
     gap: spacing.sm,
-  },
-  emptyArt: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  emptyTile: {
-    width: 52,
-    height: 52,
-    borderRadius: 17,
-  },
-  emptyTileDashed: {
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    borderColor: colors.borderStrong,
   },
   emptyTitle: {
     paddingTop: spacing.xs,

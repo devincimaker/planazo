@@ -1,6 +1,7 @@
 import { View, StyleSheet } from 'react-native';
-import { useRouter } from 'expo-router';
 import { NEEDS_GROUP_COPY, useGoToGroups } from '../../../components/group/NeedsGroupState';
+import { GroupTiles } from '../../../components/group/GroupTiles';
+import { useDismissTo } from '../../../lib/navigation';
 import { ThemedText, Button } from '../../../components/ui';
 import { colors, groupColors, spacing } from '../../../theme/tokens';
 
@@ -16,16 +17,12 @@ import { colors, groupColors, spacing } from '../../../theme/tokens';
  * recognisably about the same thing.
  */
 export default function NeedsGroupSheet() {
-  const router = useRouter();
   const goToGroups = useGoToGroups(true);
+  const notNow = useDismissTo('/(app)/(tabs)');
 
   return (
     <View style={styles.sheet}>
-      <View style={styles.art}>
-        <View style={[styles.tile, { backgroundColor: groupColors[0] }]} />
-        <View style={[styles.tile, { backgroundColor: groupColors[3] }]} />
-        <View style={[styles.tile, styles.tileDashed]} />
-      </View>
+      <GroupTiles middle={groupColors[3]} />
 
       <ThemedText variant="cardTitle" style={styles.centred}>
         {NEEDS_GROUP_COPY.title}
@@ -41,7 +38,7 @@ export default function NeedsGroupSheet() {
           variant="outline"
           // Nothing has been typed, so there is nothing to lose by leaving:
           // this sheet opens before the form, not over a half-written plan.
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/(app)/(tabs)'))}
+          onPress={notNow}
           testID="not-now"
         />
       </View>
@@ -62,21 +59,6 @@ const styles = StyleSheet.create({
     // button flush with that edge is one the thumb fights for.
     paddingBottom: spacing.xxl,
     gap: spacing.sm,
-  },
-  art: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  tile: {
-    width: 52,
-    height: 52,
-    borderRadius: 17,
-  },
-  tileDashed: {
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    borderColor: colors.borderStrong,
   },
   centred: {
     textAlign: 'center',
