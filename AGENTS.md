@@ -264,6 +264,21 @@ itself.
   honest verdict there even when no local database can give one. Local suite
   runs are a convenience, not the safety net.
 
+### One test run at a time
+
+The mobile jest suite is ~460 tests and takes around three minutes, and it uses
+the whole machine while it does. **Two runs at once starve each other into
+timeouts**, and a timed-out suite reports as `FAIL` with a real-looking test
+name. Chasing those costs more than the run you were impatient about.
+
+- **Never start a second run while one is in flight**, including "just this one
+  file to see the failure". The answer is already in the first run's output.
+- **Don't pipe a gate through `tail` or `grep`** and throw the rest away. The
+  failure detail is the whole reason you ran it. Let it print, or redirect the
+  full output to a file you can read afterwards.
+- **A suite that took 30s yesterday and 200s today timed out**, it did not
+  break. Check what else is running before believing the failure.
+
 ## Verification matches the change
 
 Checking costs the user's attention, which is the scarce thing here. Spend it in

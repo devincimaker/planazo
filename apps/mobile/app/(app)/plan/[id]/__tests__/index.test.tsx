@@ -701,6 +701,21 @@ describe('PlanDetailScreen — the 20a menu', () => {
     expect(screen.getByText("Say you're in and you get a pick.")).toBeTruthy();
   });
 
+  // PLA-55. Host powers and authorship are different questions, and the same
+  // sentence used to answer them differently depending on whether the plan had
+  // ended. An admin can edit and cancel a plan they had nothing to do with;
+  // telling them they hosted it is untrue.
+  it('tells an admin who posted it, rather than crediting them with it', async () => {
+    prime({
+      plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(8) },
+      role: 'admin',
+    });
+    await renderDetail();
+
+    await waitFor(() => expect(screen.getByText('Hosted by Marta')).toBeTruthy());
+    expect(screen.queryByText('Hosted by you')).toBeNull();
+  });
+
   it('back falls back to the group screen after a deep link', async () => {
     prime({
       plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(8) },

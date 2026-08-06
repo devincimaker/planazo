@@ -1,6 +1,8 @@
 import {
   bestViableOption,
+  canAddPhotos,
   countAvailabilityByDate,
+  isAlbumOpen,
   getYesCount,
   isPlanConfirmed,
   isPlanFull,
@@ -158,6 +160,11 @@ export function derivePlanDetail({
   const unanswered = (memberIds ?? []).filter((uid) => !answeredIds.has(uid)).length;
 
   const isHost = plan.created_by === userId || membership?.role === 'admin';
+
+  // Who actually posted it, which is not the same question as who has host
+  // powers over it. An admin can edit and cancel a plan they had nothing to do
+  // with; telling them they hosted it is simply untrue (PLA-55).
+  const youCreated = plan.created_by === userId;
   const viableLead = bestViableOption(countByDate, plan.min_people);
   const youCancelled = plan.cancelled_by === userId;
 
@@ -170,26 +177,20 @@ export function derivePlanDetail({
   // already fetched, so it costs nothing.
   const waitPosition = waitlistPosition(rsvps, userId);
 
-  // PLA-32. The album opens when the night does and never closes again.
-  // Mirrors can_add_plan_photo() in 20260803000001: the start is the locked
-  // date if a flexible plan has one, otherwise the fixed date. A flexible
-  // plan nobody has locked has neither, and no album, because the night does
-  // not exist yet.
-  const albumStart = plan.locked_date ?? plan.event_date;
+  // PLA-32. Both rules live in plan-logic beside the SQL they mirror; they
+  // were written out by hand here and drifted from it (PLA-55). Note isHost is
+  // not an input: it is right for editing, cancelling and locking, and wrong as
+  // a proxy for having been at the plan.
+  //
   // A snapshot on purpose. The album opening is a once-per-plan threshold
   // hours wide, not something anyone watches tick over, so reading the clock
   // here costs a stale render nobody can perceive and saves a timer.
-  const albumOpen = !!albumStart && new Date(albumStart).getTime() <= Date.now();
-
-  // Looking is for the group, adding is for the people who were there. The
-  // database enforces this; here it only decides whether to draw the button,
-  // and a yes is a yes rather than availability on a flexible plan.
-  const canAddPhotos =
-    albumOpen && !isCancelled && (isHost || userRsvp?.response === 'yes');
+  const albumOpen = isAlbumOpen(plan);
+  const canAdd = canAddPhotos({ ...plan, rsvps }, userId);
 
   return {
     albumOpen,
-    canAddPhotos,
+    canAddPhotos: canAdd,
     waitPosition,
     isFlexible,
     isOpen,
@@ -215,6 +216,7 @@ export function derivePlanDetail({
     isHost,
     viableLead,
     youCancelled,
+    youCreated,
     isPast,
     isExpired,
     isEnded,

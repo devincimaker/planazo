@@ -219,7 +219,7 @@ describe('uploadPhotos', () => {
 
     const outcome = await uploadPhotos({ planId: 'plan-1', userId: 'u1', photos: [bigPhoto] });
 
-    expect(outcome).toEqual({ added: 1, failed: 0 });
+    expect(outcome).toEqual({ added: 1, failed: 0, refused: false });
     const values = inserted[0]!;
     expect(values.storage_path).toMatch(/^plan-1\/u1\/\w+\.jpg$/);
     expect(values.thumb_path).toBe(String(values.storage_path).replace(/\.jpg$/, '_thumb.jpg'));
@@ -263,11 +263,49 @@ describe('uploadPhotos', () => {
 
     const outcome = await uploadPhotos({ planId: 'plan-1', userId: 'u1', photos: [bigPhoto] });
 
-    expect(outcome).toEqual({ added: 0, failed: 1 });
+    expect(outcome).toEqual({ added: 0, failed: 1, refused: false });
     expect(deleteEq).toHaveBeenCalledWith('id', 'row-1');
     // An object whose row is gone is invisible to the account purge, so the
     // rendition cannot be left behind.
     expect(remove).toHaveBeenCalledWith([inserted[0]!.thumb_path]);
+  });
+
+  // PLA-55. RLS refusing the insert means this person was never in the plan,
+  // so the rest of the batch would be refused identically. Counting five of
+  // those as failures produced "0 added. 5 didn't upload." over an offer to
+  // try again, which could only fail the same way.
+  it('stops at a refusal, and calls it that rather than a failure', async () => {
+    primeSigner();
+    mockUploadJpeg.mockResolvedValue(undefined);
+    let insertCalls = 0;
+    mockFrom.mockImplementation(() => ({
+      insert: () => {
+        insertCalls += 1;
+        return {
+          select: () => ({
+            single: async () => ({
+              data: null,
+              error: { code: '42501', message: 'new row violates row-level security policy' },
+            }),
+          }),
+        };
+      },
+    }));
+
+    const outcome = await uploadPhotos({
+      planId: 'plan-1',
+      userId: 'u1',
+      photos: [bigPhoto, bigPhoto, bigPhoto],
+    });
+
+    expect(outcome).toEqual({ added: 0, failed: 0, refused: true });
+    expect(insertCalls).toBe(1);
+    // Nothing was ever accepted, so nothing was uploaded to roll back.
+    expect(mockUploadJpeg).not.toHaveBeenCalled();
+    // The resize it had already spent is still collected from the cache.
+    expect(mockDeleteAsync).toHaveBeenCalledWith('file:///pick/a.jpg#2048', {
+      idempotent: true,
+    });
   });
 });
 

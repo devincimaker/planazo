@@ -2,6 +2,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from './supabase';
 import { pickManyFromLibrary, uploadJpeg, type PickedImage } from './images';
+import { isForbiddenError } from './queryErrors';
 import { spellCount } from './words';
 
 export const PHOTO_BUCKET = 'plan-photos';
@@ -121,8 +122,14 @@ async function preparePhoto(photo: PickedImage): Promise<{ photo: PickedImage; t
 export interface UploadOutcome {
   /** Photos that made it all the way to a row plus an object. */
   added: number;
-  /** Photos that did not, for any reason. */
+  /** Photos that did not, for a reason that trying again might fix. */
   failed: number;
+  /**
+   * The batch was never allowed (PLA-55). A different thing from a failure:
+   * no amount of retrying turns a refusal into a photo, so the card must not
+   * offer one.
+   */
+  refused: boolean;
 }
 
 /**
@@ -153,6 +160,7 @@ export async function uploadPhotos(opts: {
   const { planId, userId, photos, onProgress } = opts;
   let added = 0;
   let failed = 0;
+  let refused = false;
 
   for (const [index, picked] of photos.entries()) {
     let insertedId: string | null = null;
@@ -194,6 +202,13 @@ export async function uploadPhotos(opts: {
         // The trigger raises these two by name. A full album is not something
         // the person can fix by retrying, so stop rather than fail 19 more.
         if (/photo_cap_reached/.test(insertError.message)) break;
+        // Nor is a refusal. RLS answering 42501 means this person was never
+        // in the plan, so the other nineteen would be refused identically
+        // (PLA-55). Stop, and say so rather than counting it as a failure.
+        if (isForbiddenError(insertError)) {
+          refused = true;
+          break;
+        }
         throw insertError;
       }
       insertedId = row.id;
@@ -240,7 +255,7 @@ export async function uploadPhotos(opts: {
     }
   }
 
-  return { added, failed };
+  return { added, failed, refused };
 }
 
 /**
