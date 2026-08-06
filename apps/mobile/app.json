@@ -17,6 +17,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.planazo.app",
       "appleTeamId": "D4ADFZ3XZL",
+      "associatedDomains": ["applinks:planazo.me"],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }

@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import { supabase } from '../../../../lib/supabase';
 import { useFriends } from '../../../../lib/useFriends';
+import { inviteLinkFor } from '../../../../lib/inviteCode';
 import { MIN_TOUCH_TARGET } from '../../../../lib/a11y';
 import { ThemedText, Avatar, Button } from '../../../../components/ui';
 import { colors, fonts, radii, spacing } from '../../../../theme/tokens';
@@ -48,7 +49,7 @@ export default function InviteToGroupSheet() {
   const memberIds = new Set((group?.group_members ?? []).map((m: any) => m.user_id));
   const invitedIds = new Set(group?.pendingInviteeIds ?? []);
   const invitable = friends.filter((f) => !memberIds.has(f.id));
-  const link = group ? `planazo://join/${group.invite_code}` : '';
+  const link = group ? inviteLinkFor(group.invite_code) : '';
 
   const copyLink = async () => {
     await Clipboard.setStringAsync(link);
