@@ -31,6 +31,10 @@ git worktree list --porcelain | awk '
   port=$(wt_read_value "$meta" "PLANAZO_METRO_PORT" 2>/dev/null || echo "-")
   sim=$(wt_read_value "$meta" "PLANAZO_SIM_NAME" 2>/dev/null || echo "-")
   udid=$(wt_read_value "$meta" "PLANAZO_SIM_UDID" 2>/dev/null || echo "")
+  sim_mode=$(wt_read_value "$meta" "PLANAZO_SIM_MODE" 2>/dev/null || echo "device")
+  # Set up with --no-sim: say so rather than printing a simulator name that
+  # exists only in the ledger.
+  [ "${sim_mode:-device}" = "none" ] && sim="(none)" && udid=""
 
   running=""
   [ "$port" != "-" ] && lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1 && running=" (metro up)"

@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "lint": "eslint .",
-    "test": "vitest run",
+    "//test": "Deliberately NOT named `test`: turbo would then sweep this suite into `turbo test`, so the documented gate (`pnpm turbo typecheck lint test`, then `pnpm test:integration`) ran all 137 of these against a real database twice. `turbo test` now means unit tests, which need no database and run anywhere.",
+    "test:integration": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },

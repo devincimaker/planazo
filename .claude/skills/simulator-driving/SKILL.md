@@ -9,6 +9,23 @@ description: Drive the iOS simulator UI programmatically — tap by label, deep 
 needs `idb` (already installed at `~/.local/bin/idb`). The helper here taps by
 accessibility label, so you never guess coordinates.
 
+## What belongs here, and what belongs to the plugin
+
+The `ios-simulator-skill` plugin covers generic simulator work this file does
+not: accessibility and localization audits, visual diffing, dark mode and
+Dynamic Type, push notifications, status bar, location, gestures, log
+monitoring. **Reach for it for anything about iOS in general.**
+
+This file is the opposite: everything that is true only of *Planazo*. Which
+simulator is yours across worktrees, the two blockers that trap agents on this
+app, the `planazo://dev-login` deep link, and the failure modes that cost real
+hours here (a queued `openurl` raising its own alert, the reboot wait everybody
+gets wrong). No general plugin can know any of it.
+
+When both could do the job, prefer this one for tapping and reading the screen:
+`sim.py` knows how to tell an alert from a label, which is what the generic
+tools get wrong on this app.
+
 ## Before anything: know which simulator is yours
 
 Multiple worktrees each own a booted simulator. Driving the wrong one corrupts

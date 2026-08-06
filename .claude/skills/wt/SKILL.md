@@ -28,7 +28,9 @@ issue number.
 ```bash
 pnpm wt:new fix/pla-NN-slug          # new worktree, shared mode
 pnpm wt:new feat/pla-NN-slug --db    # new worktree with its own branch DB
+pnpm wt:new chore/pla-NN-slug --no-sim  # no simulator: nothing on screen changes
 pnpm wt:setup --db                   # upgrade an existing worktree to its own DB
+pnpm wt:setup --sim                  # build the simulator after all
 pnpm wt:start                        # boot its simulator + Metro, connect the app
 pnpm wt:start --login                # …and sign in as the demo user
 pnpm wt:list                         # all worktrees; flags merged branches + orphaned DBs

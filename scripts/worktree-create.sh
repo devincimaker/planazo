@@ -3,6 +3,7 @@
 #
 #   pnpm wt:new pla-17                # shares main's local DB (UI/JS work)
 #   pnpm wt:new pla-17 --db           # gets its own Supabase branch database
+#   pnpm wt:new pla-17 --no-sim       # no simulator: nothing on screen changes
 #   pnpm wt:new pla-17 --base main    # branch off something other than origin/main
 
 set -euo pipefail
@@ -13,10 +14,13 @@ source "$SCRIPT_DIR/worktree-common.sh"
 branch=""
 base=""
 db_flag=""
+sim_flag=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --db)     db_flag="--db" ;;
     --no-db)  db_flag="--no-db" ;;
+    --sim)    sim_flag="--sim" ;;
+    --no-sim) sim_flag="--no-sim" ;;
     --base)   shift; base=${1:-} ;;
     -*)       wt_die "Unknown flag: $1" ;;
     *)        [ -n "$branch" ] && wt_die "Unexpected argument: $1"; branch=$1 ;;
@@ -25,7 +29,7 @@ while [ $# -gt 0 ]; do
 done
 
 [ -n "$branch" ] || {
-  echo "Usage: pnpm wt:new <branch> [--db] [--base <ref>]" >&2
+  echo "Usage: pnpm wt:new <branch> [--db] [--no-sim] [--base <ref>]" >&2
   exit 1
 }
 git check-ref-format --branch "$branch" >/dev/null 2>&1 || wt_die "Invalid branch name: $branch"
@@ -68,11 +72,11 @@ else
   git worktree add -b "$branch" "$target" "$base"
 fi
 
-if ! "$SCRIPT_DIR/worktree-setup.sh" "$target" ${db_flag:+"$db_flag"}; then
+if ! "$SCRIPT_DIR/worktree-setup.sh" "$target" ${db_flag:+"$db_flag"} ${sim_flag:+"$sim_flag"}; then
   echo >&2
   echo "The worktree was created but setup did not finish." >&2
-  # Carry the flag into the retry. Dropping it would make the recovery command
-  # mean something different from what was asked for.
-  echo "Fix the problem above, then re-run:  pnpm wt:setup $target${db_flag:+ $db_flag}" >&2
+  # Carry the flags into the retry. Dropping them would make the recovery
+  # command mean something different from what was asked for.
+  echo "Fix the problem above, then re-run:  pnpm wt:setup $target${db_flag:+ $db_flag}${sim_flag:+ $sim_flag}" >&2
   exit 1
 fi

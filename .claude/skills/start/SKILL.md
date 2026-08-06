@@ -45,7 +45,11 @@ the user reviewing as you go.
 | Call | Choose the expensive option when | Ambiguous → |
 | --- | --- | --- |
 | **Database** | the work implies schema: migrations, RLS or policies, RPCs, triggers, new tables/columns/indexes, `SECURITY DEFINER` → `--db` | **shared**. `pnpm wt:setup --db` upgrades in place the moment you find you need it |
-| **Simulator** | the issue changes something on screen: UI, copy, navigation, styling, state, loading and error states → `pnpm wt:start` | **skip it**. `pnpm wt:start` is one command away |
+| **Simulator** | the issue changes something on screen: UI, copy, navigation, styling, state, loading and error states → build one (the default) | **`--no-sim`**. `pnpm wt:setup --sim` builds one the moment the diff says you need it |
+
+`--no-sim` is the half that actually saves time: without it, setup creates, boots and
+installs a Dev Client no matter what this table decided, and the choice only governed
+whether `wt:start` ran afterwards.
 
 The same cheap-to-upgrade logic on both sides: a wrong "shared" or a skipped simulator
 costs one command, a wrong `--db` costs money and minutes. See the **`wt`** skill for the

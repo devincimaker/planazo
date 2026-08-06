@@ -18,6 +18,9 @@ jobs:
   checks:
     name: Typecheck + tests
     runs-on: ubuntu-latest
+    # Real runs finish in about 90s. Without this the default is 360 minutes, so
+    # anything that hangs burns six hours of runner time before anyone notices.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -50,8 +53,11 @@ jobs:
       - name: Unit tests (shared)
         run: pnpm --filter @planazo/shared test
 
+      # --maxWorkers overrides the 50% baked into the package script. That 50% is
+      # a courtesy to a laptop you are also using; this runner is dedicated to
+      # this one job, so half of it would sit idle for the whole suite.
       - name: Component tests (mobile)
-        run: pnpm --filter mobile test -- --ci
+        run: pnpm --filter mobile test -- --ci --maxWorkers=100%
 
       # Catches what typecheck can't: bad CSS module references, missing
       # font/metadata config, anything that only fails at render time.
@@ -61,6 +67,7 @@ jobs:
   migrations:
     name: DB migrations + integration tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -160,17 +167,26 @@ jobs:
 
       # Full stack, not `db start`: the integration tests sign up real users,
       # so auth (and the REST API) must be up. Migrations apply on start.
+      #
+      # Excluded are the services no test reaches, which is most of the ~80s this
+      # step used to cost — studio alone is a whole web UI nobody opens in CI.
+      # What stays is load-bearing: db and auth (every test signs up), kong and
+      # rest (all traffic), storage (photos, group-images), realtime
+      # (realtime.test.ts) and mailpit (signup-confirmation.test.ts reads the
+      # 6-digit code out of the inbox). Verified against the local stack, which
+      # already runs without imgproxy/vector/pooler and passes all 142.
       - name: Start local Supabase and apply all migrations
         if: steps.scope.outputs.touched == 'true'
-        run: supabase start
+        run: supabase start -x studio,imgproxy,logflare,vector,supavisor
 
       - name: Integration tests (RLS, RPCs, triggers)
         if: steps.scope.outputs.touched == 'true'
-        run: pnpm --filter @planazo/integration-tests test
+        run: pnpm --filter @planazo/integration-tests test:integration
 
   deploy:
     name: Push migrations to production
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # Merges to main only, and only after the same commit passed every test —
     # this is the one automated writer production has.
     needs: [checks, migrations]

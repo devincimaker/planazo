@@ -4,6 +4,8 @@
 #   pnpm wt:setup                 # this worktree, keeping its current DB mode
 #   pnpm wt:setup --db            # give it (or move it to) its own branch DB
 #   pnpm wt:setup --no-db         # move it back to main's shared local stack
+#   pnpm wt:setup --no-sim        # skip the simulator: nothing on screen changes
+#   pnpm wt:setup --sim           # build one after all, once the diff says so
 #   pnpm wt:setup <path> --db
 
 set -euo pipefail
@@ -13,12 +15,15 @@ source "$SCRIPT_DIR/worktree-common.sh"
 
 target=""
 db_mode=""
+sim_mode=""
 for arg in "$@"; do
   case "$arg" in
-    --db)    db_mode="branch" ;;
-    --no-db) db_mode="shared" ;;
-    -*)      wt_die "Unknown flag: $arg" ;;
-    *)       target="$arg" ;;
+    --db)     db_mode="branch" ;;
+    --no-db)  db_mode="shared" ;;
+    --sim)    sim_mode="device" ;;
+    --no-sim) sim_mode="none" ;;
+    -*)       wt_die "Unknown flag: $arg" ;;
+    *)        target="$arg" ;;
   esac
 done
 target=${target:-$(pwd)}
@@ -47,6 +52,16 @@ slug=$(wt_slug "$branch")
 if [ -z "$db_mode" ]; then
   db_mode=$(wt_read_value "$metadata" "PLANAZO_DB_MODE" 2>/dev/null || true)
   db_mode=${db_mode:-shared}
+fi
+
+# Same sticky rule for the simulator. Default is to build one: a worktree that
+# never says otherwise behaves exactly as it always has. `--no-sim` is what
+# makes /start's "nothing on screen" routing actually save anything — before it,
+# that decision only chose whether to run wt:start, while setup built, booted
+# and installed a Dev Client either way.
+if [ -z "$sim_mode" ]; then
+  sim_mode=$(wt_read_value "$metadata" "PLANAZO_SIM_MODE" 2>/dev/null || true)
+  sim_mode=${sim_mode:-device}
 fi
 
 # --- slot: metro port + simulator name (sticky across re-runs) ----------------
@@ -251,6 +266,12 @@ wt_upsert_env "$target/apps/mobile/.env" "IOS_SIMULATOR" "$sim_name"
 
 # --- simulator ---------------------------------------------------------------
 
+sim_udid=""
+if [ "$sim_mode" = "none" ]; then
+  wt_step "Simulator: skipped"
+  wt_info "no simulator for this worktree (--no-sim)"
+  wt_info "changed your mind? pnpm wt:setup --sim"
+else
 wt_step "Simulator"
 sim_udid=$(wt_sim_udid_for_name "$sim_name")
 if [ -z "$sim_udid" ]; then
@@ -281,6 +302,7 @@ else
       "com.apple.CoreSimulator.CoreSimulatorBridge-->$scheme" -string "com.planazo.app" 2>/dev/null || true
   done
 fi
+fi  # sim_mode
 
 # --- ledger ------------------------------------------------------------------
 
@@ -289,13 +311,22 @@ fi
 wt_upsert_env "$metadata" "PLANAZO_SLUG" "$slug"
 wt_upsert_env "$metadata" "PLANAZO_DB_MODE" "$db_mode"
 wt_upsert_env "$metadata" "PLANAZO_METRO_PORT" "$metro_port"
+wt_upsert_env "$metadata" "PLANAZO_SIM_MODE" "$sim_mode"
 wt_upsert_env "$metadata" "PLANAZO_SIM_NAME" "$sim_name"
 wt_upsert_env "$metadata" "PLANAZO_SIM_UDID" "$sim_udid"
 wt_upsert_env "$metadata" "PLANAZO_BRANCH_NAME" "${branch_name:-}"
 wt_upsert_env "$metadata" "PLANAZO_BRANCH_REF" "${branch_ref:-}"
 
 wt_step "Ready"
-wt_info "cd $target && pnpm wt:start"
+# Only point at wt:start when there is a simulator for it to boot; on a --no-sim
+# worktree that command now refuses, and suggesting it invites the round trip
+# this mode exists to avoid.
+if [ "$sim_mode" = "none" ]; then
+  wt_info "cd $target"
+  wt_info "No simulator: the tests are the proof here. Needs one after all? pnpm wt:setup --sim"
+else
+  wt_info "cd $target && pnpm wt:start"
+fi
 if [ "$db_mode" = "shared" ]; then
   wt_info "DB is main's local stack. Touching supabase/migrations here changes main's schema —"
   wt_info "run 'pnpm wt:setup --db' first if this branch needs its own database."
