@@ -10,7 +10,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "expo": "expo",
-    "test": "jest --forceExit",
+    "test": "jest --forceExit --maxWorkers=50%",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

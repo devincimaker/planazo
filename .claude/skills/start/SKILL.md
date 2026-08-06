@@ -75,15 +75,61 @@ full database decision and every guard refusal it can produce.
 them. It backgrounds Metro itself and returns, so run it in the foreground with a
 generous timeout.
 
+**Never pipe it through `tail` or `head`.** They print nothing until EOF, and the Metro
+spawn holds the pipe open, so the command looks hung when it finished a minute ago. PLA-73
+lost twenty minutes to `pnpm wt:start --login 2>&1 | tail -25`: a 600s block, an empty
+output file, and a session convinced it was waiting on something already done. Let it
+stream, or redirect to a file and Read that.
+
+**Confirm readiness with a probe, not with the command's exit.** These two answer it
+outright, and they are cheap enough to run whenever there is any doubt:
+
+```bash
+lsof -ti :$PLANAZO_METRO_PORT          # Metro is listening
+xcrun simctl list devices booted       # and this worktree's simulator is up
+```
+
+Be careful reading `ps` here: every other worktree runs its own `worktree-start.sh` and
+`expo start`, so a match proves someone's Metro is alive, not yours. Match on the port.
+
 It refuses loudly in two cases that are the guard working, not a problem to route around:
 a shared-mode worktree carrying migrations (fix: `pnpm wt:setup --db`), and a port held by
 another project's bundler (fix: `pnpm wt:setup` for a new port — never kill the other
-bundler). For driving the UI afterwards, invoke the **`simulator-driving`** skill rather
-than improvising deep links and taps.
+bundler).
+
+**To reach a screen, deep-link to it.** The app's scheme is `planazo`, and expo-router maps
+routes straight onto it:
+
+```bash
+xcrun simctl openurl "$UDID" "planazo://profile"
+xcrun simctl openurl "$UDID" "planazo://plan/<id>/poll"
+```
+
+Chains of blind taps drift, and a fast refresh resets navigation to the feed underneath
+you, so a chain that worked once fails silently the next time. For anything a deep link
+cannot reach, invoke the **`simulator-driving`** skill rather than improvising taps.
+
+**Let the tests carry the numbers.** The simulator answers "does this look broken", which
+is one screenshot. It is a slow and imprecise way to assert a padding value that a unit
+test can pin exactly.
 
 ## Phase 5 — Plan it together
 
 This is what the skill is actually for. The setup was just clearing the runway.
+
+**First, check whether there is anything left to plan.** When the issue carries a `Work`
+section that already names the change, and the label is `S`, the plan has been written —
+by whoever filed it. Read the code, do it, and report what you found and what you decided
+in the summary afterwards. Planning it a second time is the expensive way to agree with
+the issue.
+
+PLA-73 said "extract the bar once and have the five call it". Restating that as findings,
+levers and two blocking questions cost twenty-five minutes on a change that took fifteen.
+The one genuine discovery — that the padding differences were a home-indicator bug, not
+drift — was worth a sentence in the summary, not a gate in front of the work.
+
+So: **plan when the issue leaves the approach open, implement when it does not.** The
+rest of this phase is for the first case.
 
 1. **Read the code the issue names before proposing anything**, and report which of the
    issue's claims the code confirms and which it does not. Issues here often carry
@@ -99,8 +145,10 @@ This is what the skill is actually for. The setup was just clearing the runway.
    - **Match the size of the fix to the size of the issue.** A new shared component, a new
      prop on a shared primitive, or a refactor of adjacent code is rarely warranted by an
      `S` bug. If you believe it is, justify it and expect to be challenged.
-3. **`AskUserQuestion` for choices that change the work.** Decide the rest yourself and
-   say which way you went.
+3. **`AskUserQuestion` only when a wrong guess costs more than asking.** The test is
+   whether being wrong would throw away work already done — not whether the choice is
+   interesting. A decision you can state in the summary and reverse in one edit is one you
+   should just take. Decide the rest yourself and say which way you went.
 4. **How formal to be is a judgment call — state it out loud.** Default to a conversation.
    Call `EnterPlanMode` when the change is big enough that a written plan is worth
    reviewing, or whenever the user asks.

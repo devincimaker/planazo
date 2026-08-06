@@ -40,7 +40,13 @@ target="$root/$slug"
 
 # Default to origin/main, not local main — local main can hold unpushed commits
 # that would silently ride along into the new branch.
+#
+# Fetch first, or origin/main is only as fresh as the last time anything pulled.
+# PLA-73 branched two commits behind without knowing it, and found out at rebase
+# time with the work already written. A stale start is a merge conflict you have
+# not met yet, so pay the two seconds here.
 if [ -z "$base" ]; then
+  git fetch --quiet origin main 2>/dev/null || wt_info "note: could not reach origin; using the origin/main you already have"
   if git rev-parse --verify origin/main >/dev/null 2>&1; then
     base="origin/main"
     ahead=$(git rev-list --count origin/main..main 2>/dev/null || echo 0)
