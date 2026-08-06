@@ -55,11 +55,11 @@ This is the last moment the code can be improved without a follow-up PR, and the
 cheapest one: the diff is small, still fresh in this session, and there is a CI
 run between it and production either way.
 
-Invoke the **`simplify`** skill from inside the worktree, scoped to what this
-branch changed — `git diff main...HEAD --stat` is the honest scope, not every
-file those changes happen to live in. It looks for reuse, simplification,
-efficiency and altitude. It is a quality pass and nothing else: it does not hunt
-for bugs, and `/code-review` is the tool for that, earlier, not here.
+Invoke the **`simplify`** skill from inside the worktree, starting from what this
+branch changed — `git diff main...HEAD --stat` is where the pass starts, not
+where it has to stop. It looks for reuse, simplification, efficiency and
+altitude. It is a quality pass and nothing else: it does not hunt for bugs, and
+`/code-review` is the tool for that, earlier, not here.
 
 Then exactly one of two things is true:
 
@@ -78,9 +78,31 @@ Two things a simplify pass must never quietly do here:
   someone will follow tap by tap. If the pass makes any of those steps read
   false, either revert that part or update the body — a stale walkthrough is
   worse than none.
-- **Grow the diff.** Extracting a shared component or refactoring adjacent code
-  is a separate PR, not a merge-time flourish. If the pass proposes one, say so
-  and leave it for the user to file.
+- **Leave the job half-finished.** If the pass finds a sixth copy of the thing
+  this PR just extracted, or the same duplication one file further out, fix it
+  here. Filing a follow-up issue for a change that fits in this sitting is how
+  the backlog fills with three-line chores nobody will ever pick up, and how one
+  issue quietly turns into four.
+
+**The diff growing is fine.** What is not fine is the *work* spreading across
+four issues because each pass stopped at the edge of its own diff. The limit is
+the kind of work, not its size: finishing what this PR started is in scope,
+starting something unrelated is not. A sixth call site of the component you just
+extracted is the same job. Rewriting the navigation stack because you had the
+file open is not.
+
+The `simplify` skill is a built-in, and its own instructions say to skip any
+finding whose fix "would require changes well outside the reviewed diff". **Here
+that is overridden**, and this rule wins. Apply those findings rather than
+reporting them.
+
+Two kinds of finding still belong in a follow-up issue, and only these:
+
+- **It needs a decision the user has not made.** A visual change to a screen this
+  PR was not about, a schema change, a new dependency. Say what you found and
+  what it would take, and let them choose.
+- **Verifying it would cost more than the PR it is riding on.** Say what you are
+  leaving and why, so the trade is visible rather than silent.
 
 Skip this phase, and say which reason applied, when:
 
