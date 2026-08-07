@@ -164,7 +164,7 @@ async function openMenu() {
 describe('PlanDetailScreen — fixed plans', () => {
   it('tells the gap below minimum and answers via upsert', async () => {
     prime({
-      plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: '2026-08-06T19:30:00Z' },
+      plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(7) },
       rsvps: [
         { user_id: 'u-marta', response: 'yes', profile: { display_name: 'Marta' } },
         { user_id: 'u-jordi', response: 'yes', profile: { display_name: 'Jordi' } },
@@ -186,7 +186,7 @@ describe('PlanDetailScreen — fixed plans', () => {
 
   it('flips to "It\'s on" once the minimum is met and collapses my answer', async () => {
     prime({
-      plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: '2026-08-06T19:30:00Z' },
+      plan: { ...basePlan, plan_type: 'fixed', status: 'open', event_date: iso(7) },
       rsvps: [
         { user_id: 'me', response: 'yes', profile: { display_name: 'Me' } },
         { user_id: 'u-marta', response: 'yes', profile: { display_name: 'Marta' } },

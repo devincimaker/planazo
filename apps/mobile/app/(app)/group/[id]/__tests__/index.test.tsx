@@ -49,6 +49,17 @@ async function renderDetail() {
   );
 }
 
+/**
+ * ISO timestamp N days from today at the given hour, local time. Module scope
+ * so every fixture can reach it: the group screen sorts upcoming plans away
+ * from past ones, so a literal date silently changes what a test is asserting
+ * the day after it passes.
+ */
+function iso(days: number, hour = 19) {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate() + days, hour, 0, 0).toISOString();
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockCanGoBack = true;
@@ -95,7 +106,7 @@ describe('GroupDetailScreen', () => {
         title: 'Padel',
         plan_type: 'fixed',
         status: 'open',
-        event_date: '2026-08-07T20:30:00',
+        event_date: iso(2, 20),
         locked_date: null,
         min_people: 4,
         rsvps: [{ user_id: 'me', response: 'yes' }],
@@ -106,7 +117,7 @@ describe('GroupDetailScreen', () => {
         title: 'Sopar de festa',
         plan_type: 'fixed',
         status: 'locked',
-        event_date: '2026-08-09T21:00:00',
+        event_date: iso(4, 21),
         locked_date: null,
         min_people: 2,
         rsvps: [
@@ -143,7 +154,7 @@ describe('GroupDetailScreen', () => {
         title: 'Cancelled thing',
         plan_type: 'fixed',
         status: 'cancelled',
-        event_date: '2026-08-07T20:30:00',
+        event_date: iso(2, 20),
         locked_date: null,
         min_people: 2,
         cancelled_by: 'u2',
@@ -167,10 +178,6 @@ describe('GroupDetailScreen', () => {
   });
 
   it('19d: one Past section, three endings', async () => {
-    const iso = (days: number) => {
-      const now = new Date();
-      return new Date(now.getFullYear(), now.getMonth(), now.getDate() + days, 19, 0, 0).toISOString();
-    };
     const base = { plan_type: 'fixed', locked_date: null, plan_date_options: [] };
     group.plans = [
       { ...base, id: 'pl', title: 'Upcoming padel', status: 'open', event_date: iso(5), min_people: 2, rsvps: [] },

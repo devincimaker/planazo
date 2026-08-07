@@ -54,7 +54,10 @@ const fixedOpen = {
   plan_type: 'fixed',
   status: 'open',
   min_people: 3,
-  event_date: '2026-08-06T19:30:00Z',
+  // Relative, like every other date here: the feed drops past plans, so a
+  // literal date turns this fixture invisible the morning after it passes and
+  // takes eleven tests with it.
+  event_date: iso(2),
   location: 'Padel Indoor Gràcia',
   groups: GROUP,
   rsvps: [
