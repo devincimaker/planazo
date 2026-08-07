@@ -13,6 +13,17 @@ import { repoRoot, resolveStack } from './env';
 export default async function globalSetup(): Promise<void> {
   const stack = resolveStack();
 
+  // Hand the resolved stack to the workers. Each test file re-runs
+  // resolveStack() in its own module graph, and process.env is its first
+  // source — inherited by every worker spawned after this point — so an .env
+  // predating SUPABASE_JWT_SECRET or SUPABASE_DB_URL costs one `supabase
+  // status` here instead of one per file (PLA-84).
+  process.env.SUPABASE_URL = stack.url;
+  process.env.SUPABASE_ANON_KEY = stack.anonKey;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = stack.serviceRoleKey;
+  process.env.SUPABASE_JWT_SECRET = stack.jwtSecret;
+  if (stack.dbUrl) process.env.SUPABASE_DB_URL = stack.dbUrl;
+
   if (!stack.dbUrl) {
     // No Postgres URL means the drift check cannot run, and a verdict about an
     // unverifiable schema is worth nothing — refuse, same as every other

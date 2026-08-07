@@ -214,10 +214,8 @@ Delete it with: supabase branches delete $branch_name --project-ref $WT_PROJECT_
     "Could not read SUPABASE_ANON_KEY from the branch payload. Keys present: $branch_keys"
   service_key=$(wt_branch_field "$branch_json" "SUPABASE_SERVICE_ROLE_KEY") || wt_die \
     "Could not read SUPABASE_SERVICE_ROLE_KEY from the branch payload. Keys present: $branch_keys"
-  # The integration suite signs its own access tokens with this instead of
-  # calling the auth endpoint, whose password-grant rate limit is platform-level
-  # on hosted projects and cannot be raised (PLA-84). Hard requirement: a branch
-  # database has no other way to get the secret.
+  # The integration suite mints access tokens from this (PLA-84). Hard
+  # requirement: a branch database has no other way to get the secret.
   jwt_secret=$(wt_branch_field "$branch_json" "SUPABASE_JWT_SECRET") || wt_die \
     "Could not read SUPABASE_JWT_SECRET from the branch payload. Keys present: $branch_keys"
   # Connection choice matters twice over. POSTGRES_URL_NON_POOLING points at
@@ -268,9 +266,8 @@ wt_upsert_env "$target/.env" "SUPABASE_SERVICE_ROLE_KEY" "$service_key"
 # trusting a run's verdict. Carries a password in branch mode — .env is
 # gitignored and already holds the service-role key.
 wt_upsert_env "$target/.env" "SUPABASE_DB_URL" "${db_url:-}"
-# JWT signing secret for the same stack. The integration suite mints access
-# tokens locally with it (PLA-84) — same sensitivity class as the service-role
-# key already written above.
+# JWT signing secret for the same stack — what the integration suite mints
+# access tokens from (PLA-84).
 wt_upsert_env "$target/.env" "SUPABASE_JWT_SECRET" "${jwt_secret:-}"
 
 wt_upsert_env "$target/apps/mobile/.env" "EXPO_PUBLIC_SUPABASE_URL" "$supabase_url"

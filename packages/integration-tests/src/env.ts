@@ -7,11 +7,9 @@ export interface Stack {
   anonKey: string;
   serviceRoleKey: string;
   /**
-   * HS256 secret the stack's auth server signs access tokens with. The suite
-   * signs its own (testbed.ts) instead of calling the password-grant endpoint,
-   * whose rate limit on hosted projects is platform-level and unraisable
-   * (PLA-84). Same sensitivity class as serviceRoleKey, which can do strictly
-   * more.
+   * HS256 secret the stack's auth server signs access tokens with; testbed.ts
+   * mints the suite's own tokens from it instead of calling the rate-limited
+   * sign-in endpoint (PLA-84).
    */
   jwtSecret: string;
   /** Direct Postgres URL for the same database, when known. Drift checks only. */
@@ -38,6 +36,21 @@ function parseEnvFile(path: string): Record<string, string> {
 function isLoopback(url: string): boolean {
   const host = new URL(url).hostname;
   return host === '127.0.0.1' || host === 'localhost' || host === '::1';
+}
+
+/** Parsed `supabase status -o env` output, or null when no local stack answers. */
+function statusEnv(): Record<string, string> | null {
+  try {
+    const out = execSync('supabase status -o env', { encoding: 'utf8' });
+    const vars: Record<string, string> = {};
+    for (const line of out.split('\n')) {
+      const m = line.match(/^([A-Z_]+)="(.*)"$/);
+      if (m) vars[m[1]] = m[2];
+    }
+    return vars;
+  } catch {
+    return null;
+  }
 }
 
 /** The `<ref>` of an `https://<ref>.supabase.co` URL, or null. */
@@ -180,12 +193,7 @@ export function resolveStack(): Stack {
   }
 
   if (!url || !anonKey || !serviceRoleKey) {
-    const out = execSync('supabase status -o env', { encoding: 'utf8' });
-    const vars: Record<string, string> = {};
-    for (const line of out.split('\n')) {
-      const m = line.match(/^([A-Z_]+)="(.*)"$/);
-      if (m) vars[m[1]] = m[2];
-    }
+    const vars = statusEnv() ?? {};
     url = vars.API_URL;
     anonKey = vars.ANON_KEY;
     serviceRoleKey = vars.SERVICE_ROLE_KEY;
@@ -208,13 +216,9 @@ export function resolveStack(): Stack {
   // `supabase status` — an older .env (written before either key existed)
   // is not a reason to refuse a run the stack itself can satisfy.
   if ((!dbUrl || !jwtSecret) && isLoopback(url)) {
-    try {
-      const out = execSync('supabase status -o env', { encoding: 'utf8' });
-      dbUrl = dbUrl ?? (out.match(/^DB_URL="(.*)"$/m)?.[1] ?? null);
-      jwtSecret = jwtSecret ?? (out.match(/^JWT_SECRET="(.*)"$/m)?.[1] ?? null);
-    } catch {
-      // leave whatever we had; the checks below decide
-    }
+    const vars = statusEnv();
+    dbUrl = dbUrl ?? vars?.DB_URL ?? null;
+    jwtSecret = jwtSecret ?? vars?.JWT_SECRET ?? null;
   }
 
   // A hosted branch has no equivalent fallback: the secret only travels through
@@ -225,7 +229,10 @@ export function resolveStack(): Stack {
       `No SUPABASE_JWT_SECRET found for ${url}.\n` +
         `The suite signs its own access tokens instead of calling the rate-limited\n` +
         `auth endpoint, and needs the stack's JWT secret to do it.\n` +
-        `Re-run: pnpm wt:setup --db (rewrites this worktree's .env with the secret)`,
+        (isLoopback(url)
+          ? `Loopback answers via \`supabase status\` — is the stack up (supabase start)?\n` +
+            `A worktree can also refresh its .env with: pnpm wt:setup`
+          : `Re-run: pnpm wt:setup --db (rewrites this worktree's .env with the secret)`),
     );
   }
 

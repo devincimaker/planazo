@@ -12,28 +12,31 @@ export interface TestUser {
   client: Client;
 }
 
-function newClient(key: string): Client {
-  const { url } = resolveStack();
-  return createClient<Database>(url, key, {
+function newServiceClient(): Client {
+  const { url, serviceRoleKey } = resolveStack();
+  return createClient<Database>(url, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
 
 /**
- * HS256-signs an access token for an existing auth user, exactly as the
- * stack's auth server would: same claims RLS can read, same secret, so
- * Postgres cannot tell it from a real sign-in. Signing locally is what keeps
+ * HS256-signs an access token for an existing auth user, as the stack's auth
+ * server would: same secret, and the claims this schema reads — auth.uid()'s
+ * `sub`, PostgREST's `role`, plus `email` for parity with a real session — so
+ * Postgres accepts it exactly as it accepts a sign-in's. If a policy ever
+ * reads more of auth.jwt(), add the claim here. Signing locally is what keeps
  * the suite off the password-grant endpoint, whose hosted rate limit
  * (~30/5min, platform-level, unraisable) used to fail runs from branch-DB
  * worktrees (PLA-84). Every test in the suite exercises this against the real
  * verifier — a wrong claim or signature is an instant 401 everywhere.
  */
-function mintAccessToken(userId: string): string {
+function mintAccessToken(userId: string, email: string): string {
   const { jwtSecret } = resolveStack();
   const b64 = (obj: object) => Buffer.from(JSON.stringify(obj)).toString('base64url');
   const now = Math.floor(Date.now() / 1000);
   const body = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({
     sub: userId,
+    email,
     role: 'authenticated',
     aud: 'authenticated',
     iat: now,
@@ -47,12 +50,11 @@ function mintAccessToken(userId: string): string {
  * A client locked to one minted token. `accessToken` hands the token to
  * PostgREST, Storage and Realtime alike, and disables the client's auth API —
  * which is the point: an actor's client should query as that actor and
- * nothing else. The one file testing the auth flow itself
- * (signup-confirmation.test.ts) builds its own clients.
+ * nothing else.
  */
-function newUserClient(userId: string): Client {
+function newUserClient(userId: string, email: string): Client {
   const { url, anonKey } = resolveStack();
-  const token = mintAccessToken(userId);
+  const token = mintAccessToken(userId, email);
   return createClient<Database>(url, anonKey, { accessToken: async () => token });
 }
 
@@ -69,19 +71,19 @@ export function ok<T>(res: { data: T; error: { message: string } | null }): NonN
  * and tears it down, and does nothing on an actor's behalf in between.
  */
 export class TestBed {
-  readonly service: Client = newClient(resolveStack().serviceRoleKey);
+  readonly service: Client = newServiceClient();
   private users: TestUser[] = [];
   private groupIds: string[] = [];
 
   /**
    * Deliberately neither signUp nor signInWithPassword: signUp would tie the
-   * suite to the product's email policy (PLA-71), and password sign-in is
-   * rate-limited on hosted branch databases to a ceiling one run exceeds on
-   * its own (PLA-84). The admin API creates the account pre-confirmed —
-   * the trigger on auth.users fires the same on an admin insert, so profile
-   * and handle are built exactly as a real signup builds them — and the
-   * actor's token is minted locally. The real auth flow keeps its coverage in
-   * signup-confirmation.test.ts, where it is the subject, not the setup.
+   * suite to the product's email policy (PLA-71), and sign-in is what hosted
+   * stacks throttle (PLA-84 — see mintAccessToken). The admin API creates the
+   * account pre-confirmed — the trigger on auth.users fires the same on an
+   * admin insert, so profile and handle are built exactly as a real signup
+   * builds them — and the actor's token is minted locally. The real auth flow
+   * keeps its coverage in signup-confirmation.test.ts, where it is the
+   * subject, not the setup.
    */
   async createUser(name?: string): Promise<TestUser> {
     const email = `it-${randomUUID()}@example.com`;
@@ -93,7 +95,7 @@ export class TestBed {
     if (error || !data.user) {
       // The one auth endpoint still in the setup path. A throttle here must
       // say so, or it reads as a failure of whichever test file hit it first.
-      if (/rate limit/i.test(error?.message ?? '')) {
+      if (error && (error.status === 429 || error.code === 'over_request_rate_limit')) {
         throw new Error(
           `Supabase auth rate limit reached while creating ${email} via admin.createUser.\n` +
             `This is the platform throttling this stack's auth endpoint, not a failing test.\n` +
@@ -109,7 +111,7 @@ export class TestBed {
       id: data.user.id,
       email,
       name: name ?? email.split('@')[0],
-      client: newUserClient(data.user.id),
+      client: newUserClient(data.user.id, email),
     };
     this.users.push(user);
     return user;
