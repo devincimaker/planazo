@@ -14,6 +14,7 @@ import { supabase } from '../../../../lib/supabase';
 import { useAuthStore } from '../../../../stores/authStore';
 import { errorCopy, isNotFoundError } from '../../../../lib/queryErrors';
 import { usePendingRemoval } from '../../../../lib/usePendingRemoval';
+import { groupManageQuery } from '../../../../lib/groupManageQuery';
 import { MIN_TOUCH_TARGET } from '../../../../lib/a11y';
 import {
   BLOCKED_QUERY_KEY,
@@ -34,23 +35,7 @@ export default function ManageGroupScreen() {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
 
-  const { data: group, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['group-manage', id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('groups')
-        .select(
-          `id, name, color, invite_code, anyone_can_post,
-          group_members(user_id, role, notify_new_plans, joined_at,
-            profile:profiles(display_name, avatar_url))`
-        )
-        .eq('id', id)
-        .single();
-      if (error) throw error;
-      return data as any;
-    },
-    enabled: !!id,
-  });
+  const { data: group, isLoading, isError, error, refetch } = useQuery(groupManageQuery(id));
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['group-manage', id] });
@@ -266,6 +251,7 @@ export default function ManageGroupScreen() {
           notifyPending={setNotify.isPending}
           isAdmin={isAdmin}
           onEditProfile={() => router.push(`/(app)/group/${id}/edit`)}
+          onAdmins={() => router.push(`/(app)/group/${id}/admins`)}
         />
 
         <View style={styles.leaveBlock}>

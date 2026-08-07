@@ -44,8 +44,9 @@ function RemoveGlyph({ color }: { color: string }) {
  * on the screen was hiding inside the least likely thing to press. "Member"
  * is gone with it, being only the absence of admin and saying nothing.
  *
- * Promotion needs a real interaction of its own, and has none until PLA-50
- * gives it one.
+ * Promotion got its real interaction in PLA-50: the Admins screen, reached
+ * through the labelled "Admins" row in the "How it runs" card. This badge
+ * stays a badge.
  */
 function adminBadge(m: GroupMemberRow) {
   return m.role === 'admin' ? (
@@ -205,7 +206,9 @@ export function MemberList({
       </Card>
       {others.length > 0 ? (
         <ThemedText variant="caption" style={styles.swipeHint}>
-          Swipe a name for remove and block
+          {/* Non-admins only get Block in the swipe, so the hint must not
+              promise them Remove. */}
+          {isAdmin ? 'Swipe a name for remove and block' : 'Swipe a name to block'}
         </ThemedText>
       ) : null}
     </View>

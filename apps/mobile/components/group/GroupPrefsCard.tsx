@@ -13,6 +13,7 @@ interface Props {
   notifyPending: boolean;
   isAdmin: boolean;
   onEditProfile: () => void;
+  onAdmins: () => void;
 }
 
 /** "How it runs": the two switches, plus the way in to the group profile. */
@@ -25,6 +26,7 @@ export function GroupPrefsCard({
   notifyPending,
   isAdmin,
   onEditProfile,
+  onAdmins,
 }: Props) {
   return (
     <View style={styles.section}>
@@ -59,17 +61,38 @@ export function GroupPrefsCard({
           />
         </View>
         {isAdmin ? (
-          <Pressable
-            style={({ pressed }) => [styles.prefRow, styles.divider, pressed && styles.rowPressed]}
-            onPress={onEditProfile}
-            accessibilityRole="button"
-            testID="edit-group"
-          >
-            <ThemedText variant="bodyStrong">Edit group profile</ThemedText>
-            <ThemedText variant="body" color={colors.textFaint}>
-              ›
-            </ThemedText>
-          </Pressable>
+          <>
+            <Pressable
+              style={({ pressed }) => [
+                styles.prefRow,
+                styles.divider,
+                pressed && styles.rowPressed,
+              ]}
+              onPress={onEditProfile}
+              accessibilityRole="button"
+              testID="edit-group"
+            >
+              <ThemedText variant="bodyStrong">Edit group profile</ThemedText>
+              <ThemedText variant="body" color={colors.textFaint}>
+                ›
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [
+                styles.prefRow,
+                styles.divider,
+                pressed && styles.rowPressed,
+              ]}
+              onPress={onAdmins}
+              accessibilityRole="button"
+              testID="manage-admins"
+            >
+              <ThemedText variant="bodyStrong">Admins</ThemedText>
+              <ThemedText variant="body" color={colors.textFaint}>
+                ›
+              </ThemedText>
+            </Pressable>
+          </>
         ) : null}
       </Card>
     </View>
