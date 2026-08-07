@@ -53,11 +53,13 @@ jobs:
       - name: Unit tests (shared)
         run: pnpm --filter @planazo/shared test
 
-      # --maxWorkers overrides the 50% baked into the package script. That 50% is
-      # a courtesy to a laptop you are also using; this runner is dedicated to
-      # this one job, so half of it would sit idle for the whole suite.
+      # Leave --maxWorkers alone: the package script's 50% is load-bearing.
+      # Overriding it to 100% here looked like free speed on a dedicated runner
+      # and cost a red main instead — jest's worker count already excludes the
+      # coordinator process, so 100% oversubscribes the box and every test blows
+      # the 5s timeout. 217s and eight failures, against a 31.8s baseline.
       - name: Component tests (mobile)
-        run: pnpm --filter mobile test -- --ci --maxWorkers=100%
+        run: pnpm --filter mobile test -- --ci
 
       # Catches what typecheck can't: bad CSS module references, missing
       # font/metadata config, anything that only fails at render time.
