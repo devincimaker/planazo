@@ -14,7 +14,7 @@ export function groupManageQuery(id: string | undefined) {
       const { data, error } = await supabase
         .from('groups')
         .select(
-          `id, name, color, invite_code, anyone_can_post, created_by,
+          `id, name, color, anyone_can_post, who_can_invite, join_mode, created_by,
           group_members(user_id, role, notify_new_plans, joined_at,
             profile:profiles(display_name, avatar_url))`
         )

@@ -378,6 +378,41 @@ describe('FeedScreen', () => {
     expect(screen.getByText('Padel + pizza')).toBeTruthy();
   });
 
+  /**
+   * The faces and the number answer two different questions. Everyone who
+   * marked a date is interested, so all three get a face; only the best single
+   * date decides whether the plan is on, so the label says one. The card used
+   * to count the faces and claim "3 going" beside its own "Open" badge.
+   */
+  it('shows every interested face while counting only the best date', async () => {
+    const spreadThin = {
+      ...flexibleOpen,
+      id: 'p5',
+      title: 'Vermut algun dia',
+      min_people: 3,
+      // My own 'no' is what makes the faces row render at all — a flexible
+      // plan hides it while it is still waiting on you.
+      rsvps: [{ user_id: 'me', response: 'no', profile: { display_name: 'Rocío' } }],
+      plan_date_options: [
+        { id: 'd1', date: iso(5), date_availability: [{ user_id: 'u-marta', profile: { display_name: 'Marta' } }] },
+        { id: 'd2', date: iso(6), date_availability: [{ user_id: 'u-aina', profile: { display_name: 'Aina' } }] },
+        { id: 'd3', date: iso(7), date_availability: [{ user_id: 'u-pau', profile: { display_name: 'Pau' } }] },
+      ],
+    };
+    primeSupabase([spreadThin]);
+    await renderFeed();
+
+    await waitFor(() => expect(screen.getByText('Vermut algun dia')).toBeTruthy());
+    expect(screen.getByText('1 of 3 needed')).toBeTruthy();
+    expect(screen.queryByText('3 going')).toBeNull();
+
+    // All three still hold a place in the stack.
+    for (const name of ['Marta', 'Aina', 'Pau']) {
+      expect(screen.getByLabelText(name)).toBeTruthy();
+    }
+    expect(screen.getByText('Open')).toBeTruthy();
+  });
+
   it('shows the empty state with a create CTA', async () => {
     primeSupabase([]);
     await renderFeed();

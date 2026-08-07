@@ -36,7 +36,7 @@ function primeRpc({
   mockRpc.mockImplementation((fn: string) =>
     Promise.resolve(
       fn === 'get_group_by_invite_code'
-        ? (preview ?? { data: [{ id: 'g1', name: 'Piso Gràcia' }], error: null })
+        ? (preview ?? { data: [{ id: 'g1', name: 'Piso Gràcia', join_mode: 'open' }], error: null })
         : (join ?? { data: { status: 'joined', group_id: 'g1' }, error: null })
     )
   );
@@ -90,6 +90,49 @@ describe('JoinByInviteScreen', () => {
 
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/(app)/group/g1'));
     expect(screen.queryByTestId('join-failed')).toBeNull();
+  });
+
+  /**
+   * PLA-49. The button says what the tap will do before it does it: an
+   * approval door is asked, not entered, and the screen after it says so.
+   */
+  it('an approval door asks rather than joins', async () => {
+    primeRpc({
+      preview: { data: [{ id: 'g1', name: 'Club Pàdel', join_mode: 'approval' }], error: null },
+      join: { data: { status: 'requested', group_id: 'g1', name: 'Club Pàdel' }, error: null },
+    });
+
+    await renderJoin();
+
+    expect(await screen.findByText('Ask to join Club Pàdel')).toBeTruthy();
+    expect(
+      screen.getByText('An admin has to let you in. They get your request the moment you send it.')
+    ).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('join-group'));
+
+    expect(await screen.findByTestId('join-requested')).toBeTruthy();
+    expect(screen.getByText('You’ve asked to join')).toBeTruthy();
+    // Nowhere to go yet: the group is not theirs until an admin says so.
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A decline is never announced, so asking again after one looks exactly like
+   * asking for the first time. The server returns the same `requested` either
+   * way, and this screen must not go looking for a difference.
+   */
+  it('a second ask after a silent decline looks like the first', async () => {
+    primeRpc({
+      preview: { data: [{ id: 'g1', name: 'Club Pàdel', join_mode: 'approval' }], error: null },
+      join: { data: { status: 'requested', group_id: 'g1', name: 'Club Pàdel' }, error: null },
+    });
+
+    await renderJoin();
+    await fireEvent.press(await screen.findByTestId('join-group'));
+
+    expect(await screen.findByTestId('join-requested')).toBeTruthy();
+    expect(screen.queryByText(/declin/i)).toBeNull();
   });
 
   it('says so when the code resolves to nothing', async () => {

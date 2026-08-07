@@ -348,8 +348,9 @@ wt_require_local_stack() {
 }
 
 # `branches get -o json` returns the branch's CREDENTIALS, not metadata:
-# SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, POSTGRES_URL and
-# POSTGRES_URL_NON_POOLING. Everything setup needs is in that one call.
+# SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY,
+# SUPABASE_JWT_SECRET, POSTGRES_URL and POSTGRES_URL_NON_POOLING. Everything
+# setup needs is in that one call.
 wt_branch_field() {
   local json=$1 key=$2
   printf '%s' "$json" | python3 -c '

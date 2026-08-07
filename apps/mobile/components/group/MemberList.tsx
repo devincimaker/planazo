@@ -70,7 +70,8 @@ interface Props {
   onOpenChange: (userId: string | null) => void;
   onAskRemove: (m: GroupMemberRow) => void;
   onAskBlock: (m: GroupMemberRow) => void;
-  onInvite: () => void;
+  /** Null when this group's door is admins-only and this user is not one. */
+  onInvite: (() => void) | null;
 }
 
 /** The People section: every member, with block and remove behind a swipe. */
@@ -122,16 +123,18 @@ export function MemberList({
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
         <ThemedText variant="sectionLabel">People</ThemedText>
-        <Pressable
-          onPress={onInvite}
-          accessibilityRole="button"
-          testID="invite"
-          style={styles.sectionAction}
-        >
-          <ThemedText variant="bodyStrong" color={colors.accent}>
-            Invite
-          </ThemedText>
-        </Pressable>
+        {onInvite ? (
+          <Pressable
+            onPress={onInvite}
+            accessibilityRole="button"
+            testID="invite"
+            style={styles.sectionAction}
+          >
+            <ThemedText variant="bodyStrong" color={colors.accent}>
+              Invite
+            </ThemedText>
+          </Pressable>
+        ) : null}
       </View>
       <Card padded={false}>
         {me ? (

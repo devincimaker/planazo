@@ -36,6 +36,10 @@ let gmDeletes: jest.Mock[] = [];
 let blockUpserts: jest.Mock[] = [];
 let blockDeletes: jest.Mock[] = [];
 let blockedRows: { blocked_id: string }[] = [];
+let joinRequests: any[] = [];
+
+/** Removal is an RPC now, not a delete: it also resets the link (PLA-49). */
+const removeCalls = () => mockRpc.mock.calls.filter((c) => c[0] === 'remove_group_member');
 
 function primeSupabase() {
   groupUpdates = [];
@@ -74,7 +78,15 @@ function primeSupabase() {
     c.then = (resolve: (v: unknown) => void) => {
       const result = mutation
         ? { error: null }
-        : { data: table === 'blocked_users' ? blockedRows : group, error: null };
+        : {
+            data:
+              table === 'blocked_users'
+                ? blockedRows
+                : table === 'group_invites'
+                  ? joinRequests
+                  : group,
+            error: null,
+          };
       return Promise.resolve(result).then(resolve);
     };
     return c;
@@ -94,6 +106,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   jest.spyOn(Alert, 'alert');
   blockedRows = [];
+  joinRequests = [];
   primeSupabase();
   mockRpc.mockResolvedValue({ data: { left: true }, error: null });
   useAuthStore.setState({
@@ -104,8 +117,9 @@ beforeEach(() => {
     id: 'g1',
     name: 'Piso Gràcia',
     color: '#F7B0DC',
-    invite_code: 'ABCD2345',
     anyone_can_post: true,
+    who_can_invite: 'members',
+    join_mode: 'open',
     group_members: [
       {
         user_id: 'me',
@@ -261,8 +275,8 @@ describe('ManageGroupScreen', () => {
     await waitFor(() => expect(screen.queryByText('Aina')).toBeNull());
     expect(mockShowToast.mock.calls.at(-1)![0]).toBe('Aina is out of the group');
     expect(mockShowToast.mock.calls.at(-1)![1].action.label).toBe('Undo');
-    // Nothing has been deleted yet: that is what makes the undo honest.
-    expect(gmDeletes.every((d) => d.mock.calls.length === 0)).toBe(true);
+    // Nothing has been removed yet: that is what makes the undo honest.
+    expect(removeCalls()).toHaveLength(0);
   });
 
   it('undo inside the window means the membership is never deleted', async () => {
@@ -280,10 +294,10 @@ describe('ManageGroupScreen', () => {
     // Leaving the screen commits whatever is still pending, so an unmount here
     // is the strongest way to say "nothing was pending".
     view.unmount();
-    expect(gmDeletes.every((d) => d.mock.calls.length === 0)).toBe(true);
+    expect(removeCalls()).toHaveLength(0);
   });
 
-  it('the delete lands when the undo window closes', async () => {
+  it('the removal lands when the undo window closes', async () => {
     jest.useFakeTimers();
     try {
       await renderManage();
@@ -296,7 +310,12 @@ describe('ManageGroupScreen', () => {
         jest.advanceTimersByTime(5000);
       });
 
-      await waitFor(() => expect(gmDeletes.some((d) => d.mock.calls.length > 0)).toBe(true));
+      await waitFor(() =>
+        expect(removeCalls().at(-1)).toEqual([
+          'remove_group_member',
+          { p_group_id: 'g1', p_user_id: 'u2' },
+        ])
+      );
     } finally {
       jest.useRealTimers();
     }
@@ -310,11 +329,11 @@ describe('ManageGroupScreen', () => {
     await invoke('u2', 'remove');
     await fireEvent.press(screen.getByTestId('member-confirm-confirm'));
     await waitFor(() => expect(screen.queryByText('Aina')).toBeNull());
-    expect(gmDeletes.every((d) => d.mock.calls.length === 0)).toBe(true);
+    expect(removeCalls()).toHaveLength(0);
 
     view.unmount();
 
-    await waitFor(() => expect(gmDeletes.some((d) => d.mock.calls.length > 0)).toBe(true));
+    await waitFor(() => expect(removeCalls().length).toBeGreaterThan(0));
   });
 
   it('members can block but not remove, and get no rename or admins row', async () => {
@@ -384,6 +403,112 @@ describe('ManageGroupScreen', () => {
         )
       ).toBe(true)
     );
+  });
+
+  // PLA-49. The door dials sit under the same card pattern as "How it runs",
+  // and both are admin-only in the same way: shown to everybody, movable by
+  // admins, so a member who cannot find Invite gets to see why.
+  it('the door dials write through update_group_door', async () => {
+    await renderManage();
+
+    await fireEvent(await screen.findByTestId('pref-admins-invite'), 'valueChange', true);
+    await waitFor(() =>
+      expect(mockRpc).toHaveBeenCalledWith('update_group_door', {
+        p_group_id: 'g1',
+        p_who_can_invite: 'admins',
+        p_join_mode: undefined,
+      })
+    );
+
+    await fireEvent(screen.getByTestId('pref-join-approval'), 'valueChange', true);
+    await waitFor(() =>
+      expect(mockRpc).toHaveBeenCalledWith('update_group_door', {
+        p_group_id: 'g1',
+        p_who_can_invite: undefined,
+        p_join_mode: 'approval',
+      })
+    );
+  });
+
+  it('a member sees the dials but cannot move them', async () => {
+    group.group_members[0].role = 'member';
+    await renderManage();
+
+    expect(await screen.findByTestId('pref-admins-invite')).toBeTruthy();
+    expect(screen.getByTestId('pref-admins-invite').props.disabled).toBe(true);
+    expect(screen.getByTestId('pref-join-approval').props.disabled).toBe(true);
+  });
+
+  it('the admins dial takes the Invite entry point away from a member', async () => {
+    group.who_can_invite = 'admins';
+    group.group_members[0].role = 'member';
+    await renderManage();
+
+    await screen.findByText('Aina');
+    expect(screen.queryByTestId('invite')).toBeNull();
+  });
+
+  it('an admin still gets Invite under the admins dial', async () => {
+    group.who_can_invite = 'admins';
+    await renderManage();
+
+    expect(await screen.findByTestId('invite')).toBeTruthy();
+  });
+
+  it('people waiting at an approval door can be let in', async () => {
+    joinRequests = [
+      { id: 'r1', invitee_id: 'u9', profile: { display_name: 'Pau Miró', avatar_url: null } },
+    ];
+    await renderManage();
+
+    expect(await screen.findByText('Pau Miró')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('approve-u9'));
+
+    await waitFor(() =>
+      expect(mockRpc).toHaveBeenCalledWith('respond_to_join_request', {
+        p_group_id: 'g1',
+        p_user_id: 'u9',
+        p_approve: true,
+      })
+    );
+  });
+
+  it('declining sends the same call with p_approve false, and says nothing', async () => {
+    joinRequests = [
+      { id: 'r1', invitee_id: 'u9', profile: { display_name: 'Pau Miró', avatar_url: null } },
+    ];
+    await renderManage();
+
+    await fireEvent.press(await screen.findByTestId('decline-u9'));
+
+    await waitFor(() =>
+      expect(mockRpc).toHaveBeenCalledWith('respond_to_join_request', {
+        p_group_id: 'g1',
+        p_user_id: 'u9',
+        p_approve: false,
+      })
+    );
+    expect(Alert.alert).not.toHaveBeenCalled();
+  });
+
+  // An empty "Asking to join" heading on every visit would be a permanent
+  // reminder of a setting most groups never switch on.
+  it('the section is absent when nobody is waiting', async () => {
+    await renderManage();
+
+    await screen.findByText('Aina');
+    expect(screen.queryByTestId('join-requests')).toBeNull();
+  });
+
+  it('a member is never asked to answer knocks', async () => {
+    joinRequests = [
+      { id: 'r1', invitee_id: 'u9', profile: { display_name: 'Pau Miró', avatar_url: null } },
+    ];
+    group.group_members[0].role = 'member';
+    await renderManage();
+
+    await screen.findByText('Aina');
+    expect(screen.queryByTestId('join-requests')).toBeNull();
   });
 
   it('leave confirms, calls the RPC and lands back on the tab', async () => {

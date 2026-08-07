@@ -127,6 +127,7 @@ fi
 supabase_url=""
 anon_key=""
 service_key=""
+jwt_secret=""
 branch_name=$(wt_read_value "$metadata" "PLANAZO_BRANCH_NAME" 2>/dev/null || true)
 branch_ref=$(wt_read_value "$metadata" "PLANAZO_BRANCH_REF" 2>/dev/null || true)
 
@@ -164,6 +165,9 @@ shared mode while it may still exist and bill. Delete it and re-run:
   anon_key=$(printf '%s\n' "$local_env" | sed -n 's/^ANON_KEY="\(.*\)"$/\1/p')
   service_key=$(printf '%s\n' "$local_env" | sed -n 's/^SERVICE_ROLE_KEY="\(.*\)"$/\1/p')
   db_url=$(printf '%s\n' "$local_env" | sed -n 's/^DB_URL="\(.*\)"$/\1/p')
+  # Best-effort here: on loopback the integration suite can re-derive it from
+  # `supabase status` itself, so a missing key is not worth dying over.
+  jwt_secret=$(printf '%s\n' "$local_env" | sed -n 's/^JWT_SECRET="\(.*\)"$/\1/p')
   [ -n "$anon_key" ] && [ -n "$service_key" ] || wt_die "Could not parse keys from 'supabase status -o env'"
   wt_info "$supabase_url (shared with main — schema changes here affect main)"
 else
@@ -210,6 +214,10 @@ Delete it with: supabase branches delete $branch_name --project-ref $WT_PROJECT_
     "Could not read SUPABASE_ANON_KEY from the branch payload. Keys present: $branch_keys"
   service_key=$(wt_branch_field "$branch_json" "SUPABASE_SERVICE_ROLE_KEY") || wt_die \
     "Could not read SUPABASE_SERVICE_ROLE_KEY from the branch payload. Keys present: $branch_keys"
+  # The integration suite mints access tokens from this (PLA-84). Hard
+  # requirement: a branch database has no other way to get the secret.
+  jwt_secret=$(wt_branch_field "$branch_json" "SUPABASE_JWT_SECRET") || wt_die \
+    "Could not read SUPABASE_JWT_SECRET from the branch payload. Keys present: $branch_keys"
   # Connection choice matters twice over. POSTGRES_URL_NON_POOLING points at
   # db.<ref>.supabase.co, which resolves IPv6-only and is unreachable from an
   # IPv4 network. POSTGRES_URL reaches the pooler over IPv4 but on 6543 —
@@ -258,6 +266,9 @@ wt_upsert_env "$target/.env" "SUPABASE_SERVICE_ROLE_KEY" "$service_key"
 # trusting a run's verdict. Carries a password in branch mode — .env is
 # gitignored and already holds the service-role key.
 wt_upsert_env "$target/.env" "SUPABASE_DB_URL" "${db_url:-}"
+# JWT signing secret for the same stack — what the integration suite mints
+# access tokens from (PLA-84).
+wt_upsert_env "$target/.env" "SUPABASE_JWT_SECRET" "${jwt_secret:-}"
 
 wt_upsert_env "$target/apps/mobile/.env" "EXPO_PUBLIC_SUPABASE_URL" "$supabase_url"
 wt_upsert_env "$target/apps/mobile/.env" "EXPO_PUBLIC_SUPABASE_ANON_KEY" "$anon_key"

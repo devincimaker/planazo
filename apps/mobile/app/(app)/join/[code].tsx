@@ -5,6 +5,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../../lib/supabase';
 import { stashPendingJoin } from '../../../lib/pendingJoin';
+import {
+  joinBlurb,
+  joinLabel,
+  joinPendingLabel,
+  requestedBlurb,
+  requestedEyebrow,
+} from '../../../lib/groupDoor';
 import { useAuthStore } from '../../../stores/authStore';
 import { ThemedText, Button, GroupTile, ErrorState } from '../../../components/ui';
 import { colors, spacing } from '../../../theme/tokens';
@@ -57,7 +64,7 @@ export default function JoinByInviteScreen() {
       if (error) throw error;
       // The RPC returns a table, so an unknown code is an empty list rather
       // than an error. Nothing to preview and nothing to join.
-      const group = (data as { id: string; name: string }[])[0];
+      const group = (data as { id: string; name: string; join_mode: string }[])[0];
       return group ?? null;
     },
     enabled: signedIn && !!inviteCode,
@@ -76,6 +83,9 @@ export default function JoinByInviteScreen() {
         void preview.refetch();
         return;
       }
+      // Nothing to do but stop: the mutation's own result is what puts the
+      // screen into its asked state below.
+      if (result.status === 'requested') return;
       // 'already_member' lands in the same place as 'joined'. Being told you
       // were already in a group you just asked to join is a correction nobody
       // needs; the group appearing is the answer.
@@ -85,6 +95,12 @@ export default function JoinByInviteScreen() {
   });
 
   const goToFeed = () => router.replace('/(app)/(tabs)');
+
+  // Sent, and now waiting on an admin. Read off the mutation rather than kept
+  // alongside it, and deliberately the same screen whether this is the first
+  // ask or one that was quietly turned down before: a decline is never
+  // announced (PLA-49).
+  const asked = join.data?.status === 'requested';
 
   if (!signedIn) {
     return <Loading />;
@@ -123,22 +139,29 @@ export default function JoinByInviteScreen() {
     return <Loading />;
   }
 
+  // One card, two things it can say. The layout is identical either side of
+  // the ask, and only the footer changes: a card written out twice drifts the
+  // first time either half is restyled.
   return (
     <Screen>
-      <View style={styles.card} testID="join-preview">
+      <View style={styles.card} testID={asked ? 'join-requested' : 'join-preview'}>
         <GroupTile name={preview.data.name} size={72} />
         <View style={styles.titleBlock}>
           <ThemedText variant="sectionLabel" color={colors.textMuted}>
-            You’ve been invited to
+            {asked ? requestedEyebrow : 'You’ve been invited to'}
           </ThemedText>
           <ThemedText variant="screenTitle" style={styles.name}>
             {preview.data.name}
           </ThemedText>
         </View>
         <ThemedText variant="body" color={colors.textSecondary} style={styles.blurb}>
-          Join and you’ll see their plans, and they’ll see yours.
+          {asked ? requestedBlurb() : joinBlurb(preview.data.join_mode)}
         </ThemedText>
       </View>
+
+      {asked ? (
+        <Button label="Go to my plans" onPress={goToFeed} testID="join-requested-done" />
+      ) : null}
 
       {join.isError ? (
         <ThemedText
@@ -152,15 +175,21 @@ export default function JoinByInviteScreen() {
         </ThemedText>
       ) : null}
 
-      <View style={styles.actions}>
-        <Button
-          label={join.isPending ? 'Joining…' : `Join ${preview.data.name}`}
-          disabled={join.isPending}
-          onPress={() => join.mutate()}
-          testID="join-group"
-        />
-        <Button label="Not now" variant="secondary" onPress={goToFeed} testID="join-decline" />
-      </View>
+      {asked ? null : (
+        <View style={styles.actions}>
+          <Button
+            label={
+              join.isPending
+                ? joinPendingLabel(preview.data.join_mode)
+                : joinLabel(preview.data.join_mode, preview.data.name)
+            }
+            disabled={join.isPending}
+            onPress={() => join.mutate()}
+            testID="join-group"
+          />
+          <Button label="Not now" variant="secondary" onPress={goToFeed} testID="join-decline" />
+        </View>
+      )}
     </Screen>
   );
 }

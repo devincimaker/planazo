@@ -63,7 +63,7 @@ beforeEach(() => {
     name: 'Piso Gràcia',
     description: 'The flat, plus honorary members',
     color: '#F7B0DC',
-    invite_code: 'ABCD2345',
+    who_can_invite: 'members',
     group_members: [
       { user_id: 'me', role: 'admin', profile: { id: 'me', display_name: 'Rocío' } },
       { user_id: 'u2', role: 'member', profile: { id: 'u2', display_name: 'Aina' } },
@@ -202,6 +202,82 @@ describe('GroupDetailScreen', () => {
 
     await fireEvent.press(screen.getByTestId('past-row-ph'));
     expect(mockPush).toHaveBeenCalledWith('/(app)/plan/ph');
+  });
+
+  /**
+   * The count beside min_people is the best single date, never the union of
+   * everyone free on any date. Three people each free on a different day is a
+   * plan going nowhere, and the row used to call it "3 going" while the plan
+   * screen said "3 more and it's on".
+   */
+  const flexiblePlan = (plan_date_options: unknown[]) => ({
+    plan_type: 'flexible',
+    status: 'open',
+    event_date: null,
+    locked_date: null,
+    min_people: 3,
+    rsvps: [],
+    plan_date_options,
+  });
+  const free = (id: string, name: string) => ({ user_id: id, profile: { display_name: name } });
+
+  /** One person per date, so no single evening ever has more than one. */
+  const spreadThin = (days: number[]) =>
+    flexiblePlan(
+      days.map((d, i) => ({
+        id: `o${i + 1}`,
+        date: iso(d),
+        date_availability: [free(`u${i + 1}`, `P${i + 1}`)],
+      }))
+    );
+
+  /** Three free on the lead day, one of them also free on the other. */
+  const threeOnOneDay = (leadDay: number, otherDay: number) =>
+    flexiblePlan([
+      {
+        id: 'o1',
+        date: iso(leadDay),
+        date_availability: [free('u1', 'Aina'), free('u2', 'Pau'), free('u3', 'Jordi')],
+      },
+      { id: 'o2', date: iso(otherDay), date_availability: [free('u1', 'Aina')] },
+    ]);
+
+  it('counts the best single date, not everyone free on any date', async () => {
+    group.plans = [{ ...spreadThin([3, 4, 5]), id: 'pf', title: 'Vermut algun dia' }];
+
+    await renderDetail();
+
+    expect(await screen.findByText('Vermut algun dia')).toBeTruthy();
+    expect(screen.getByText('3 dates on the table')).toBeTruthy();
+    expect(screen.getByText('1 of 3 needed')).toBeTruthy();
+    expect(screen.queryByText('3 going')).toBeNull();
+  });
+
+  it('sinks a spread-thin plan into Past as never-quite, not as happened', async () => {
+    group.plans = [{ ...spreadThin([-6, -5, -4]), id: 'pf', title: 'Vermut algun dia' }];
+
+    await renderDetail();
+    await fireEvent.press(await screen.findByTestId('past-toggle'));
+
+    expect(screen.getByText("Didn't happen · 1 of 3")).toBeTruthy();
+    expect(screen.queryByText('3 went')).toBeNull();
+  });
+
+  it('calls a flexible plan on once one date reaches the minimum', async () => {
+    group.plans = [
+      { ...threeOnOneDay(3, 4), id: 'pl', title: 'Calçotada' },
+      { ...threeOnOneDay(-5, -4), id: 'pp', title: 'Calçotada passada' },
+    ];
+
+    await renderDetail();
+
+    expect(await screen.findByText('3 going')).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('past-toggle'));
+    // Nobody holds a yes on a flexible plan that never locked, so the went
+    // label falls back to the count that made it happen.
+    expect(screen.getByText('3 went')).toBeTruthy();
+    expect(screen.queryByText("Didn't happen · 3 of 3")).toBeNull();
   });
 
   it('empty group points the start-plan CTA at this group', async () => {

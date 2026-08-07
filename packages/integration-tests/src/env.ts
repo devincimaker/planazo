@@ -6,6 +6,12 @@ export interface Stack {
   url: string;
   anonKey: string;
   serviceRoleKey: string;
+  /**
+   * HS256 secret the stack's auth server signs access tokens with; testbed.ts
+   * mints the suite's own tokens from it instead of calling the rate-limited
+   * sign-in endpoint (PLA-84).
+   */
+  jwtSecret: string;
   /** Direct Postgres URL for the same database, when known. Drift checks only. */
   dbUrl: string | null;
 }
@@ -30,6 +36,21 @@ function parseEnvFile(path: string): Record<string, string> {
 function isLoopback(url: string): boolean {
   const host = new URL(url).hostname;
   return host === '127.0.0.1' || host === 'localhost' || host === '::1';
+}
+
+/** Parsed `supabase status -o env` output, or null when no local stack answers. */
+function statusEnv(): Record<string, string> | null {
+  try {
+    const out = execSync('supabase status -o env', { encoding: 'utf8' });
+    const vars: Record<string, string> = {};
+    for (const line of out.split('\n')) {
+      const m = line.match(/^([A-Z_]+)="(.*)"$/);
+      if (m) vars[m[1]] = m[2];
+    }
+    return vars;
+  } catch {
+    return null;
+  }
 }
 
 /** The `<ref>` of an `https://<ref>.supabase.co` URL, or null. */
@@ -155,6 +176,7 @@ export function resolveStack(): Stack {
   let url = process.env.SUPABASE_URL;
   let anonKey = process.env.SUPABASE_ANON_KEY;
   let serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  let jwtSecret = process.env.SUPABASE_JWT_SECRET ?? null;
   let dbUrl = process.env.SUPABASE_DB_URL ?? null;
 
   if (!url || !anonKey || !serviceRoleKey) {
@@ -163,6 +185,7 @@ export function resolveStack(): Stack {
       url = env.SUPABASE_URL;
       anonKey = env.SUPABASE_ANON_KEY;
       serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
+      jwtSecret = env.SUPABASE_JWT_SECRET ?? null;
       dbUrl = env.SUPABASE_DB_URL ?? null;
     } else {
       url = anonKey = serviceRoleKey = undefined;
@@ -170,15 +193,11 @@ export function resolveStack(): Stack {
   }
 
   if (!url || !anonKey || !serviceRoleKey) {
-    const out = execSync('supabase status -o env', { encoding: 'utf8' });
-    const vars: Record<string, string> = {};
-    for (const line of out.split('\n')) {
-      const m = line.match(/^([A-Z_]+)="(.*)"$/);
-      if (m) vars[m[1]] = m[2];
-    }
+    const vars = statusEnv() ?? {};
     url = vars.API_URL;
     anonKey = vars.ANON_KEY;
     serviceRoleKey = vars.SERVICE_ROLE_KEY;
+    jwtSecret = vars.JWT_SECRET ?? null;
     dbUrl = vars.DB_URL ?? null;
   }
 
@@ -193,16 +212,30 @@ export function resolveStack(): Stack {
   assertAllowed(url, root);
   assertNoSchemaSkew(root);
 
-  // Loopback targets always have a queryable DB_URL via `supabase status`.
-  if (!dbUrl && isLoopback(url)) {
-    try {
-      const out = execSync('supabase status -o env', { encoding: 'utf8' });
-      dbUrl = out.match(/^DB_URL="(.*)"$/m)?.[1] ?? null;
-    } catch {
-      dbUrl = null;
-    }
+  // Loopback targets can answer for their own DB_URL and JWT_SECRET via
+  // `supabase status` — an older .env (written before either key existed)
+  // is not a reason to refuse a run the stack itself can satisfy.
+  if ((!dbUrl || !jwtSecret) && isLoopback(url)) {
+    const vars = statusEnv();
+    dbUrl = dbUrl ?? vars?.DB_URL ?? null;
+    jwtSecret = jwtSecret ?? vars?.JWT_SECRET ?? null;
   }
 
-  cached = { url, anonKey, serviceRoleKey, dbUrl };
+  // A hosted branch has no equivalent fallback: the secret only travels through
+  // wt:setup, so a worktree provisioned before PLA-84 refuses with the fix
+  // rather than failing later inside a test file.
+  if (!jwtSecret) {
+    throw new Error(
+      `No SUPABASE_JWT_SECRET found for ${url}.\n` +
+        `The suite signs its own access tokens instead of calling the rate-limited\n` +
+        `auth endpoint, and needs the stack's JWT secret to do it.\n` +
+        (isLoopback(url)
+          ? `Loopback answers via \`supabase status\` — is the stack up (supabase start)?\n` +
+            `A worktree can also refresh its .env with: pnpm wt:setup`
+          : `Re-run: pnpm wt:setup --db (rewrites this worktree's .env with the secret)`),
+    );
+  }
+
+  cached = { url, anonKey, serviceRoleKey, jwtSecret, dbUrl };
   return cached;
 }

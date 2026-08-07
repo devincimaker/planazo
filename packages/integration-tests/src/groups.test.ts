@@ -199,7 +199,9 @@ describe('get_group_by_invite_code', () => {
       await loner.client.rpc('get_group_by_invite_code', {
         code: `  ${group.invite_code.toLowerCase()} `,
       }),
-    ) as Array<{ id: string; name: string }>;
-    expect(rows).toEqual([{ id: group.id, name: group.name }]);
+    ) as Array<{ id: string; name: string; join_mode: string }>;
+    // join_mode rides along from PLA-49 so the join screen can say whether the
+    // button joins or asks. The name is still everything else it gives out.
+    expect(rows).toEqual([{ id: group.id, name: group.name, join_mode: 'open' }]);
   });
 });

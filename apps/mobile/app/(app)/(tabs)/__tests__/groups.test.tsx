@@ -279,6 +279,27 @@ describe('GroupsScreen', () => {
     expect(gmInserts.every((ins) => ins.mock.calls.length === 0)).toBe(true);
   });
 
+  // PLA-49: an approval door files a request, so there is no group to open
+  // yet. Same words whether this is a first ask or one quietly turned down.
+  it('an approval door says the ask went in, and opens nothing', async () => {
+    mockRpc.mockResolvedValue({
+      data: { status: 'requested', group_id: 'g9', name: 'Padel Dilluns' },
+      error: null,
+    });
+
+    await renderGroups();
+
+    await fireEvent.changeText(await screen.findByTestId('join-input'), 'planazo://join/ABCD2345');
+    await fireEvent.press(screen.getByTestId('join-button'));
+
+    await waitFor(() =>
+      expect((Alert.alert as jest.Mock).mock.calls.at(-1)![0]).toBe(
+        'You’ve asked to join Padel Dilluns'
+      )
+    );
+    expect(mockPush).not.toHaveBeenCalledWith('/(app)/group/g9');
+  });
+
   it('an unknown code is reported, not swallowed as a join', async () => {
     mockRpc.mockResolvedValue({ data: { status: 'not_found' }, error: null });
 
