@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   View,
   ScrollView,
@@ -25,6 +25,8 @@ import { errorCopy, isNotFoundError } from '../../../../lib/queryErrors';
 import { usePullToRefresh } from '../../../../lib/usePullToRefresh';
 import { usePlanDetail } from '../../../../lib/usePlanDetail';
 import { derivePlanDetail } from '../../../../lib/planDerived';
+import { stashPendingPlan } from '../../../../lib/pendingPlan';
+import { planLinkFor } from '../../../../lib/shareLinks';
 import { useAuthStore } from '../../../../stores/authStore';
 import {
   ThemedText,
@@ -40,7 +42,7 @@ import { colors, spacing } from '../../../../theme/tokens';
 export default function PlanDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { user } = useAuthStore();
+  const { user, session } = useAuthStore();
   // null = not editing dates; array = local picks being edited.
   //
   // Stamped with the plan they were made on. A deep link — a push tap, a shared
@@ -100,10 +102,26 @@ export default function PlanDetailScreen() {
   const goBack = () =>
     router.canGoBack() ? router.back() : router.replace('/(app)/(tabs)');
 
+  // A shared link is the one way into this screen with no session behind it:
+  // (app)/_layout has no guard, so it mounts and queries as nobody. RLS answers
+  // a stranger and an empty list identically, so without this the person who
+  // followed the link is told their own group's plan isn't here. Hold it and
+  // send them to sign in; index spends it once there is a session (PLA-81).
+  useEffect(() => {
+    if (session) return;
+    if (id) stashPendingPlan(id);
+    router.replace('/(auth)/login');
+  }, [session, id, router]);
+
   // A plan you can't see and a plan that doesn't exist look identical from here
   // — RLS filters it to zero rows either way, so `.single()` throws PGRST116.
   // Say so instead of spinning forever (PLA-19).
-  if (!isLoading && (isError || !plan)) {
+  //
+  // Gated on `session`, because signed out the queries are disabled and resolve
+  // to nothing: without it this branch would win the frame before the redirect
+  // above lands, and flash "This plan isn't here" at someone on their way to
+  // the login screen. The spinner below covers that frame instead.
+  if (session && !isLoading && (isError || !plan)) {
     const notFound = !id || isNotFoundError(error);
     const copy = notFound
       ? {
@@ -154,7 +172,7 @@ export default function PlanDetailScreen() {
   };
 
   const nudge = () =>
-    Share.share({ message: `"${plan.title}" needs answers on Planazo: planazo://plan/${plan.id}` });
+    Share.share({ message: `"${plan.title}" needs answers on Planazo: ${planLinkFor(plan.id)}` });
 
   const tryAgain = () =>
     router.push({

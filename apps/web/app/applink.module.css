@@ -1,9 +1,14 @@
 /*
- * The invite landing page (PLA-77).
+ * Where an app link lands for someone without the app: the invite page
+ * (PLA-77) and the plan page (PLA-81), which are the same page with different
+ * words.
  *
  * Read once, on a phone, by someone who has just been handed a link and does
  * not know what Planazo is. Narrow measure, one action, nothing to scroll past
  * before reaching it.
+ *
+ * `.codeBlock` and `.code` are the invite page's alone: a plan link has no
+ * fallback to offer, because there is nothing to paste into the app.
  */
 
 .page {

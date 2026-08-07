@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useAuthStore } from '../stores/authStore';
 import { useNeedsOnboarding } from '../lib/useOnboarding';
 import { takePendingJoin } from '../lib/pendingJoin';
+import { takePendingPlan } from '../lib/pendingPlan';
 import { BrandSplash } from '../components/ui';
 
 /**
@@ -25,14 +26,22 @@ export default function Index() {
         return;
       }
 
-      // An invite that sent someone to sign up is waiting to be finished
-      // (PLA-77), and it outranks the carousel: they tapped a particular
-      // group, and answering that is what they came to do. Nothing is lost,
-      // because `onboarded_at` is still null and the next launch comes back
-      // through here to tell them what Planazo is for.
+      // A link that sent someone to sign in is waiting to be finished (PLA-77
+      // for an invite, PLA-81 for a plan), and it outranks the carousel: they
+      // tapped a particular group or plan, and answering that is what they came
+      // to do. Nothing is lost, because `onboarded_at` is still null and the
+      // next launch comes back through here to tell them what Planazo is for.
+      //
+      // Both are drained on every pass, so the one that loses cannot sit here
+      // as a stale destination waiting for the next launch. An invite wins:
+      // it is the one that grants access, and the plan behind a link is
+      // usually in the very group the invite is for.
       const pendingJoin = takePendingJoin();
+      const pendingPlan = takePendingPlan();
       if (pendingJoin) {
         router.replace(`/(app)/join/${pendingJoin}`);
+      } else if (pendingPlan) {
+        router.replace(`/(app)/plan/${pendingPlan}`);
       } else if (needsOnboarding) {
         router.replace('/onboarding');
       } else {

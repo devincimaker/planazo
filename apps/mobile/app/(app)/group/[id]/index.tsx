@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { isPlanPast, planLastDate } from '@planazo/shared';
 import { supabase } from '../../../../lib/supabase';
 import { fmtDay, fmtTime } from '../../../../lib/dates';
-import { inviteLinkFor } from '../../../../lib/inviteCode';
+import { inviteLinkFor } from '../../../../lib/shareLinks';
 import { useAuthStore } from '../../../../stores/authStore';
 import { errorCopy, isNotFoundError } from '../../../../lib/queryErrors';
 import { usePullToRefresh } from '../../../../lib/usePullToRefresh';
