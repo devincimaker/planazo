@@ -1,35 +1,8 @@
-import { buildMonthGrid, isoDate, isoOfDate, MonthGridCell } from '../monthGrid';
+import { buildMonthGrid, MonthGridCell } from '../monthGrid';
 
 const flat = (weeks: MonthGridCell[][]) => weeks.flat();
 const days = (weeks: MonthGridCell[][]) => flat(weeks).filter((c) => c.iso);
 const pads = (weeks: MonthGridCell[][]) => flat(weeks).filter((c) => !c.iso);
-
-describe('isoDate', () => {
-  it('zero-pads month and day', () => {
-    expect(isoDate(2026, 2, 5)).toBe('2026-03-05');
-  });
-
-  it('leaves two-digit month and day alone', () => {
-    expect(isoDate(2026, 11, 25)).toBe('2026-12-25');
-  });
-
-  it('orders correctly under string compare across a month boundary', () => {
-    // The calendar greys out past days with `iso < today` — this is the
-    // property that makes that comparison safe.
-    expect(isoDate(2026, 8, 30) < isoDate(2026, 9, 1)).toBe(true);
-    expect(isoDate(2026, 8, 9) < isoDate(2026, 8, 10)).toBe(true);
-  });
-});
-
-describe('isoOfDate', () => {
-  it('formats a local Date as YYYY-MM-DD', () => {
-    expect(isoOfDate(new Date(2026, 0, 9))).toBe('2026-01-09');
-  });
-
-  it('agrees with isoDate at the end of a year', () => {
-    expect(isoOfDate(new Date(2025, 11, 31))).toBe('2025-12-31');
-  });
-});
 
 describe('buildMonthGrid', () => {
   it('always emits whole weeks of 7 cells', () => {
@@ -80,7 +53,6 @@ describe('buildMonthGrid', () => {
     expect(d.map((c) => c.label)).toEqual(
       Array.from({ length: 31 }, (_, i) => String(i + 1))
     );
-    expect(d[0]?.label).toBe('1');
     expect(d[0]?.iso).toBe('2026-01-01');
   });
 

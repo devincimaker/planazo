@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { MIN_TOUCH_TARGET } from '../../lib/a11y';
-import { buildMonthGrid, isoOfDate } from '../../lib/monthGrid';
+import { isoOfDate } from '../../lib/dates';
+import { buildMonthGrid } from '../../lib/monthGrid';
 import { colors, fonts } from '../../theme/tokens';
 
 const DOW = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
