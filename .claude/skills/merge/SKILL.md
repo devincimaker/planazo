@@ -131,12 +131,19 @@ first failure and say what would fix it.
 From **inside the worktree**:
 
 ```bash
-gh pr merge <n> --squash --delete-branch
+gh pr merge <n> --squash
 ```
 
 `--squash` because history here is one commit per PR, ending `(PLA-NN) (#NN)`.
-`gh` may report it could not delete the local branch while the worktree still has
-it checked out — harmless, the reclaim removes both a moment later.
+
+**No `--delete-branch`, and that is not a style preference.** The flag ends by
+running `git checkout main` so it can delete the local branch, which a worktree
+can never do: main is checked out in the primary checkout. So it fails *after*
+the merge has already landed, `gh` exits non-zero, and the hook below never
+fires. PR #63 merged and then left its worktree, its simulator and its remote
+branch behind in exactly that way. Neither half of the flag is wanted here: the
+repo has `delete_branch_on_merge` on, so GitHub deletes the remote branch itself,
+and `wt:rm` deletes the local one as part of the reclaim.
 
 Then **read the hook's message before doing anything else.** It reports one of:
 
@@ -210,7 +217,8 @@ Two follow-ups belong here and nowhere else:
 | --- | --- | --- |
 | Simplify's changes fail typecheck, lint or tests | the pass broke something, and it is still yours | fix it or revert that part. Never push a red branch to "let CI decide" |
 | CI is green but for the pre-simplify SHA | the rollup was read before the new run registered | re-read `statusCheckRollup` and match it against `gh pr view --json headRefOid`. Pending is a wait, not a pass |
-| Hook said nothing at all | the merge did not run from a worktree (main, or the wrong one) | reclaim by hand: `pnpm wt:rm <branch>` from the primary checkout |
+| Hook said nothing at all | the merge did not run from a worktree (main, or the wrong one), or `gh` exited non-zero *after* merging | check `gh pr view <n> --json state` first: `MERGED` means the merge landed and only the cleanup failed. Reclaim by hand: `pnpm wt:rm <branch>` from the primary checkout |
+| `fatal: 'main' is already used by worktree at …` | `--delete-branch` slipped back into the merge command | the merge itself landed. Reclaim by hand, and drop the flag — Phase 4 says why |
 | "Worktree kept: the PR for '<branch>' is OPEN" | `gh pr merge <n>` merged a *different* PR than this worktree's branch | merge this branch's PR from this worktree, or reclaim by hand |
 | "Could not reclaim … dirty tree" | uncommitted work in the worktree | commit or stash it, then `pnpm wt:rm <branch>` |
 | PR already `MERGED` on arrival | merged in the browser, so no hook fired | skip Phases 2 and 4; run Phases 5 to 7, reclaiming by hand |
