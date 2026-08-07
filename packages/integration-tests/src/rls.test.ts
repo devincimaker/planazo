@@ -220,21 +220,22 @@ describe('group_members role UPDATE', () => {
   }
 
   it("a plain member cannot change anyone's role, their own included", async () => {
-    const demoteAdmin = await plain.client
-      .from('group_members')
-      .update({ role: 'member' })
-      .eq('group_id', g.id)
-      .eq('user_id', admin.id)
-      .select();
+    const [demoteAdmin, promoteSelf] = await Promise.all([
+      plain.client
+        .from('group_members')
+        .update({ role: 'member' })
+        .eq('group_id', g.id)
+        .eq('user_id', admin.id)
+        .select(),
+      plain.client
+        .from('group_members')
+        .update({ role: 'admin' })
+        .eq('group_id', g.id)
+        .eq('user_id', plain.id)
+        .select(),
+    ]);
     expect(demoteAdmin.error).toBeNull();
     expect(demoteAdmin.data).toEqual([]);
-
-    const promoteSelf = await plain.client
-      .from('group_members')
-      .update({ role: 'admin' })
-      .eq('group_id', g.id)
-      .eq('user_id', plain.id)
-      .select();
     expect(promoteSelf.error).toBeNull();
     expect(promoteSelf.data).toEqual([]);
 

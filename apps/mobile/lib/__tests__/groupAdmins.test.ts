@@ -2,11 +2,12 @@ import {
   splitByRole,
   filterByName,
   adminSub,
-  adminsLabel,
+  adminCount,
   adminSummary,
   adminsNote,
   candidatesEmptyLine,
   demoteConfirmCopy,
+  memberName,
   type AdminsMember,
 } from '../groupAdmins';
 
@@ -96,12 +97,25 @@ describe('adminSub', () => {
   });
 });
 
-describe('labels and notes', () => {
-  it('adminsLabel counts', () => {
-    expect(adminsLabel(1)).toBe('Admins · 1');
-    expect(adminsLabel(4)).toBe('Admins · 4');
+describe('memberName', () => {
+  it('reads the display name, with one shared fallback for a missing profile', () => {
+    expect(memberName(member('u1', 'member', null, 'Aina'))).toBe('Aina');
+    expect(memberName({ user_id: 'u1', role: null, joined_at: null, profile: null })).toBe(
+      'this person'
+    );
   });
+});
 
+describe('adminCount', () => {
+  it('counts only the admin role, not null or member', () => {
+    expect(
+      adminCount([member('a', 'admin', null), member('b', 'member', null), member('c', null, null)])
+    ).toBe(1);
+    expect(adminCount([])).toBe(0);
+  });
+});
+
+describe('labels and notes', () => {
   it('adminSummary addresses the sole admin directly', () => {
     expect(adminSummary(1)).toBe('Just you');
     expect(adminSummary(3)).toBe('3 people run this group');

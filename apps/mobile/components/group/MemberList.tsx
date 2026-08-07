@@ -26,11 +26,20 @@ function BlockGlyph({ color }: { color: string }) {
   );
 }
 
-/** The "minus in a circle" glyph on the Remove action. */
-function RemoveGlyph({ color }: { color: string }) {
+/**
+ * The "minus in a circle" glyph on the Remove action, exported because the
+ * Admins screen's demote control is the same shape at 20pt. Sized styles are
+ * inline so one drawing serves both.
+ */
+export function RemoveGlyph({ color, size = 17 }: { color: string; size?: number }) {
   return (
-    <View style={[styles.glyphRing, styles.glyphRingCentred, { borderColor: color }]}>
-      <View style={[styles.glyphDash, { backgroundColor: color }]} />
+    <View
+      style={[
+        styles.glyphRingCentred,
+        { width: size, height: size, borderRadius: radii.pill, borderWidth: 1.5, borderColor: color },
+      ]}
+    >
+      <View style={{ width: Math.round(size * 0.45), height: 1.5, backgroundColor: color }} />
     </View>
   );
 }
@@ -324,9 +333,5 @@ const styles = StyleSheet.create({
     width: 16,
     height: 1.5,
     transform: [{ rotate: '-45deg' }],
-  },
-  glyphDash: {
-    width: 8,
-    height: 1.5,
   },
 });

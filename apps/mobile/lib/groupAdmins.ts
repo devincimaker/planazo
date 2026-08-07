@@ -13,6 +13,25 @@ export interface AdminsMember {
 }
 
 /**
+ * Arrival order, which is the People card's order. One comparator on purpose:
+ * the Admins screen promises names sit where the People card taught you to
+ * look, and that only holds while both sort the same way.
+ */
+export function byArrival(a: AdminsMember, b: AdminsMember): number {
+  return (a.joined_at ?? '').localeCompare(b.joined_at ?? '');
+}
+
+/** A member's name wherever copy needs one, with the one shared fallback. */
+export function memberName(m: AdminsMember): string {
+  return m.profile?.display_name ?? 'this person';
+}
+
+/** The one definition of "how many people run this group". */
+export function adminCount(members: AdminsMember[]): number {
+  return members.filter((m) => m.role === 'admin').length;
+}
+
+/**
  * The two cards: current admins, then everyone who could become one. Both
  * keep the People card's order (you first, then by arrival), so a name sits
  * where the previous screen taught you to look for it.
@@ -22,11 +41,9 @@ export function splitByRole<T extends AdminsMember>(
   myId: string | undefined
 ): { admins: T[]; candidates: T[] } {
   const meFirst = (rows: T[]) => {
-    const byArrival = [...rows].sort((a, b) =>
-      (a.joined_at ?? '').localeCompare(b.joined_at ?? '')
-    );
-    const mine = byArrival.filter((m) => m.user_id === myId);
-    return [...mine, ...byArrival.filter((m) => m.user_id !== myId)];
+    const arrived = [...rows].sort(byArrival);
+    const mine = arrived.filter((m) => m.user_id === myId);
+    return [...mine, ...arrived.filter((m) => m.user_id !== myId)];
   };
   return {
     admins: meFirst(members.filter((m) => m.role === 'admin')),
@@ -44,11 +61,6 @@ export function filterByName<T extends AdminsMember>(members: T[], query: string
 /** The line under an admin's name. Promotions carry no timestamp, so the one date we do know is the only one shown. */
 export function adminSub(userId: string, createdBy: string | null): string {
   return userId === createdBy ? 'Made the group' : 'Admin';
-}
-
-/** The admins card's section label. */
-export function adminsLabel(adminCount: number): string {
-  return `Admins · ${adminCount}`;
 }
 
 /** The subtitle on Manage's Admins row. Only admins see the row, so "you" is safe. */

@@ -1,3 +1,4 @@
+import type { QueryClient } from '@tanstack/react-query';
 import { supabase } from './supabase';
 
 /**
@@ -25,4 +26,15 @@ export function groupManageQuery(id: string | undefined) {
     },
     enabled: !!id,
   };
+}
+
+/**
+ * Every cache a membership or settings write goes stale through, in one place
+ * for the same reason as the query above: Manage and Admins both mutate this
+ * group, and a fourth key added to one screen must reach the other.
+ */
+export function invalidateGroup(queryClient: QueryClient, id: string | undefined): void {
+  queryClient.invalidateQueries({ queryKey: ['group-manage', id] });
+  queryClient.invalidateQueries({ queryKey: ['group', id] });
+  queryClient.invalidateQueries({ queryKey: ['groups'] });
 }

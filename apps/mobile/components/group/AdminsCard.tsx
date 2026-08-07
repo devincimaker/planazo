@@ -1,18 +1,10 @@
 import { View, StyleSheet, Pressable } from 'react-native';
 import { MIN_TOUCH_TARGET } from '../../lib/a11y';
-import { adminSub, adminsLabel, adminsNote } from '../../lib/groupAdmins';
+import { adminSub, adminsNote, memberName } from '../../lib/groupAdmins';
 import { ThemedText, Card, Avatar } from '../ui';
 import { colors, radii, spacing } from '../../theme/tokens';
-import type { GroupMemberRow } from './MemberList';
-
-/** The ring-and-dash on a demote control, drawn like MemberList's glyphs. */
-function MinusRing({ color }: { color: string }) {
-  return (
-    <View style={[styles.glyphRing, { borderColor: color }]}>
-      <View style={[styles.glyphDash, { backgroundColor: color }]} />
-    </View>
-  );
-}
+import { settingsStyles } from './PrefSwitchRow';
+import { RemoveGlyph, type GroupMemberRow } from './MemberList';
 
 interface Props {
   /** Current admins, already ordered (you first, then by arrival). */
@@ -32,15 +24,17 @@ interface Props {
  */
 export function AdminsCard({ admins, myId, createdBy, viewerIsAdmin, disabled, onDemote }: Props) {
   const lastAdmin = admins.length <= 1;
-  const nameOf = (m: GroupMemberRow) => m.profile?.display_name ?? 'this person';
 
   return (
-    <View style={styles.section}>
-      <ThemedText variant="sectionLabel">{adminsLabel(admins.length)}</ThemedText>
+    <View style={settingsStyles.section}>
+      <ThemedText variant="sectionLabel">{`Admins · ${admins.length}`}</ThemedText>
       <Card padded={false}>
         {admins.map((m, index) => (
-          <View key={m.user_id} style={[styles.personRow, index > 0 && styles.divider]}>
-            <Avatar name={nameOf(m)} size={36} imageUrl={m.profile?.avatar_url} />
+          <View
+            key={m.user_id}
+            style={[adminRowStyles.personRow, index > 0 && settingsStyles.divider]}
+          >
+            <Avatar name={memberName(m)} size={36} imageUrl={m.profile?.avatar_url} />
             <View style={styles.personBody}>
               <ThemedText variant="bodyStrong" numberOfLines={1}>
                 {m.profile?.display_name}
@@ -59,19 +53,22 @@ export function AdminsCard({ admins, myId, createdBy, viewerIsAdmin, disabled, o
                 disabled={disabled}
                 accessibilityRole="button"
                 accessibilityLabel={
-                  m.user_id === myId ? 'Step down as admin' : `Remove ${nameOf(m)} as admin`
+                  m.user_id === myId ? 'Step down as admin' : `Remove ${memberName(m)} as admin`
                 }
                 testID={`demote-${m.user_id}`}
-                style={({ pressed }) => [styles.demoteButton, pressed && styles.rowPressed]}
+                style={({ pressed }) => [
+                  styles.demoteButton,
+                  pressed && adminRowStyles.rowPressed,
+                ]}
               >
-                <MinusRing color={colors.accentText} />
+                <RemoveGlyph color={colors.accentText} size={20} />
               </Pressable>
             ) : null}
           </View>
         ))}
       </Card>
       {viewerIsAdmin ? (
-        <ThemedText variant="caption" style={styles.cardNote} testID="admins-note">
+        <ThemedText variant="caption" style={settingsStyles.note} testID="admins-note">
           {adminsNote(lastAdmin)}
         </ThemedText>
       ) : null}
@@ -79,10 +76,8 @@ export function AdminsCard({ admins, myId, createdBy, viewerIsAdmin, disabled, o
   );
 }
 
-const styles = StyleSheet.create({
-  section: {
-    gap: 10,
-  },
+/** Row metrics shared by both of the Admins screen's cards. */
+export const adminRowStyles = StyleSheet.create({
   // Tighter than the People card's 16 vertical: the 44pt control at the row's
   // end carries the height, so 12 keeps the row at 68 instead of 76.
   personRow: {
@@ -93,10 +88,12 @@ const styles = StyleSheet.create({
     paddingLeft: spacing.lg,
     paddingRight: spacing.md,
   },
-  divider: {
-    borderTopWidth: 1,
-    borderTopColor: colors.divider,
+  rowPressed: {
+    backgroundColor: colors.surfaceSunken,
   },
+});
+
+const styles = StyleSheet.create({
   personBody: {
     flex: 1,
     minWidth: 0,
@@ -108,23 +105,5 @@ const styles = StyleSheet.create({
     minHeight: MIN_TOUCH_TARGET,
     minWidth: MIN_TOUCH_TARGET,
     borderRadius: radii.row,
-  },
-  rowPressed: {
-    backgroundColor: colors.surfaceSunken,
-  },
-  cardNote: {
-    paddingHorizontal: spacing.xs,
-  },
-  glyphRing: {
-    width: 20,
-    height: 20,
-    borderRadius: radii.pill,
-    borderWidth: 1.5,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  glyphDash: {
-    width: 9,
-    height: 1.5,
   },
 });

@@ -192,6 +192,17 @@ export function retryQuery(failureCount: number, error: unknown): boolean {
   return failureCount < 2;
 }
 
+/**
+ * The not-found copy shared by the screens behind a membership (Manage,
+ * Admins): being here at all meant being in the group, so a vanished row
+ * means it was deleted or you were removed. The group detail screen keeps
+ * its own wording — a deep link can land there without ever having joined.
+ */
+export const groupGoneCopy = {
+  title: "This group isn't here",
+  body: "It was deleted, or you've been removed from it.",
+};
+
 /** Screen-agnostic copy for a failed fetch. Screens override the not-found case. */
 export function errorCopy(error: unknown): { title: string; body: string } {
   if (isTimeoutError(error)) {

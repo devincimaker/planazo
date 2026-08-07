@@ -6,9 +6,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { GroupRole } from '@planazo/shared';
 import { supabase } from '../../../../lib/supabase';
 import { useAuthStore } from '../../../../stores/authStore';
-import { errorCopy, isNotFoundError } from '../../../../lib/queryErrors';
-import { groupManageQuery } from '../../../../lib/groupManageQuery';
-import { splitByRole, demoteConfirmCopy } from '../../../../lib/groupAdmins';
+import { errorCopy, groupGoneCopy, isNotFoundError } from '../../../../lib/queryErrors';
+import { groupManageQuery, invalidateGroup } from '../../../../lib/groupManageQuery';
+import { splitByRole, demoteConfirmCopy, memberName } from '../../../../lib/groupAdmins';
 import { MIN_TOUCH_TARGET } from '../../../../lib/a11y';
 import type { GroupMemberRow } from '../../../../components/group/MemberList';
 import { AdminsCard } from '../../../../components/group/AdminsCard';
@@ -32,10 +32,7 @@ export default function GroupAdminsScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
-  const [query, setQuery] = useState('');
-  const [demoting, setDemoting] = useState<{ userId: string; name: string; isSelf: boolean } | null>(
-    null
-  );
+  const [demoting, setDemoting] = useState<GroupMemberRow | null>(null);
 
   const { data: group, isLoading, isError, error, refetch } = useQuery(groupManageQuery(id));
 
@@ -48,22 +45,13 @@ export default function GroupAdminsScreen() {
         .eq('user_id', userId);
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['group-manage', id] });
-      queryClient.invalidateQueries({ queryKey: ['group', id] });
-      queryClient.invalidateQueries({ queryKey: ['groups'] });
-    },
+    onSuccess: () => invalidateGroup(queryClient, id),
     onError: (error: Error) => Alert.alert('Error', error.message),
   });
 
   if (!isLoading && (isError || !group)) {
     const notFound = !id || isNotFoundError(error);
-    const copy = notFound
-      ? {
-          title: "This group isn't here",
-          body: "It was deleted, or you've been removed from it.",
-        }
-      : errorCopy(error);
+    const copy = notFound ? groupGoneCopy : errorCopy(error);
 
     return (
       <SafeAreaView style={styles.screen} edges={['top']}>
@@ -94,20 +82,16 @@ export default function GroupAdminsScreen() {
   const { admins, candidates } = splitByRole(members, user?.id);
   const viewerIsAdmin = admins.some((m) => m.user_id === user?.id);
 
-  const askDemote = (m: GroupMemberRow) =>
-    setDemoting({
-      userId: m.user_id,
-      name: m.profile?.display_name ?? 'this person',
-      isSelf: m.user_id === user?.id,
-    });
-
   const runDemote = () => {
     if (!demoting) return;
     setDemoting(null);
-    setRole.mutate({ userId: demoting.userId, role: 'member' });
+    setRole.mutate({ userId: demoting.user_id, role: 'member' });
   };
 
-  const confirmCopy = demoteConfirmCopy(demoting?.name ?? '', !!demoting?.isSelf);
+  const confirmCopy = demoteConfirmCopy(
+    demoting ? memberName(demoting) : '',
+    demoting?.user_id === user?.id
+  );
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
@@ -141,14 +125,12 @@ export default function GroupAdminsScreen() {
           createdBy={group.created_by ?? null}
           viewerIsAdmin={viewerIsAdmin}
           disabled={setRole.isPending}
-          onDemote={askDemote}
+          onDemote={setDemoting}
         />
 
         {viewerIsAdmin ? (
           <PromoteCard
             candidates={candidates}
-            query={query}
-            onQueryChange={setQuery}
             disabled={setRole.isPending}
             onPromote={(m) => setRole.mutate({ userId: m.user_id, role: 'admin' })}
           />

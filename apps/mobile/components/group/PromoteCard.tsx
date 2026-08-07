@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import { View, StyleSheet, Pressable, TextInput } from 'react-native';
 import { MIN_TOUCH_TARGET } from '../../lib/a11y';
-import { filterByName, candidatesEmptyLine } from '../../lib/groupAdmins';
+import { filterByName, candidatesEmptyLine, memberName } from '../../lib/groupAdmins';
 import { ThemedText, Card, Avatar } from '../ui';
 import { colors, fonts, radii, spacing } from '../../theme/tokens';
+import { settingsStyles } from './PrefSwitchRow';
+import { adminRowStyles } from './AdminsCard';
 import type { GroupMemberRow } from './MemberList';
 
 /** The filled plus on a promote row. */
@@ -28,8 +31,6 @@ function SearchGlyph() {
 interface Props {
   /** Every non-admin, already ordered; the search narrows from here. */
   candidates: GroupMemberRow[];
-  query: string;
-  onQueryChange: (q: string) => void;
   disabled: boolean;
   onPromote: (m: GroupMemberRow) => void;
 }
@@ -39,12 +40,12 @@ interface Props {
  * single tap from the role. No confirm on the way up — the demote control
  * sits one card above, so the tap undoes itself.
  */
-export function PromoteCard({ candidates, query, onQueryChange, disabled, onPromote }: Props) {
+export function PromoteCard({ candidates, disabled, onPromote }: Props) {
+  const [query, setQuery] = useState('');
   const found = filterByName(candidates, query);
-  const nameOf = (m: GroupMemberRow) => m.profile?.display_name ?? 'this person';
 
   return (
-    <View style={styles.section}>
+    <View style={settingsStyles.section}>
       <ThemedText variant="sectionLabel">Make someone an admin</ThemedText>
 
       <View style={styles.searchBox}>
@@ -54,7 +55,7 @@ export function PromoteCard({ candidates, query, onQueryChange, disabled, onProm
           placeholder="Search members"
           placeholderTextColor={colors.textFaint}
           value={query}
-          onChangeText={onQueryChange}
+          onChangeText={setQuery}
           autoCapitalize="none"
           autoCorrect={false}
           testID="admin-search"
@@ -68,15 +69,15 @@ export function PromoteCard({ candidates, query, onQueryChange, disabled, onProm
             onPress={() => onPromote(m)}
             disabled={disabled}
             accessibilityRole="button"
-            accessibilityLabel={`Make ${nameOf(m)} an admin`}
+            accessibilityLabel={`Make ${memberName(m)} an admin`}
             testID={`promote-${m.user_id}`}
             style={({ pressed }) => [
-              styles.personRow,
-              index > 0 && styles.divider,
-              pressed && styles.rowPressed,
+              adminRowStyles.personRow,
+              index > 0 && settingsStyles.divider,
+              pressed && adminRowStyles.rowPressed,
             ]}
           >
-            <Avatar name={nameOf(m)} size={36} imageUrl={m.profile?.avatar_url} />
+            <Avatar name={memberName(m)} size={36} imageUrl={m.profile?.avatar_url} />
             <ThemedText variant="bodyStrong" numberOfLines={1} style={styles.candidateName}>
               {m.profile?.display_name}
             </ThemedText>
@@ -96,27 +97,9 @@ export function PromoteCard({ candidates, query, onQueryChange, disabled, onProm
 }
 
 const styles = StyleSheet.create({
-  section: {
-    gap: 10,
-  },
-  personRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.md,
-    paddingLeft: spacing.lg,
-    paddingRight: spacing.md,
-  },
-  divider: {
-    borderTopWidth: 1,
-    borderTopColor: colors.divider,
-  },
   candidateName: {
     flex: 1,
     minWidth: 0,
-  },
-  rowPressed: {
-    backgroundColor: colors.surfaceSunken,
   },
   searchBox: {
     flexDirection: 'row',

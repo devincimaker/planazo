@@ -12,10 +12,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../../../lib/supabase';
 import { useAuthStore } from '../../../../stores/authStore';
-import { errorCopy, isNotFoundError } from '../../../../lib/queryErrors';
+import { errorCopy, groupGoneCopy, isNotFoundError } from '../../../../lib/queryErrors';
 import { usePendingRemoval } from '../../../../lib/usePendingRemoval';
-import { groupManageQuery } from '../../../../lib/groupManageQuery';
-import { adminSummary } from '../../../../lib/groupAdmins';
+import { groupManageQuery, invalidateGroup } from '../../../../lib/groupManageQuery';
+import { adminCount, adminSummary, byArrival, memberName } from '../../../../lib/groupAdmins';
 import { MIN_TOUCH_TARGET } from '../../../../lib/a11y';
 import {
   BLOCKED_QUERY_KEY,
@@ -42,11 +42,7 @@ export default function ManageGroupScreen() {
 
   const { data: group, isLoading, isError, error, refetch } = useQuery(groupManageQuery(id));
 
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['group-manage', id] });
-    queryClient.invalidateQueries({ queryKey: ['group', id] });
-    queryClient.invalidateQueries({ queryKey: ['groups'] });
-  };
+  const invalidate = () => invalidateGroup(queryClient, id);
 
   // Read off the query rather than the sorted rows further down, because the
   // hooks that need it run before the loading guard those rows sit behind.
@@ -147,12 +143,7 @@ export default function ManageGroupScreen() {
 
   if (!isLoading && (isError || !group)) {
     const notFound = !id || isNotFoundError(error);
-    const copy = notFound
-      ? {
-          title: "This group isn't here",
-          body: "It was deleted, or you've been removed from it.",
-        }
-      : errorCopy(error);
+    const copy = notFound ? groupGoneCopy : errorCopy(error);
 
     return (
       <SafeAreaView style={styles.screen} edges={['top']}>
@@ -179,18 +170,15 @@ export default function ManageGroupScreen() {
     );
   }
 
-  const members = [...((group.group_members ?? []) as GroupMemberRow[])].sort((a, b) =>
-    (a.joined_at ?? '').localeCompare(b.joined_at ?? '')
-  );
+  const members = [...((group.group_members ?? []) as GroupMemberRow[])].sort(byArrival);
   // Dropping the pending one is what usePendingRemoval's id is for.
   const others = members.filter(
     (m) => m.user_id !== user?.id && m.user_id !== pendingRemovalId
   );
   const blocked = new Set(blockedIds ?? []);
-  const nameOf = (m: GroupMemberRow) => m.profile?.display_name ?? 'this person';
 
   const askRemove = (m: GroupMemberRow) =>
-    setConfirm({ kind: 'remove', userId: m.user_id, name: nameOf(m) });
+    setConfirm({ kind: 'remove', userId: m.user_id, name: memberName(m) });
 
   const askBlock = (m: GroupMemberRow) => {
     // Unblocking is not destructive and undoes itself, so it does not ask.
@@ -199,7 +187,7 @@ export default function ManageGroupScreen() {
       setOpenRowId(null);
       return;
     }
-    setConfirm({ kind: 'block', userId: m.user_id, name: nameOf(m) });
+    setConfirm({ kind: 'block', userId: m.user_id, name: memberName(m) });
   };
 
   const runConfirm = () => {
@@ -287,7 +275,7 @@ export default function ManageGroupScreen() {
           onNotify={(on) => setNotify.mutate(on)}
           notifyPending={setNotify.isPending}
           isAdmin={isAdmin}
-          adminSummary={adminSummary(members.filter((m) => m.role === 'admin').length)}
+          adminSummary={adminSummary(adminCount(members))}
           onEditProfile={() => router.push(`/(app)/group/${id}/edit`)}
           onAdmins={() => router.push(`/(app)/group/${id}/admins`)}
         />
