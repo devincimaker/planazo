@@ -79,6 +79,23 @@ something the user asked to be done with.
 This overrides any general "never commit to main" habit. It is a solo repo with
 a solo reviewer, and the user's own instruction is the gate.
 
+## One function, one purpose
+
+Whenever possible, write functions that do one thing and do it well. A function
+that fetches *and* transforms *and* renders is three functions wearing one name:
+harder to name honestly, harder to reuse, and impossible to test without
+standing up everything it touches. If the name needs an "and" to be accurate,
+split it.
+
+Small single-purpose functions are what make the next rule cheap to follow:
+**every function with logic in it gets thorough unit tests.** Cover the happy
+path, the edges (empty, zero, boundary, unexpected order), and the failure
+modes, not just one example input. This is where the tests live in this repo:
+pure logic belongs in `packages/shared` or a screen's `lib/` (vitest/jest, no
+database, run anywhere), which is exactly why extracting it out of components
+and RPC call sites pays off. Glue with no logic of its own does not earn a
+test; the moment it grows a branch, it does.
+
 ## Lint
 
 `eslint.config.mjs` at the root covers every package. It does two jobs, and a new
