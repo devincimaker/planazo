@@ -211,7 +211,7 @@ export type Database = {
           created_at: string | null
           group_id: string
           id: string
-          invited_by: string
+          invited_by: string | null
           invitee_id: string
           responded_at: string | null
           status: string
@@ -220,7 +220,7 @@ export type Database = {
           created_at?: string | null
           group_id: string
           id?: string
-          invited_by: string
+          invited_by?: string | null
           invitee_id: string
           responded_at?: string | null
           status?: string
@@ -229,7 +229,7 @@ export type Database = {
           created_at?: string | null
           group_id?: string
           id?: string
-          invited_by?: string
+          invited_by?: string | null
           invitee_id?: string
           responded_at?: string | null
           status?: string
@@ -310,8 +310,10 @@ export type Database = {
           id: string
           image_url: string | null
           invite_code: string
+          join_mode: string
           name: string
           updated_at: string | null
+          who_can_invite: string
         }
         Insert: {
           anyone_can_post?: boolean
@@ -322,8 +324,10 @@ export type Database = {
           id?: string
           image_url?: string | null
           invite_code: string
+          join_mode?: string
           name: string
           updated_at?: string | null
+          who_can_invite?: string
         }
         Update: {
           anyone_can_post?: boolean
@@ -334,8 +338,10 @@ export type Database = {
           id?: string
           image_url?: string | null
           invite_code?: string
+          join_mode?: string
           name?: string
           updated_at?: string | null
+          who_can_invite?: string
         }
         Relationships: [
           {
@@ -681,6 +687,7 @@ export type Database = {
           email: string
           handle: string | null
           id: string
+          onboarded_at: string | null
           push_enabled: boolean
           push_token: string | null
           updated_at: string | null
@@ -693,6 +700,7 @@ export type Database = {
           email: string
           handle?: string | null
           id: string
+          onboarded_at?: string | null
           push_enabled?: boolean
           push_token?: string | null
           updated_at?: string | null
@@ -705,6 +713,7 @@ export type Database = {
           email?: string
           handle?: string | null
           id?: string
+          onboarded_at?: string | null
           push_enabled?: boolean
           push_token?: string | null
           updated_at?: string | null
@@ -781,8 +790,10 @@ export type Database = {
           id: string
           image_url: string | null
           invite_code: string
+          join_mode: string
           name: string
           updated_at: string | null
+          who_can_invite: string
         }
         SetofOptions: {
           from: "*"
@@ -812,9 +823,11 @@ export type Database = {
         Args: { code: string }
         Returns: {
           id: string
+          join_mode: string
           name: string
         }[]
       }
+      get_group_invite_code: { Args: { p_group_id: string }; Returns: string }
       invite_to_group: {
         Args: { p_group_id: string; p_invitee: string }
         Returns: Json
@@ -833,6 +846,7 @@ export type Database = {
         Args: { p_date_option_id?: string; p_plan_id: string }
         Returns: Json
       }
+      mint_invite_code: { Args: { p_group_id: string }; Returns: string }
       plan_album_card: {
         Args: { p_plan_id: string }
         Returns: {
@@ -843,6 +857,10 @@ export type Database = {
         }[]
       }
       plan_photo_plan_id: { Args: { p_name: string }; Returns: string }
+      remove_group_member: {
+        Args: { p_group_id: string; p_user_id: string }
+        Returns: Json
+      }
       reopen_plan: { Args: { p_plan_id: string }; Returns: Json }
       respond_friend_request: {
         Args: { p_accept: boolean; p_friendship_id: string }
@@ -852,7 +870,12 @@ export type Database = {
         Args: { p_accept: boolean; p_invite_id: string }
         Returns: Json
       }
+      respond_to_join_request: {
+        Args: { p_approve: boolean; p_group_id: string; p_user_id: string }
+        Returns: Json
+      }
       restore_plan: { Args: { p_plan_id: string }; Returns: Json }
+      rotate_invite_code: { Args: { p_group_id: string }; Returns: string }
       search_people: {
         Args: { p_query: string }
         Returns: {
@@ -866,6 +889,14 @@ export type Database = {
       set_group_notify: {
         Args: { p_group_id: string; p_notify: boolean }
         Returns: undefined
+      }
+      update_group_door: {
+        Args: {
+          p_group_id: string
+          p_join_mode?: string
+          p_who_can_invite?: string
+        }
+        Returns: Json
       }
     }
     Enums: {

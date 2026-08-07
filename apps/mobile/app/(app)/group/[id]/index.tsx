@@ -22,6 +22,7 @@ import {
 import { supabase } from '../../../../lib/supabase';
 import { fmtDay, fmtTime } from '../../../../lib/dates';
 import { inviteLinkFor } from '../../../../lib/shareLinks';
+import { canInvite } from '../../../../lib/groupDoor';
 import { useAuthStore } from '../../../../stores/authStore';
 import { errorCopy, isNotFoundError } from '../../../../lib/queryErrors';
 import { usePullToRefresh } from '../../../../lib/usePullToRefresh';
@@ -54,7 +55,7 @@ export default function GroupDetailScreen() {
       const { data, error } = await supabase
         .from('groups')
         .select(
-          `id, name, description, color, image_url, invite_code,
+          `id, name, description, color, image_url, who_can_invite,
           group_members(user_id, role, profile:profiles(id, display_name, avatar_url)),
           plans(id, title, plan_type, status, event_date, locked_date, min_people, created_at,
             cancelled_at, cancelled_by, cancel_reason,
@@ -266,16 +267,18 @@ export default function GroupDetailScreen() {
               names={memberNames}
               label={`${members.length} ${members.length === 1 ? 'person' : 'people'}`}
             />
-            <Pressable
-              onPress={() => router.push(`/(app)/group/${id}/invite`)}
-              accessibilityRole="button"
-              testID="invite"
-              style={styles.inviteAction}
-            >
-              <ThemedText variant="bodyStrong" color={colors.accent}>
-                Invite
-              </ThemedText>
-            </Pressable>
+            {canInvite(group.who_can_invite, myRole) ? (
+              <Pressable
+                onPress={() => router.push(`/(app)/group/${id}/invite`)}
+                accessibilityRole="button"
+                testID="invite"
+                style={styles.inviteAction}
+              >
+                <ThemedText variant="bodyStrong" color={colors.accent}>
+                  Invite
+                </ThemedText>
+              </Pressable>
+            ) : null}
           </View>
         </View>
 

@@ -63,7 +63,7 @@ beforeEach(() => {
     name: 'Piso Gràcia',
     description: 'The flat, plus honorary members',
     color: '#F7B0DC',
-    invite_code: 'ABCD2345',
+    who_can_invite: 'members',
     group_members: [
       { user_id: 'me', role: 'admin', profile: { id: 'me', display_name: 'Rocío' } },
       { user_id: 'u2', role: 'member', profile: { id: 'u2', display_name: 'Aina' } },

@@ -241,7 +241,10 @@ describe('promotion', () => {
     ok(await say(leaver, planId, 'yes'));
     ok(await say(memberB, planId, 'pending'));
 
-    ok(await leaver.client.from('group_members').delete().eq('group_id', groupId).eq('user_id', leaver.id));
+    // Through the service role, because PLA-49 closed the raw DELETE to
+    // clients. The bare statement is the point: it proves the trigger fires on
+    // the row going, not on some RPC remembering to call it.
+    ok(await bed.service.from('group_members').delete().eq('group_id', groupId).eq('user_id', leaver.id));
 
     expect((await seated(planId)).sort()).toEqual([host.id, memberB.id].sort());
     expect(await queue(planId)).toEqual([]);

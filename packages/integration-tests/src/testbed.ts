@@ -143,6 +143,21 @@ export class TestBed {
   }
 
   /**
+   * A group's invite code, read past RLS.
+   *
+   * On the bed rather than in a test file because since PLA-49 the column is
+   * REVOKEd from `authenticated`: the service role is the only way to learn a
+   * code without going through `get_group_invite_code`, which is itself under
+   * test in places and cannot be the thing that sets those tests up.
+   */
+  async codeOf(groupId: string): Promise<string> {
+    const { invite_code } = ok(
+      await this.service.from('groups').select('invite_code').eq('id', groupId).single(),
+    );
+    return invite_code;
+  }
+
+  /**
    * Joins by invite code — the real app path (PLA-35), so every test's setup
    * exercises it. `role` exists only for the rare fixture that needs a second
    * admin: no client path can grant that, so it goes through the service role.
@@ -157,12 +172,9 @@ export class TestBed {
       return;
     }
 
-    const { invite_code } = ok(
-      await this.service.from('groups').select('invite_code').eq('id', groupId).single(),
-    );
-    const res = ok(await user.client.rpc('join_group_by_invite_code', { p_code: invite_code })) as {
-      status: string;
-    };
+    const res = ok(
+      await user.client.rpc('join_group_by_invite_code', { p_code: await this.codeOf(groupId) }),
+    ) as { status: string };
     if (res.status !== 'joined') {
       throw new Error(`join_group_by_invite_code returned ${res.status} for ${user.email}`);
     }
