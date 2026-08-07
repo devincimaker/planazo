@@ -191,6 +191,93 @@ describe('create_group and join_group_by_invite_code', () => {
   });
 });
 
+// PLA-50: the Admins screen promotes and demotes with a plain UPDATE on
+// group_members, so the only thing between a member and someone else's role
+// is "Admins can update memberships" (USING is_group_admin, no WITH CHECK).
+// These pin that policy from both sides. Note the deny shape: a filtered
+// UPDATE is not an error, it is a 200 that touched nothing — the same PLA-16
+// shape as plan edits, and why the UI never trusts a bare success.
+describe('group_members role UPDATE', () => {
+  let g: { id: string };
+  let admin: TestUser;
+  let plain: TestUser;
+
+  beforeAll(async () => {
+    [admin, plain] = await Promise.all([
+      bed.createUser('Role Admin'),
+      bed.createUser('Role Member'),
+    ]);
+    g = await bed.createGroup(admin, { name: 'Rls Role Group' });
+    await bed.join(g.id, plain);
+  });
+
+  /** Every member's role, by the service role's unfiltered view. */
+  async function roles(): Promise<Record<string, string | null>> {
+    const rows = ok(
+      await bed.service.from('group_members').select('user_id, role').eq('group_id', g.id),
+    );
+    return Object.fromEntries(rows.map((r) => [r.user_id, r.role]));
+  }
+
+  it("a plain member cannot change anyone's role, their own included", async () => {
+    const demoteAdmin = await plain.client
+      .from('group_members')
+      .update({ role: 'member' })
+      .eq('group_id', g.id)
+      .eq('user_id', admin.id)
+      .select();
+    expect(demoteAdmin.error).toBeNull();
+    expect(demoteAdmin.data).toEqual([]);
+
+    const promoteSelf = await plain.client
+      .from('group_members')
+      .update({ role: 'admin' })
+      .eq('group_id', g.id)
+      .eq('user_id', plain.id)
+      .select();
+    expect(promoteSelf.error).toBeNull();
+    expect(promoteSelf.data).toEqual([]);
+
+    expect(await roles()).toEqual({ [admin.id]: 'admin', [plain.id]: 'member' });
+  });
+
+  it('an admin promotes, and the new admin can demote the one who did it', async () => {
+    ok(
+      await admin.client
+        .from('group_members')
+        .update({ role: 'admin' })
+        .eq('group_id', g.id)
+        .eq('user_id', plain.id),
+    );
+    expect(await roles()).toEqual({ [admin.id]: 'admin', [plain.id]: 'admin' });
+
+    // Admin is a role, not a founder title: the promotion carries the same
+    // power back, including over the person who granted it.
+    ok(
+      await plain.client
+        .from('group_members')
+        .update({ role: 'member' })
+        .eq('group_id', g.id)
+        .eq('user_id', admin.id),
+    );
+    expect(await roles()).toEqual({ [admin.id]: 'member', [plain.id]: 'admin' });
+  });
+
+  // The last-admin rule lives in the client (settled in the PLA-50 handoff):
+  // the database lets the only admin step down. If this test starts failing,
+  // an RPC took over the write and the Admins screen needs to move onto it.
+  it('the database permits even the last admin to step down', async () => {
+    ok(
+      await plain.client
+        .from('group_members')
+        .update({ role: 'member' })
+        .eq('group_id', g.id)
+        .eq('user_id', plain.id),
+    );
+    expect(await roles()).toEqual({ [admin.id]: 'member', [plain.id]: 'member' });
+  });
+});
+
 describe('plans', () => {
   it('members can read plans, outsiders cannot', async () => {
     expect(ok(await member.client.from('plans').select('id').eq('id', planId))).toHaveLength(1);
