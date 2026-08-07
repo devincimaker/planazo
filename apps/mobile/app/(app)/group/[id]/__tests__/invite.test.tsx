@@ -1,3 +1,4 @@
+import { Alert } from 'react-native';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as Clipboard from 'expo-clipboard';
@@ -27,6 +28,8 @@ const mockRpc = supabase.rpc as jest.Mock;
 let group: any;
 let pendingInvites: any[] = [];
 let acceptedFriendships: any[] = [];
+/** What get_group_invite_code answers with. Null plus a message is a refusal. */
+let inviteCode: { data: string | null; error: { message: string } | null };
 
 function primeSupabase() {
   mockFrom.mockImplementation((table: string) => {
@@ -65,8 +68,14 @@ async function renderInvite() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  jest.spyOn(Alert, 'alert');
   primeSupabase();
-  mockRpc.mockResolvedValue({ data: { status: 'invited' }, error: null });
+  inviteCode = { data: 'ABCD2345', error: null };
+  // The code is no longer a column the client may read (PLA-49), so the sheet
+  // asks for it by name and every other RPC keeps the old default.
+  mockRpc.mockImplementation(async (fn: string) =>
+    fn === 'get_group_invite_code' ? inviteCode : { data: { status: 'invited' }, error: null }
+  );
   useAuthStore.setState({
     user: { id: 'me' } as any,
     profile: { id: 'me', display_name: 'Rocío', avatar_url: null } as any,
@@ -74,8 +83,11 @@ beforeEach(() => {
   group = {
     id: 'g1',
     name: 'Piso Gràcia',
-    invite_code: 'ABCD2345',
-    group_members: [{ user_id: 'me' }, { user_id: 'f1' }],
+    join_mode: 'open',
+    group_members: [
+      { user_id: 'me', role: 'admin' },
+      { user_id: 'f1', role: 'member' },
+    ],
   };
   pendingInvites = [{ invitee_id: 'f2' }];
   acceptedFriendships = [
@@ -113,6 +125,67 @@ describe('InviteToGroupSheet', () => {
       expect(Clipboard.setStringAsync).toHaveBeenCalledWith('https://planazo.me/join/ABCD2345')
     );
     expect(await screen.findByText('Link copied ✓')).toBeTruthy();
+  });
+
+  it('asks for the code by RPC rather than reading the column', async () => {
+    await renderInvite();
+
+    await screen.findByText('https://planazo.me/join/ABCD2345');
+    expect(mockRpc).toHaveBeenCalledWith('get_group_invite_code', { p_group_id: 'g1' });
+    // The select that used to carry invite_code no longer does.
+    const selects = mockFrom.mock.results
+      .map((r) => (r.value as any).select.mock.calls[0]?.[0])
+      .filter(Boolean);
+    expect(selects.some((s: string) => s.includes('invite_code'))).toBe(false);
+  });
+
+  // The sheet promises what the link actually does. A door on approval that
+  // still said "joins straight away" is the whole issue in miniature.
+  it('an open door says the link lets people straight in', async () => {
+    await renderInvite();
+    expect(await screen.findByText('Anyone with the link joins straight away.')).toBeTruthy();
+  });
+
+  it('an approval door says the link only asks', async () => {
+    group.join_mode = 'approval';
+    await renderInvite();
+    expect(
+      await screen.findByText('People with the link ask to join, and an admin lets them in.')
+    ).toBeTruthy();
+  });
+
+  it('an admin can reset the link, after being told what that costs', async () => {
+    await renderInvite();
+
+    await fireEvent.press(await screen.findByTestId('reset-link'));
+    const [title, body, buttons] = (Alert.alert as jest.Mock).mock.calls.at(-1)!;
+    expect(title).toBe('Reset the invite link?');
+    expect(body).toMatch(/old link stops working/);
+
+    buttons[1].onPress();
+    await waitFor(() =>
+      expect(mockRpc).toHaveBeenCalledWith('rotate_invite_code', { p_group_id: 'g1' })
+    );
+  });
+
+  it('a member gets no reset row, and backing out resets nothing', async () => {
+    group.group_members[0].role = 'member';
+    await renderInvite();
+
+    await screen.findByTestId('copy-link');
+    expect(screen.queryByTestId('reset-link')).toBeNull();
+    expect(mockRpc).not.toHaveBeenCalledWith('rotate_invite_code', expect.anything());
+  });
+
+  // Refused by the admins dial: the friend picker is still worth showing, so
+  // only the link goes, and it says why.
+  it('a refused code leaves the rest of the sheet standing', async () => {
+    inviteCode = { data: null, error: { message: 'Only admins can invite to this group' } };
+    await renderInvite();
+
+    expect(await screen.findByTestId('link-unavailable')).toBeTruthy();
+    expect(screen.queryByTestId('copy-link')).toBeNull();
+    expect(screen.getByTestId('invitee-f3')).toBeTruthy();
   });
 
   it('members are excluded, already-invited people are disabled', async () => {

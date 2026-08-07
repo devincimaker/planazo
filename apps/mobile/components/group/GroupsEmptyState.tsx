@@ -30,10 +30,24 @@ export function GroupsEmptyState() {
       const result = data as { status: string; group_id?: string; name?: string };
       if (result.status === 'not_found') throw new Error('That link doesn’t work');
       if (result.status === 'already_member') throw new Error('You’re already in this group');
-      return { id: result.group_id as string, name: result.name as string };
+      return {
+        status: result.status,
+        id: result.group_id as string,
+        name: result.name as string,
+      };
     },
     onSuccess: (group) => {
       setJoinText('');
+      // An approval door files a request instead of letting you in, so there
+      // is no group to open yet. Same words whether this is a first ask or one
+      // that was quietly turned down before (PLA-49).
+      if (group.status === 'requested') {
+        Alert.alert(
+          `You’ve asked to join ${group.name}`,
+          'An admin has your request. You’ll hear the moment they let you in.'
+        );
+        return;
+      }
       queryClient.invalidateQueries({ queryKey: ['groups'] });
       router.push(`/(app)/group/${group.id}`);
     },

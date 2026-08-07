@@ -344,13 +344,14 @@ describe('host powers end with membership', () => {
     ok(await admin.client.rpc('lock_plan', { p_plan_id: flexPlan }));
     ok(await admin.client.rpc('cancel_plan', { p_plan_id: cancelledPlan }));
 
-    // The removal itself, exactly as group/[id]/manage.tsx does it.
+    // The removal itself, exactly as group/[id]/manage.tsx does it. An RPC
+    // since PLA-49, not a delete: the raw DELETE policy is gone, so the same
+    // statement would now match no rows and quietly leave the creator in.
     ok(
-      await admin.client
-        .from('group_members')
-        .delete()
-        .eq('group_id', gid)
-        .eq('user_id', creator.id),
+      await admin.client.rpc('remove_group_member', {
+        p_group_id: gid,
+        p_user_id: creator.id,
+      }),
     );
   });
 

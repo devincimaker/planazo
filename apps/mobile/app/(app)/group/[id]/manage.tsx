@@ -21,8 +21,12 @@ import {
   fetchBlockedIds,
   unblockUser,
 } from '../../../../lib/moderation';
+import { canInvite } from '../../../../lib/groupDoor';
+import { useDoorSettings, useJoinRequests } from '../../../../lib/useGroupDoor';
 import { MemberList, type GroupMemberRow } from '../../../../components/group/MemberList';
 import { GroupPrefsCard } from '../../../../components/group/GroupPrefsCard';
+import { DoorSettings } from '../../../../components/group/DoorSettings';
+import { JoinRequests } from '../../../../components/group/JoinRequests';
 import { ThemedText, ErrorState, ConfirmSheet } from '../../../../components/ui';
 import { colors, fonts, spacing } from '../../../../theme/tokens';
 
@@ -40,7 +44,7 @@ export default function ManageGroupScreen() {
       const { data, error } = await supabase
         .from('groups')
         .select(
-          `id, name, color, invite_code, anyone_can_post,
+          `id, name, color, anyone_can_post, who_can_invite, join_mode,
           group_members(user_id, role, notify_new_plans, joined_at,
             profile:profiles(display_name, avatar_url))`
         )
@@ -57,6 +61,15 @@ export default function ManageGroupScreen() {
     queryClient.invalidateQueries({ queryKey: ['group', id] });
     queryClient.invalidateQueries({ queryKey: ['groups'] });
   };
+
+  // Read off the query rather than the sorted rows further down, because the
+  // hooks that need it run before the loading guard those rows sit behind.
+  const isAdmin = ((group?.group_members ?? []) as GroupMemberRow[]).some(
+    (m) => m.user_id === user?.id && m.role === 'admin'
+  );
+
+  const { requests, respond, answeringId } = useJoinRequests(String(id), isAdmin);
+  const setDoor = useDoorSettings(String(id), invalidate);
 
   // Who this user has shut out (the shield rule: those people no longer see
   // this user's plans). Only ever their own list — RLS on blocked_users makes
@@ -87,16 +100,20 @@ export default function ManageGroupScreen() {
     onError: (error: Error) => Alert.alert('Error', error.message),
   });
 
+  // The RPC, not a delete: removing somebody also withdraws the invites they
+  // sent and resets the link, so the way back in goes with them (PLA-49).
   const removeMember = useMutation({
     mutationFn: async (userId: string) => {
-      const { error } = await supabase
-        .from('group_members')
-        .delete()
-        .eq('group_id', id)
-        .eq('user_id', userId);
+      const { error } = await supabase.rpc('remove_group_member', {
+        p_group_id: id,
+        p_user_id: userId,
+      });
       if (error) throw error;
     },
-    onSuccess: invalidate,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['group-invite-sheet', id] });
+      invalidate();
+    },
     onError: (error: Error) => Alert.alert('Error', error.message),
   });
 
@@ -181,7 +198,6 @@ export default function ManageGroupScreen() {
   const others = members.filter(
     (m) => m.user_id !== user?.id && m.user_id !== pendingRemovalId
   );
-  const isAdmin = me?.role === 'admin';
   const blocked = new Set(blockedIds ?? []);
   const nameOf = (m: GroupMemberRow) => m.profile?.display_name ?? 'this person';
 
@@ -213,7 +229,7 @@ export default function ManageGroupScreen() {
     confirm?.kind === 'remove'
       ? {
           title: `Remove ${confirm.name}?`,
-          body: 'They drop out of this group’s plans too.',
+          body: 'They drop out of this group’s plans too, and the invite link resets so the old one cannot let them back in.',
           action: 'Remove',
         }
       : {
@@ -246,6 +262,12 @@ export default function ManageGroupScreen() {
       </View>
 
       <ScrollView style={styles.flex} contentContainerStyle={styles.content}>
+        <JoinRequests
+          requests={requests}
+          answeringId={answeringId}
+          onRespond={(userId, approve) => respond.mutate({ userId, approve })}
+        />
+
         <MemberList
           me={me}
           others={others}
@@ -254,7 +276,19 @@ export default function ManageGroupScreen() {
           onOpenChange={setOpenRowId}
           onAskRemove={askRemove}
           onAskBlock={askBlock}
-          onInvite={() => router.push(`/(app)/group/${id}/invite`)}
+          onInvite={
+            canInvite(group.who_can_invite, me?.role)
+              ? () => router.push(`/(app)/group/${id}/invite`)
+              : null
+          }
+        />
+
+        <DoorSettings
+          whoCanInvite={group.who_can_invite}
+          joinMode={group.join_mode}
+          onChange={(door) => setDoor.mutate(door)}
+          pending={setDoor.isPending}
+          isAdmin={isAdmin}
         />
 
         <GroupPrefsCard

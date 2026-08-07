@@ -1,10 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../../lib/supabase';
 import { stashPendingJoin } from '../../../lib/pendingJoin';
+import { joinBlurb, joinLabel, joinPendingLabel } from '../../../lib/groupDoor';
 import { useAuthStore } from '../../../stores/authStore';
 import { ThemedText, Button, GroupTile, ErrorState } from '../../../components/ui';
 import { colors, spacing } from '../../../theme/tokens';
@@ -28,6 +29,10 @@ export default function JoinByInviteScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { session } = useAuthStore();
+  // Sent, and now waiting on an admin. Deliberately the same screen whether
+  // this is the first ask or one that was quietly turned down before: a
+  // decline is never announced (PLA-49).
+  const [asked, setAsked] = useState(false);
 
   // Normalised, not validated. What counts as a real code is the database's
   // rule, and it already answers with `not_found`; a second copy of the rule
@@ -57,7 +62,7 @@ export default function JoinByInviteScreen() {
       if (error) throw error;
       // The RPC returns a table, so an unknown code is an empty list rather
       // than an error. Nothing to preview and nothing to join.
-      const group = (data as { id: string; name: string }[])[0];
+      const group = (data as { id: string; name: string; join_mode: string }[])[0];
       return group ?? null;
     },
     enabled: signedIn && !!inviteCode,
@@ -74,6 +79,10 @@ export default function JoinByInviteScreen() {
     onSuccess: (result) => {
       if (result.status === 'not_found') {
         void preview.refetch();
+        return;
+      }
+      if (result.status === 'requested') {
+        setAsked(true);
         return;
       }
       // 'already_member' lands in the same place as 'joined'. Being told you
@@ -123,6 +132,28 @@ export default function JoinByInviteScreen() {
     return <Loading />;
   }
 
+  if (asked) {
+    return (
+      <Screen>
+        <View style={styles.card} testID="join-requested">
+          <GroupTile name={preview.data.name} size={72} />
+          <View style={styles.titleBlock}>
+            <ThemedText variant="sectionLabel" color={colors.textMuted}>
+              You’ve asked to join
+            </ThemedText>
+            <ThemedText variant="screenTitle" style={styles.name}>
+              {preview.data.name}
+            </ThemedText>
+          </View>
+          <ThemedText variant="body" color={colors.textSecondary} style={styles.blurb}>
+            An admin has your request. You’ll hear the moment they let you in.
+          </ThemedText>
+        </View>
+        <Button label="Go to my plans" onPress={goToFeed} testID="join-requested-done" />
+      </Screen>
+    );
+  }
+
   return (
     <Screen>
       <View style={styles.card} testID="join-preview">
@@ -136,7 +167,7 @@ export default function JoinByInviteScreen() {
           </ThemedText>
         </View>
         <ThemedText variant="body" color={colors.textSecondary} style={styles.blurb}>
-          Join and you’ll see their plans, and they’ll see yours.
+          {joinBlurb(preview.data.join_mode)}
         </ThemedText>
       </View>
 
@@ -154,7 +185,11 @@ export default function JoinByInviteScreen() {
 
       <View style={styles.actions}>
         <Button
-          label={join.isPending ? 'Joining…' : `Join ${preview.data.name}`}
+          label={
+            join.isPending
+              ? joinPendingLabel(preview.data.join_mode)
+              : joinLabel(preview.data.join_mode, preview.data.name)
+          }
           disabled={join.isPending}
           onPress={() => join.mutate()}
           testID="join-group"
