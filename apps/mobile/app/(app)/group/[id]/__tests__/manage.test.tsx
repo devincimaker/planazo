@@ -329,12 +329,21 @@ describe('ManageGroupScreen', () => {
     expect(screen.queryByTestId('manage-admins')).toBeNull();
   });
 
-  it('the admins row opens the Admins screen', async () => {
+  it('the admins row opens the Admins screen, and its subtitle counts admins', async () => {
     await renderManage();
 
-    await fireEvent.press(await screen.findByTestId('manage-admins'));
+    // Sole admin: the subtitle speaks to the viewer directly.
+    expect(await screen.findByText('Just you')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('manage-admins'));
 
     expect(mockPush).toHaveBeenCalledWith('/(app)/group/g1/admins');
+  });
+
+  it('with more admins the subtitle counts heads', async () => {
+    group.group_members[1].role = 'admin';
+    await renderManage();
+
+    expect(await screen.findByText('2 people run this group')).toBeTruthy();
   });
 
   // The swipe hint must only promise what the swipe will actually offer:

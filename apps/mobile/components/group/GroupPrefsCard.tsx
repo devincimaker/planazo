@@ -12,6 +12,8 @@ interface Props {
   onNotify: (on: boolean) => void;
   notifyPending: boolean;
   isAdmin: boolean;
+  /** "Just you" or "N people run this group" — the Admins row's subtitle. */
+  adminSummary: string;
   onEditProfile: () => void;
   onAdmins: () => void;
 }
@@ -25,6 +27,7 @@ export function GroupPrefsCard({
   onNotify,
   notifyPending,
   isAdmin,
+  adminSummary,
   onEditProfile,
   onAdmins,
 }: Props) {
@@ -68,11 +71,14 @@ export function GroupPrefsCard({
                 styles.divider,
                 pressed && styles.rowPressed,
               ]}
-              onPress={onEditProfile}
+              onPress={onAdmins}
               accessibilityRole="button"
-              testID="edit-group"
+              testID="manage-admins"
             >
-              <ThemedText variant="bodyStrong">Edit group profile</ThemedText>
+              <View style={styles.prefBody}>
+                <ThemedText variant="bodyStrong">Admins</ThemedText>
+                <ThemedText variant="caption">{adminSummary}</ThemedText>
+              </View>
               <ThemedText variant="body" color={colors.textFaint}>
                 ›
               </ThemedText>
@@ -83,11 +89,11 @@ export function GroupPrefsCard({
                 styles.divider,
                 pressed && styles.rowPressed,
               ]}
-              onPress={onAdmins}
+              onPress={onEditProfile}
               accessibilityRole="button"
-              testID="manage-admins"
+              testID="edit-group"
             >
-              <ThemedText variant="bodyStrong">Admins</ThemedText>
+              <ThemedText variant="bodyStrong">Edit group profile</ThemedText>
               <ThemedText variant="body" color={colors.textFaint}>
                 ›
               </ThemedText>

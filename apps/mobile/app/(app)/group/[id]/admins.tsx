@@ -1,11 +1,5 @@
-import {
-  View,
-  ScrollView,
-  StyleSheet,
-  Pressable,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
+import { useState } from 'react';
+import { View, ScrollView, StyleSheet, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,25 +8,34 @@ import { supabase } from '../../../../lib/supabase';
 import { useAuthStore } from '../../../../stores/authStore';
 import { errorCopy, isNotFoundError } from '../../../../lib/queryErrors';
 import { groupManageQuery } from '../../../../lib/groupManageQuery';
-import { roleActionFor, roleActionLabel } from '../../../../lib/memberRole';
+import { splitByRole, demoteConfirmCopy } from '../../../../lib/groupAdmins';
 import { MIN_TOUCH_TARGET } from '../../../../lib/a11y';
 import type { GroupMemberRow } from '../../../../components/group/MemberList';
-import { ThemedText, ErrorState, Card, Avatar } from '../../../../components/ui';
-import { colors, fonts, radii, spacing } from '../../../../theme/tokens';
+import { AdminsCard } from '../../../../components/group/AdminsCard';
+import { PromoteCard } from '../../../../components/group/PromoteCard';
+import { ThemedText, ErrorState, ConfirmSheet } from '../../../../components/ui';
+import { colors, fonts, spacing } from '../../../../theme/tokens';
 
 /**
- * Who runs the group, and the one place a role changes (PLA-50).
+ * Who runs the group, and the one place a role changes ("Group Admins"
+ * design doc, PLA-50).
  *
- * Promotion used to hide inside a status chip on the Manage screen, which
- * nobody was ever going to press. Here it is a labelled button on a labelled
- * screen. A non-admin who deep-links in gets a read-only list: every action
- * derives to null for them, and RLS blocks the write regardless.
+ * Two cards: the admins, each with a way out of the role behind a confirm
+ * sheet, and everyone who could hold it, behind a search and a single tap.
+ * Promotion is instant because it is reversible right here; demotion asks
+ * first because it takes something away from a person. A non-admin who
+ * deep-links in gets the admins card read-only: no demote controls, no
+ * promote section, and RLS refuses the write regardless.
  */
 export default function GroupAdminsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  const [query, setQuery] = useState('');
+  const [demoting, setDemoting] = useState<{ userId: string; name: string; isSelf: boolean } | null>(
+    null
+  );
 
   const { data: group, isLoading, isError, error, refetch } = useQuery(groupManageQuery(id));
 
@@ -87,72 +90,24 @@ export default function GroupAdminsScreen() {
     );
   }
 
-  const members = [...((group.group_members ?? []) as GroupMemberRow[])].sort((a, b) =>
-    (a.joined_at ?? '').localeCompare(b.joined_at ?? '')
-  );
-  const me = members.find((m) => m.user_id === user?.id);
-  const others = members.filter((m) => m.user_id !== user?.id);
-  const viewerIsAdmin = me?.role === 'admin';
-  const adminCount = members.filter((m) => m.role === 'admin').length;
-  // Same order as the People card: you first, then everyone by arrival.
-  const rows = me ? [me, ...others] : others;
+  const members = (group.group_members ?? []) as GroupMemberRow[];
+  const { admins, candidates } = splitByRole(members, user?.id);
+  const viewerIsAdmin = admins.some((m) => m.user_id === user?.id);
 
-  const renderRow = (m: GroupMemberRow, index: number) => {
-    const isSelf = m.user_id === user?.id;
-    const action = roleActionFor({ viewerIsAdmin, targetRole: m.role, adminCount });
-    return (
-      <View key={m.user_id} style={[styles.personRow, index > 0 && styles.divider]}>
-        <Avatar
-          name={m.profile?.display_name ?? '?'}
-          size={36}
-          imageUrl={m.profile?.avatar_url}
-        />
-        <View style={styles.personBody}>
-          <View style={styles.nameLine}>
-            <ThemedText variant="bodyStrong" numberOfLines={1} style={styles.name}>
-              {m.profile?.display_name}
-              {isSelf ? (
-                <ThemedText variant="bodyStrong" color={colors.textMuted}>
-                  {' '}
-                  · you
-                </ThemedText>
-              ) : null}
-            </ThemedText>
-            {m.role === 'admin' ? (
-              <View style={styles.roleChip} testID={`admin-${m.user_id}`}>
-                <ThemedText variant="tag" color={colors.background}>
-                  Admin
-                </ThemedText>
-              </View>
-            ) : null}
-          </View>
-          {action === 'demote-blocked' ? (
-            <ThemedText variant="caption" testID="last-admin-note">
-              You’re the only admin. Make someone else admin first if you want to step down.
-            </ThemedText>
-          ) : null}
-        </View>
-        {action === 'promote' || action === 'demote' ? (
-          <Pressable
-            onPress={() =>
-              setRole.mutate({
-                userId: m.user_id,
-                role: action === 'promote' ? 'admin' : 'member',
-              })
-            }
-            disabled={setRole.isPending}
-            accessibilityRole="button"
-            testID={`role-action-${m.user_id}`}
-            style={styles.actionButton}
-          >
-            <ThemedText variant="bodyStrong" color={colors.accent}>
-              {roleActionLabel(action, isSelf)}
-            </ThemedText>
-          </Pressable>
-        ) : null}
-      </View>
-    );
+  const askDemote = (m: GroupMemberRow) =>
+    setDemoting({
+      userId: m.user_id,
+      name: m.profile?.display_name ?? 'this person',
+      isSelf: m.user_id === user?.id,
+    });
+
+  const runDemote = () => {
+    if (!demoting) return;
+    setDemoting(null);
+    setRole.mutate({ userId: demoting.userId, role: 'member' });
   };
+
+  const confirmCopy = demoteConfirmCopy(demoting?.name ?? '', !!demoting?.isSelf);
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
@@ -171,12 +126,44 @@ export default function GroupAdminsScreen() {
         <View style={styles.navSpacer} />
       </View>
 
-      <ScrollView style={styles.flex} contentContainerStyle={styles.content}>
-        <ThemedText variant="caption" style={styles.explainer}>
-          Admins can remove people and edit the group.
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        <ThemedText variant="sub">
+          Admins edit the group, remove people, and make other admins.
         </ThemedText>
-        <Card padded={false}>{rows.map(renderRow)}</Card>
+
+        <AdminsCard
+          admins={admins}
+          myId={user?.id}
+          createdBy={group.created_by ?? null}
+          viewerIsAdmin={viewerIsAdmin}
+          disabled={setRole.isPending}
+          onDemote={askDemote}
+        />
+
+        {viewerIsAdmin ? (
+          <PromoteCard
+            candidates={candidates}
+            query={query}
+            onQueryChange={setQuery}
+            disabled={setRole.isPending}
+            onPromote={(m) => setRole.mutate({ userId: m.user_id, role: 'admin' })}
+          />
+        ) : null}
       </ScrollView>
+
+      <ConfirmSheet
+        visible={!!demoting}
+        title={confirmCopy.title}
+        body={confirmCopy.body}
+        actionLabel={confirmCopy.actionLabel}
+        onConfirm={runDemote}
+        onCancel={() => setDemoting(null)}
+        testID="confirm-demote"
+      />
     </SafeAreaView>
   );
 }
@@ -217,49 +204,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingTop: 6,
     paddingBottom: 40,
-    gap: spacing.md,
-  },
-  explainer: {
-    paddingHorizontal: spacing.xs,
-  },
-  personRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.lg,
-    paddingHorizontal: spacing.lg,
-  },
-  divider: {
-    borderTopWidth: 1,
-    borderTopColor: colors.divider,
-  },
-  personBody: {
-    flex: 1,
-    gap: spacing.xxs,
-  },
-  nameLine: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    minWidth: 0,
-  },
-  name: {
-    flexShrink: 1,
-  },
-  // The same passive pill the People card wears; a status, not a control.
-  roleChip: {
-    paddingVertical: 5,
-    paddingHorizontal: 11,
-    borderRadius: radii.pill,
-    borderWidth: 1.5,
-    backgroundColor: colors.ink,
-    borderColor: colors.ink,
-  },
-  // The word is the button; the box grows to a real target around it.
-  actionButton: {
-    justifyContent: 'center',
-    alignItems: 'flex-end',
-    minHeight: MIN_TOUCH_TARGET,
-    marginVertical: -spacing.md,
+    gap: spacing.xxl,
   },
 });

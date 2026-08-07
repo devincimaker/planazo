@@ -15,6 +15,7 @@ import { useAuthStore } from '../../../../stores/authStore';
 import { errorCopy, isNotFoundError } from '../../../../lib/queryErrors';
 import { usePendingRemoval } from '../../../../lib/usePendingRemoval';
 import { groupManageQuery } from '../../../../lib/groupManageQuery';
+import { adminSummary } from '../../../../lib/groupAdmins';
 import { MIN_TOUCH_TARGET } from '../../../../lib/a11y';
 import {
   BLOCKED_QUERY_KEY,
@@ -250,6 +251,7 @@ export default function ManageGroupScreen() {
           onNotify={(on) => setNotify.mutate(on)}
           notifyPending={setNotify.isPending}
           isAdmin={isAdmin}
+          adminSummary={adminSummary(members.filter((m) => m.role === 'admin').length)}
           onEditProfile={() => router.push(`/(app)/group/${id}/edit`)}
           onAdmins={() => router.push(`/(app)/group/${id}/admins`)}
         />

@@ -73,6 +73,7 @@ beforeEach(() => {
     color: '#F7B0DC',
     invite_code: 'ABCD2345',
     anyone_can_post: true,
+    created_by: 'me',
     group_members: [
       {
         user_id: 'me',
@@ -88,89 +89,141 @@ beforeEach(() => {
         joined_at: '2026-01-02',
         profile: { display_name: 'Aina', avatar_url: null },
       },
+      {
+        user_id: 'u3',
+        role: 'member',
+        notify_new_plans: true,
+        joined_at: '2026-01-03',
+        profile: { display_name: 'Diego Morales', avatar_url: null },
+      },
     ],
   };
 });
 
 describe('GroupAdminsScreen', () => {
-  it('lists everyone, badges admins, and says what admin means', async () => {
+  it('splits admins from candidates and credits the group creator', async () => {
+    group.group_members[1].role = 'admin';
     await renderAdmins();
 
     expect(await screen.findByText(/· you/)).toBeTruthy();
-    expect(screen.getByText('Aina')).toBeTruthy();
-    expect(screen.getByTestId('admin-me')).toBeTruthy();
-    expect(screen.queryByTestId('admin-u2')).toBeNull();
-    expect(screen.getByText('Admins can remove people and edit the group.')).toBeTruthy();
+    expect(screen.getByText('Admins · 2')).toBeTruthy();
+    expect(screen.getByText('Made the group')).toBeTruthy();
+    expect(screen.getByText('Admin')).toBeTruthy();
+    expect(
+      screen.getByText('Admins edit the group, remove people, and make other admins.')
+    ).toBeTruthy();
+    // Diego is the one non-admin left, waiting under "Make someone an admin".
+    expect(screen.getByTestId('promote-u3')).toBeTruthy();
+    expect(screen.queryByTestId('promote-u2')).toBeNull();
+    expect(screen.queryByTestId('demote-u3')).toBeNull();
   });
 
-  it('promoting a member writes admin onto their membership', async () => {
+  it('promoting is one tap, no confirm', async () => {
     await renderAdmins();
 
-    const button = await screen.findByTestId('role-action-u2');
-    expect(screen.getByText('Make admin')).toBeTruthy();
-    await fireEvent.press(button);
+    await fireEvent.press(await screen.findByTestId('promote-u2'));
 
+    expect(screen.queryByTestId('confirm-demote')).toBeNull();
     await waitFor(() => expect(roleWrite()).not.toBeNull());
     expect(roleWrite()!.payload).toEqual({ role: 'admin' });
     expect(roleWrite()!.eqs).toContainEqual(['group_id', 'g1']);
     expect(roleWrite()!.eqs).toContainEqual(['user_id', 'u2']);
   });
 
-  it('demoting another admin writes member, labelled as removal', async () => {
+  it('demoting another admin asks first, then writes member', async () => {
     group.group_members[1].role = 'admin';
     await renderAdmins();
 
-    const button = await screen.findByTestId('role-action-u2');
-    expect(screen.getByText('Remove as admin')).toBeTruthy();
-    await fireEvent.press(button);
+    await fireEvent.press(await screen.findByTestId('demote-u2'));
+
+    expect(await screen.findByText('Remove Aina as admin?')).toBeTruthy();
+    expect(roleWrite()).toBeNull();
+    await fireEvent.press(screen.getByTestId('confirm-demote-confirm'));
 
     await waitFor(() => expect(roleWrite()).not.toBeNull());
     expect(roleWrite()!.payload).toEqual({ role: 'member' });
     expect(roleWrite()!.eqs).toContainEqual(['user_id', 'u2']);
   });
 
+  it('cancelling the sheet writes nothing', async () => {
+    group.group_members[1].role = 'admin';
+    await renderAdmins();
+
+    await fireEvent.press(await screen.findByTestId('demote-u2'));
+    await fireEvent.press(await screen.findByTestId('confirm-demote-cancel'));
+
+    await waitFor(() => expect(screen.queryByText('Remove Aina as admin?')).toBeNull());
+    expect(roleWrite()).toBeNull();
+  });
+
   it('your own demotion is stepping down, while another admin exists', async () => {
     group.group_members[1].role = 'admin';
     await renderAdmins();
 
-    const button = await screen.findByTestId('role-action-me');
-    expect(screen.getByText('Step down as admin')).toBeTruthy();
-    await fireEvent.press(button);
+    await fireEvent.press(await screen.findByTestId('demote-me'));
+
+    expect(await screen.findByText('Step down as admin?')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('confirm-demote-confirm'));
 
     await waitFor(() => expect(roleWrite()).not.toBeNull());
     expect(roleWrite()!.payload).toEqual({ role: 'member' });
     expect(roleWrite()!.eqs).toContainEqual(['user_id', 'me']);
   });
 
-  // Never a disabled button: the copy explains, and the action is simply
-  // absent until someone else is admin.
-  it('the only admin gets the note instead of a way to step down', async () => {
+  // The design dims the control instead of removing it; the note under the
+  // card carries the why, and the way out is promoting someone below.
+  it('the only admin cannot open the step-down sheet, and the note says why', async () => {
     await renderAdmins();
 
-    expect(await screen.findByTestId('last-admin-note')).toBeTruthy();
-    expect(screen.queryByTestId('role-action-me')).toBeNull();
-    // The member next to them is still promotable — that is the way out.
-    expect(screen.getByTestId('role-action-u2')).toBeTruthy();
+    const note = await screen.findByTestId('admins-note');
+    expect(note).toHaveTextContent('A group needs at least one admin. Make someone else one first.');
+
+    await fireEvent.press(screen.getByTestId('demote-me'));
+    expect(screen.queryByText('Step down as admin?')).toBeNull();
+    expect(roleWrite()).toBeNull();
+
+    expect(screen.getByTestId('promote-u2')).toBeTruthy();
   });
 
-  // A non-admin can deep-link straight here; they get the list and nothing
-  // else. RLS would refuse the write anyway, but no button ever invites it.
+  it('with admins to spare, the note reassures instead', async () => {
+    group.group_members[1].role = 'admin';
+    await renderAdmins();
+
+    const note = await screen.findByTestId('admins-note');
+    expect(note).toHaveTextContent('They keep their place in the group either way.');
+  });
+
+  it('the search narrows candidates, and a miss says who is missing', async () => {
+    await renderAdmins();
+
+    await fireEvent.changeText(await screen.findByTestId('admin-search'), 'die');
+    expect(screen.getByTestId('promote-u3')).toBeTruthy();
+    expect(screen.queryByTestId('promote-u2')).toBeNull();
+
+    await fireEvent.changeText(screen.getByTestId('admin-search'), 'Zoe');
+    expect(screen.getByTestId('candidates-empty')).toHaveTextContent(
+      'Nobody called “Zoe” in this group.'
+    );
+  });
+
+  // A non-admin can deep-link straight here; they get the admins card and
+  // nothing else. RLS would refuse the write anyway, but no control invites it.
   it('a non-admin viewer gets a read-only list', async () => {
     group.group_members[0].role = 'member';
     group.group_members[1].role = 'admin';
     await renderAdmins();
 
     expect(await screen.findByText('Aina')).toBeTruthy();
-    expect(screen.getByTestId('admin-u2')).toBeTruthy();
-    expect(screen.queryByTestId('role-action-me')).toBeNull();
-    expect(screen.queryByTestId('role-action-u2')).toBeNull();
-    expect(screen.queryByTestId('last-admin-note')).toBeNull();
+    expect(screen.queryByTestId('demote-u2')).toBeNull();
+    expect(screen.queryByTestId('promote-me')).toBeNull();
+    expect(screen.queryByTestId('admin-search')).toBeNull();
+    expect(screen.queryByTestId('admins-note')).toBeNull();
   });
 
   it('a failed write surfaces as an alert', async () => {
     await renderAdmins();
 
-    const button = await screen.findByTestId('role-action-u2');
+    const button = await screen.findByTestId('promote-u2');
     mockFrom.mockImplementation(() => {
       const c: any = {};
       ['update', 'eq'].forEach((m) => {
