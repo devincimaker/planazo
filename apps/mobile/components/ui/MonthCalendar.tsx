@@ -2,14 +2,12 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { MIN_TOUCH_TARGET } from '../../lib/a11y';
+import { buildMonthGrid, isoOfDate } from '../../lib/monthGrid';
 import { colors, fonts } from '../../theme/tokens';
 
 const DOW = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 // How far ahead the month arrows can go (design: half a year of runway)
 const MAX_MONTHS_AHEAD = 5;
-
-const pad = (n: number) => String(n).padStart(2, '0');
-const isoOf = (y: number, m: number, d: number) => `${y}-${pad(m + 1)}-${pad(d)}`;
 
 interface MonthCalendarProps {
   /** Picked days as YYYY-MM-DD */
@@ -22,23 +20,9 @@ export function MonthCalendar({ selected, onToggleDay }: MonthCalendarProps) {
   const [offset, setOffset] = useState(0);
 
   const now = new Date();
-  const today = isoOf(now.getFullYear(), now.getMonth(), now.getDate());
+  const today = isoOfDate(now);
   const base = new Date(now.getFullYear(), now.getMonth() + offset, 1);
-  const y = base.getFullYear();
-  const m = base.getMonth();
-  const firstDow = new Date(y, m, 1).getDay();
-  const daysInMonth = new Date(y, m + 1, 0).getDate();
-
-  type Cell = { key: string; iso?: string; label?: string };
-  const cells: Cell[] = [];
-  for (let i = 0; i < firstDow; i++) cells.push({ key: `pad-${i}` });
-  for (let d = 1; d <= daysInMonth; d++) {
-    const iso = isoOf(y, m, d);
-    cells.push({ key: iso, iso, label: String(d) });
-  }
-  while (cells.length % 7 !== 0) cells.push({ key: `pad-t${cells.length}` });
-  const weeks: Cell[][] = [];
-  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+  const weeks = buildMonthGrid(base.getFullYear(), base.getMonth());
 
   const label = base.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
 
