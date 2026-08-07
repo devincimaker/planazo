@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import { supabase } from '../../../../lib/supabase';
 import { useFriends } from '../../../../lib/useFriends';
-import { inviteLinkFor } from '../../../../lib/inviteCode';
+import { inviteLinkFor } from '../../../../lib/shareLinks';
 import { MIN_TOUCH_TARGET } from '../../../../lib/a11y';
 import { ThemedText, Avatar, Button } from '../../../../components/ui';
 import { colors, fonts, radii, spacing } from '../../../../theme/tokens';

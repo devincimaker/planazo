@@ -1,9 +1,8 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 
+import AppLinkPage from '@/components/AppLinkPage';
 import { JOIN, LANG } from '@/lib/copy';
-import { GET_APP_URL } from '@/lib/links';
-import styles from '../join.module.css';
+import styles from '../../applink.module.css';
 
 const copy = JOIN[LANG];
 
@@ -31,47 +30,22 @@ function readableCode(raw: string): string | null {
  * marketing site a database, and an invite code is passed around in group
  * chats where it will outlive the invitation. The page is about the app, and
  * the app is where anything about the group belongs.
+ *
+ * The code block below is the one thing the plan page has no use for: an invite
+ * can also be typed in by hand, while a plan link admits nobody.
  */
 export default async function JoinPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
   const shown = readableCode(code);
 
   return (
-    <main className={styles.page}>
-      <nav className={styles.nav}>
-        <Link href="/" className={`serif ${styles.wordmark}`}>
-          Planazo
-        </Link>
-        <Link href="/" className={styles.navBack}>
-          {copy.backHome}
-        </Link>
-      </nav>
-
-      <p className={styles.eyebrow}>{copy.eyebrow}</p>
-      <h1 className={`serif ${styles.title}`}>{copy.title}</h1>
-      <p className={styles.lede}>{copy.lede}</p>
-
-      <div className={styles.ctaBlock}>
-        <a className={styles.btnInk} href={GET_APP_URL}>
-          {copy.cta}
-        </a>
-        <p className={styles.ctaSub}>{copy.ctaSub}</p>
-      </div>
-
-      <ol className={styles.steps}>
-        {copy.steps.map((step) => (
-          <li key={step} className={styles.step}>
-            {step}
-          </li>
-        ))}
-      </ol>
-
+    <AppLinkPage copy={copy}>
       {shown ? (
         <div className={styles.codeBlock}>
           <p className={styles.codeLabel}>{copy.codeLabel}</p>
           <p className={styles.code}>{shown}</p>
         </div>
       ) : null}
-    </main>
+    </AppLinkPage>
   );
 }

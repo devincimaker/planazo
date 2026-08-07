@@ -5,6 +5,7 @@ import OnboardingScreen from '../onboarding';
 import { useAuthStore } from '../../stores/authStore';
 import { supabase } from '../../lib/supabase';
 import { stashPendingJoin, takePendingJoin } from '../../lib/pendingJoin';
+import { stashPendingPlan, takePendingPlan } from '../../lib/pendingPlan';
 
 const mockReplace = jest.fn();
 
@@ -45,6 +46,7 @@ beforeEach(() => {
   useAuthStore.setState({ session: null, user: null, profile: null });
   // Module state, so drain whatever the last test left behind.
   takePendingJoin();
+  takePendingPlan();
 });
 
 describe('the first-run gate', () => {
@@ -141,6 +143,52 @@ describe('the first-run gate', () => {
     jest.advanceTimersByTime(150);
 
     expect(mockReplace).toHaveBeenCalledWith('/(app)/(tabs)');
+  });
+
+  /**
+   * The same journey for the other link Planazo hands out (PLA-81). A plan link
+   * tapped with no session sends people here to sign in; landing them on the
+   * feed would make the link a lie for the second time in one tap.
+   */
+  it('opens a waiting plan instead of the tabs, and outranks the carousel', async () => {
+    useAuthStore.setState({ session: SESSION, profile: profileWith(null) });
+    stashPendingPlan('plan-1');
+
+    await render(<Index />);
+    jest.advanceTimersByTime(150);
+
+    expect(mockReplace).toHaveBeenCalledWith('/(app)/plan/plan-1');
+    expect(mockReplace).not.toHaveBeenCalledWith('/onboarding');
+  });
+
+  it('spends the plan, so the next launch lands normally', async () => {
+    useAuthStore.setState({ session: SESSION, profile: profileWith('2026-08-01T10:00:00Z') });
+    stashPendingPlan('plan-1');
+
+    await render(<Index />);
+    jest.advanceTimersByTime(150);
+
+    expect(takePendingPlan()).toBeNull();
+  });
+
+  /**
+   * Both can only be waiting together if someone tapped an invite and a plan in
+   * the same signed-out run. The invite wins because it is the one that grants
+   * access, and it is usually the way into the very group the plan belongs to.
+   * The plan is drained rather than kept, so it cannot surface a launch later
+   * as a destination nobody asked for.
+   */
+  it('finishes the invite first when both are waiting, and keeps neither', async () => {
+    useAuthStore.setState({ session: SESSION, profile: profileWith('2026-08-01T10:00:00Z') });
+    stashPendingJoin('ABCD2345');
+    stashPendingPlan('plan-1');
+
+    await render(<Index />);
+    jest.advanceTimersByTime(150);
+
+    expect(mockReplace).toHaveBeenCalledWith('/(app)/join/ABCD2345');
+    expect(mockReplace).not.toHaveBeenCalledWith('/(app)/plan/plan-1');
+    expect(takePendingPlan()).toBeNull();
   });
 });
 

@@ -1,8 +1,10 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
-import { Alert, StyleSheet, type ViewStyle } from 'react-native';
+import { Alert, Share, StyleSheet, type ViewStyle } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import PlanDetailScreen from '../index';
 import { useAuthStore } from '../../../../../stores/authStore';
+import { takePendingPlan } from '../../../../../lib/pendingPlan';
 import { supabase } from '../../../../../lib/supabase';
 import { chooseFromSheet, mockActionSheet, sheetOptions } from '../../../../../lib/testing/actionSheet';
 
@@ -150,9 +152,18 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockCanGoBack = true;
   mockParamId = 'plan-1';
+  // Module state, so drain whatever a signed-out test left behind.
+  takePendingPlan();
   jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  jest.spyOn(Share, 'share').mockResolvedValue({ action: 'dismissedAction' } as never);
   mockActionSheet();
-  useAuthStore.setState({ user: { id: 'me' } as any, profile: { id: 'me' } as any });
+  // A session as well as a user: signed out, this screen now holds the plan and
+  // leaves for login instead of rendering (PLA-81), which is its own test below.
+  useAuthStore.setState({
+    session: { user: { id: 'me' } } as any,
+    user: { id: 'me' } as any,
+    profile: { id: 'me' } as any,
+  });
 });
 
 /** Open the ··· menu and return its option labels. Pick a row with chooseFromSheet. */
@@ -634,7 +645,7 @@ describe('PlanDetailScreen — the 20a menu', () => {
     await waitFor(() => expect(screen.getByTestId('plan-menu')).toBeTruthy());
 
     expect(await openMenu()).toEqual([
-      'Copy invite link',
+      'Copy link to this plan',
       "Nudge the 3 who haven't answered",
       'Edit the details',
       'Call it off',
@@ -739,7 +750,38 @@ describe('PlanDetailScreen — the 20a menu', () => {
     const options = await openMenu();
     expect(options).not.toContain('Call it off');
     expect(options).not.toContain('Edit the details');
-    expect(options).toContain('Copy invite link');
+    expect(options).toContain('Copy link to this plan');
+  });
+
+  /**
+   * PLA-81: the defect. Both ways of handing a plan to someone used to spell a
+   * `planazo://` link, which no messenger turns into something tappable, so it
+   * arrived as grey text and anyone without the app got nothing at all.
+   */
+  it('copies an https link, and shares one', async () => {
+    prime({
+      plan: {
+        ...basePlan,
+        plan_type: 'fixed',
+        status: 'open',
+        event_date: iso(8),
+        created_by: 'me',
+      },
+      members: ['me', 'u-marta'],
+    });
+    await renderDetail();
+    await waitFor(() => expect(screen.getByTestId('plan-menu')).toBeTruthy());
+
+    await openMenu();
+    await chooseFromSheet(0);
+    await waitFor(() => expect(Clipboard.setStringAsync).toHaveBeenCalled());
+    expect(Clipboard.setStringAsync).toHaveBeenCalledWith('https://planazo.me/plan/plan-1');
+
+    await openMenu();
+    await chooseFromSheet(1);
+    const shared = (Share.share as jest.Mock).mock.calls[0][0].message;
+    expect(shared).toContain('https://planazo.me/plan/plan-1');
+    expect(shared).not.toContain('planazo://');
   });
 
   // Both host rows share one guard, and on these two plans both are
@@ -1005,6 +1047,21 @@ describe('PlanDetailScreen — a plan you cannot see', () => {
     expect(screen.queryByTestId('plan-error-retry')).toBeNull();
   });
 
+  /**
+   * The title is the thing a stranger must not get, and the branch above is
+   * what guarantees it: `plan` is null there, so there is nothing to render.
+   * Pinned because "say it isn't here" and "say whose it is" are one careless
+   * edit apart.
+   */
+  it('names nothing about the plan while doing so', async () => {
+    primeMissing({ data: null, error: notFound });
+    await renderDetail();
+
+    await waitFor(() => expect(screen.getByTestId('plan-error')).toBeTruthy());
+    expect(screen.queryByText(basePlan.title)).toBeNull();
+    expect(screen.queryByText(basePlan.groups.name)).toBeNull();
+  });
+
   it('offers a way back when there is a screen behind it', async () => {
     mockCanGoBack = true;
     primeMissing({ data: null, error: notFound });
@@ -1025,6 +1082,33 @@ describe('PlanDetailScreen — a plan you cannot see', () => {
     await fireEvent.press(screen.getByTestId('plan-error-back'));
     expect(mockReplace).toHaveBeenCalledWith('/(app)/(tabs)');
     expect(mockBack).not.toHaveBeenCalled();
+  });
+
+  /**
+   * PLA-81: a shared link is the one door into this screen with no session
+   * behind it, and RLS gives an anonymous request the same empty answer it
+   * gives a stranger. Telling someone their own group's plan isn't here is the
+   * one wrong answer available, so the screen holds the plan and leaves.
+   */
+  it('holds the plan and goes to sign in when there is no session', async () => {
+    useAuthStore.setState({ session: null, user: null });
+    primeMissing({ data: null, error: notFound });
+    await renderDetail();
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/(auth)/login'));
+    expect(takePendingPlan()).toBe('plan-1');
+    expect(screen.queryByTestId('plan-error')).toBeNull();
+    expect(screen.queryByText("This plan isn't here")).toBeNull();
+  });
+
+  it('asks the database nothing at all without a session', async () => {
+    useAuthStore.setState({ session: null, user: null });
+    primeMissing({ data: null, error: notFound });
+    await renderDetail();
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/(auth)/login'));
+    expect(mockFrom).not.toHaveBeenCalledWith('plans');
+    expect(mockFrom).not.toHaveBeenCalledWith('rsvps');
   });
 
   it('offers a retry when the fetch failed rather than came back empty', async () => {

@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import type { PlanDerived } from '../../lib/planDerived';
 import { MIN_TOUCH_TARGET } from '../../lib/a11y';
+import { planLinkFor } from '../../lib/shareLinks';
 import { ThemedText, showToast } from '../ui';
 import { colors, spacing } from '../../theme/tokens';
 
@@ -19,7 +20,7 @@ export function PlanTopBar({ planId, groupId, d, groupName, onNudge }: Props) {
   const router = useRouter();
 
   const copyLink = async () => {
-    await Clipboard.setStringAsync(`planazo://plan/${planId}`);
+    await Clipboard.setStringAsync(planLinkFor(planId));
     showToast('Link copied');
   };
 
@@ -28,9 +29,13 @@ export function PlanTopBar({ planId, groupId, d, groupName, onNudge }: Props) {
   // that has already ended or been called off (PLA-31).
   const showMenu = () => {
     const rows: { label: string; action: () => void; destructive?: boolean }[] = [
+      // Not "invite link": this one admits nobody. The group's invite code is
+      // what lets someone in, and conflating the two is how a host ends up
+      // sending a stranger a link that can only tell them it isn't theirs.
+      //
       // Fire-and-forget: writing to the clipboard has no failure mode worth a
       // dialog, and the toast is the confirmation.
-      { label: 'Copy invite link', action: () => void copyLink() },
+      { label: 'Copy link to this plan', action: () => void copyLink() },
     ];
     if (d.isOpen && !d.isPast && d.unanswered > 0) {
       rows.push({

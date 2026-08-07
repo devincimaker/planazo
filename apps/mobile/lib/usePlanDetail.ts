@@ -26,7 +26,11 @@ export function usePlanDetail(id: string, { onDatesCommitted }: { onDatesCommitt
       if (error) throw error;
       return data;
     },
-    enabled: !!id,
+    // Waits on the user, not just the id: a shared link can mount this screen
+    // with no session, and RLS answers an anonymous request with zero rows for
+    // every plan there is. The only thing such a request can produce is a false
+    // "this plan isn't here" (PLA-81).
+    enabled: !!id && !!user,
   });
 
   const { data: rsvps } = useQuery({
@@ -39,7 +43,7 @@ export function usePlanDetail(id: string, { onDatesCommitted }: { onDatesCommitt
       if (error) throw error;
       return data;
     },
-    enabled: !!id,
+    enabled: !!id && !!user,
   });
 
   const { data: dateOptions } = useQuery({

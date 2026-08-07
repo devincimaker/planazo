@@ -197,6 +197,54 @@ export const JOIN = {
   },
 } as const;
 
+/**
+ * The plan landing page (PLA-81).
+ *
+ * The invite page's twin, with one deliberate difference in the last step. An
+ * invite link lets someone in; a plan link lets nobody in anywhere, because the
+ * plan belongs to its group and RLS is what says so. Promising "and you're in"
+ * here would turn the app's honest "This plan isn't here" into a broken
+ * promise, so the page says up front that the plan opens only if it is already
+ * theirs to see.
+ *
+ * Nothing about the plan itself appears, and it never will: the site has no
+ * database, and a plan id pasted into a group chat outlives the conversation.
+ */
+export const PLAN = {
+  en: {
+    eyebrow: 'Plan',
+    title: 'Someone shared a plan with you',
+    lede: 'Planazo is where a group makes plans that actually happen. Get the app and the plan opens on the next tap.',
+    steps: [
+      'Get Planazo and sign in.',
+      'Come back to this link and tap it again.',
+      "The plan opens, if it's a plan you're in.",
+    ],
+    cta: 'Get Planazo',
+    ctaSub: 'Free. iOS beta.',
+    backHome: 'What is Planazo?',
+    metaTitle: 'Someone shared a plan with you on Planazo',
+    metaDescription:
+      'Someone shared a plan with you on Planazo. Get the app and tap the link again.',
+  },
+  es: {
+    eyebrow: 'Plan',
+    title: 'Te compartieron un plan',
+    lede: 'Planazo es donde un grupo arma planes que sí pasan. Bajate la app y el plan se abre en el próximo toque.',
+    steps: [
+      'Bajate Planazo y entrá a tu cuenta.',
+      'Volvé a este link y tocalo de nuevo.',
+      'El plan se abre, si es un plan del que ya formás parte.',
+    ],
+    cta: 'Bajate Planazo',
+    ctaSub: 'Gratis. En beta para iOS.',
+    backHome: '¿Qué es Planazo?',
+    metaTitle: 'Te compartieron un plan en Planazo',
+    metaDescription:
+      'Alguien te compartió un plan en Planazo. Bajate la app y tocá el link de nuevo.',
+  },
+} as const;
+
 /** Page <title> / meta description, kept out of the UI copy above. */
 export const META = {
   en: {
