@@ -195,10 +195,12 @@ password_requirements = ""
 # Number of emails that can be sent per hour. Requires auth.email.smtp to be enabled.
 # Raised from the default 2 when confirmations came on locally (PLA-71): every
 # signup in the simulator now costs an email, and two per hour would make
-# ordinary QA impossible. Local only — production's limit is its own setting.
+# ordinary QA impossible. Local only — production's limit lives in the hosted
+# auth config, raised to 30/hour when Resend took over sending (PLA-83).
 # Whether it binds at all here is unverified: the line above is Supabase's own
-# comment, and no custom SMTP is configured, so the built-in mailer may ignore
-# it. Two per hour is a trap not worth leaving armed either way.
+# comment, and locally no custom SMTP is configured (emails stay in Mailpit,
+# see [auth.email.smtp] below), so the built-in mailer may ignore it. Two per
+# hour is a trap not worth leaving armed either way.
 # PLA-70 has to test what the app does when a resend is REFUSED. If this limit
 # does bind, dropping it back to 2 for the length of that work reaches the
 # refusal far faster than pressing resend thirty times.
@@ -257,15 +259,21 @@ otp_length = 6
 # Number of seconds before the email OTP expires (defaults to 1 hour).
 otp_expiry = 3600
 
-# Use a production-ready SMTP server
+# Local email stays in Mailpit (http://127.0.0.1:55324) on purpose. QA signs up
+# with fake @example.com addresses, and pushing those through a real provider
+# would bounce them against planazo.me's sending reputation — and Mailpit would
+# stop capturing the codes the confirm flow (PLA-71) is tested with.
+# Production sends through Resend instead, configured in the hosted project's
+# auth settings (PLA-83), never from this file. For a one-off deliverability
+# test from the local stack, export RESEND_API_KEY and uncomment:
 # [auth.email.smtp]
 # enabled = true
-# host = "smtp.sendgrid.net"
+# host = "smtp.resend.com"
 # port = 587
-# user = "apikey"
-# pass = "env(SENDGRID_API_KEY)"
-# admin_email = "admin@email.com"
-# sender_name = "Admin"
+# user = "resend"
+# pass = "env(RESEND_API_KEY)"
+# admin_email = "no-reply@planazo.me"
+# sender_name = "Planazo"
 
 # Uncomment to customize email template
 # [auth.email.template.invite]
