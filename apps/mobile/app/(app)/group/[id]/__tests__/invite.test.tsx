@@ -101,14 +101,16 @@ beforeEach(() => {
 });
 
 describe('InviteToGroupSheet', () => {
+  // PLA-77: an https link, because `planazo://` was never tappable in the
+  // messengers people actually paste it into.
   it('shows the join link and copies it', async () => {
     await renderInvite();
 
-    expect(await screen.findByText('planazo://join/ABCD2345')).toBeTruthy();
+    expect(await screen.findByText('https://planazo.me/join/ABCD2345')).toBeTruthy();
 
     await fireEvent.press(screen.getByTestId('copy-link'));
     await waitFor(() =>
-      expect(Clipboard.setStringAsync).toHaveBeenCalledWith('planazo://join/ABCD2345')
+      expect(Clipboard.setStringAsync).toHaveBeenCalledWith('https://planazo.me/join/ABCD2345')
     );
     expect(await screen.findByText('Link copied ✓')).toBeTruthy();
   });

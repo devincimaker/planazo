@@ -4,6 +4,7 @@ import Index from '../index';
 import OnboardingScreen from '../onboarding';
 import { useAuthStore } from '../../stores/authStore';
 import { supabase } from '../../lib/supabase';
+import { stashPendingJoin, takePendingJoin } from '../../lib/pendingJoin';
 
 const mockReplace = jest.fn();
 
@@ -42,6 +43,8 @@ beforeEach(() => {
     update: update.mockReturnValue({ eq: jest.fn().mockResolvedValue({ error: null }) }),
   });
   useAuthStore.setState({ session: null, user: null, profile: null });
+  // Module state, so drain whatever the last test left behind.
+  takePendingJoin();
 });
 
 describe('the first-run gate', () => {
@@ -82,6 +85,57 @@ describe('the first-run gate', () => {
     // A row that failed to load is not evidence of a new account, and the
     // launch path has its own error state for that case.
     useAuthStore.setState({ session: SESSION, profile: null });
+
+    await render(<Index />);
+    jest.advanceTimersByTime(150);
+
+    expect(mockReplace).toHaveBeenCalledWith('/(app)/(tabs)');
+  });
+
+  /**
+   * PLA-77 arrives at the same junction. An invite link tapped without an
+   * account sends the person to sign up, holding the code; this is where it
+   * gets spent, rather than in login and signup, which would put the launch
+   * decision in three places instead of one.
+   */
+  it('finishes a waiting invite instead of the tabs', async () => {
+    useAuthStore.setState({ session: SESSION, profile: profileWith('2026-08-01T10:00:00Z') });
+    stashPendingJoin('ABCD2345');
+
+    await render(<Index />);
+    jest.advanceTimersByTime(150);
+
+    expect(mockReplace).toHaveBeenCalledWith('/(app)/join/ABCD2345');
+  });
+
+  /**
+   * They tapped a particular group, and answering that is what they came to
+   * do. The carousel is not lost: `onboarded_at` is still null, so the next
+   * launch comes back through here and shows it.
+   */
+  it('lets a waiting invite outrank the carousel', async () => {
+    useAuthStore.setState({ session: SESSION, profile: profileWith(null) });
+    stashPendingJoin('ABCD2345');
+
+    await render(<Index />);
+    jest.advanceTimersByTime(150);
+
+    expect(mockReplace).toHaveBeenCalledWith('/(app)/join/ABCD2345');
+    expect(mockReplace).not.toHaveBeenCalledWith('/onboarding');
+  });
+
+  it('spends the code, so the next launch lands normally', async () => {
+    useAuthStore.setState({ session: SESSION, profile: profileWith('2026-08-01T10:00:00Z') });
+    stashPendingJoin('ABCD2345');
+
+    await render(<Index />);
+    jest.advanceTimersByTime(150);
+
+    expect(takePendingJoin()).toBeNull();
+  });
+
+  it('leaves an ordinary launch alone when no invite is waiting', async () => {
+    useAuthStore.setState({ session: SESSION, profile: profileWith('2026-08-01T10:00:00Z') });
 
     await render(<Index />);
     jest.advanceTimersByTime(150);

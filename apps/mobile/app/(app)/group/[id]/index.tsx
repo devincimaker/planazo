@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { isPlanPast, planLastDate } from '@planazo/shared';
 import { supabase } from '../../../../lib/supabase';
 import { fmtDay, fmtTime } from '../../../../lib/dates';
+import { inviteLinkFor } from '../../../../lib/inviteCode';
 import { useAuthStore } from '../../../../stores/authStore';
 import { errorCopy, isNotFoundError } from '../../../../lib/queryErrors';
 import { usePullToRefresh } from '../../../../lib/usePullToRefresh';
@@ -31,7 +32,7 @@ import { colors, spacing } from '../../../../theme/tokens';
 
 export function shareInviteLink(groupName: string, inviteCode: string) {
   return Share.share({
-    message: `Join ${groupName} on Planazo: planazo://join/${inviteCode}`,
+    message: `Join ${groupName} on Planazo: ${inviteLinkFor(inviteCode)}`,
   }).catch(() => {});
 }
 

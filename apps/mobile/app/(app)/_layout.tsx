@@ -34,6 +34,9 @@ export default function AppLayout() {
           options={{ presentation: 'modal', headerShown: false }}
         />
         <Stack.Screen name="group/[id]" options={{ headerShown: false }} />
+        {/* Where an invite link lands (PLA-77). No header: it can be the first
+            screen of a cold launch, and "Back" would point at nothing. */}
+        <Stack.Screen name="join/[code]" options={{ headerShown: false }} />
         <Stack.Screen
           name="group/new"
           getId={({ params }) => JSON.stringify(params ?? {})}

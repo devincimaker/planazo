@@ -150,6 +150,53 @@ export const COPY = {
 
 export type Copy = (typeof COPY)[Lang];
 
+/**
+ * The invite page at /join/<code> (PLA-77).
+ *
+ * Only people *without* the app ever read this: iOS hands the link straight to
+ * Planazo for everyone who has it. So the whole page is one instruction, and
+ * step 2 is the honest part. iOS gives an app no way to recover a link that
+ * was tapped before it was installed, so the second tap is what carries the
+ * invite in. Saying so beats letting someone install, land on an empty signup
+ * and assume the link was broken.
+ */
+export const JOIN = {
+  en: {
+    eyebrow: 'Invitation',
+    title: "You've been invited to a group",
+    lede: 'Planazo is where a group makes plans that actually happen. Get the app and the invite is two taps away.',
+    steps: [
+      'Get Planazo and make your account.',
+      'Come back to this link and tap it again.',
+      "That's it, you're in the group.",
+    ],
+    cta: 'Get Planazo',
+    ctaSub: 'Free. iOS and Android.',
+    codeLabel: 'Or paste this code into the app',
+    backHome: 'What is Planazo?',
+    metaTitle: "You've been invited to Planazo",
+    metaDescription:
+      'Someone invited you to their group on Planazo. Get the app, tap the link again, and you are in.',
+  },
+  es: {
+    eyebrow: 'Invitación',
+    title: 'Te invitaron a un grupo',
+    lede: 'Planazo es donde un grupo arma planes que sí pasan. Bajate la app y entrás en dos toques.',
+    steps: [
+      'Bajate Planazo y creá tu cuenta.',
+      'Volvé a este link y tocalo de nuevo.',
+      'Listo, ya estás en el grupo.',
+    ],
+    cta: 'Bajate Planazo',
+    ctaSub: 'Gratis. iOS y Android.',
+    codeLabel: 'O pegá este código en la app',
+    backHome: '¿Qué es Planazo?',
+    metaTitle: 'Te invitaron a Planazo',
+    metaDescription:
+      'Alguien te invitó a su grupo en Planazo. Bajate la app, tocá el link de nuevo y listo.',
+  },
+} as const;
+
 /** Page <title> / meta description, kept out of the UI copy above. */
 export const META = {
   en: {
