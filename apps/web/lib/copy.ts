@@ -57,7 +57,7 @@ export const COPY = {
     waitNoteOn: "If a spot opens, it's yours. We'll tell you.",
 
     heroCta: 'Get Planazo',
-    heroCtaSub: 'Free. iOS and Android.',
+    heroCtaSub: 'Free. iOS beta.',
 
     proofTitle: 'Good ideas die in WhatsApp.',
     before: 'WhatsApp',
@@ -124,7 +124,7 @@ export const COPY = {
     waitNoteOn: 'Si se libera un lugar, es tuyo. Te avisamos.',
 
     heroCta: 'Bajate Planazo',
-    heroCtaSub: 'Gratis. iOS y Android.',
+    heroCtaSub: 'Gratis. En beta para iOS.',
 
     proofTitle: 'Las buenas ideas se mueren en WhatsApp.',
     before: 'WhatsApp',
@@ -171,7 +171,7 @@ export const JOIN = {
       "That's it, you're in the group.",
     ],
     cta: 'Get Planazo',
-    ctaSub: 'Free. iOS and Android.',
+    ctaSub: 'Free. iOS beta.',
     codeLabel: 'Or paste this code into the app',
     backHome: 'What is Planazo?',
     metaTitle: "You've been invited to Planazo",
@@ -188,7 +188,7 @@ export const JOIN = {
       'Listo, ya estás en el grupo.',
     ],
     cta: 'Bajate Planazo',
-    ctaSub: 'Gratis. iOS y Android.',
+    ctaSub: 'Gratis. En beta para iOS.',
     codeLabel: 'O pegá este código en la app',
     backHome: '¿Qué es Planazo?',
     metaTitle: 'Te invitaron a Planazo',
@@ -202,12 +202,12 @@ export const META = {
   en: {
     title: 'Planazo: Plans with friends that actually happen',
     description:
-      "Throw out the idea even without a date. Everyone marks the days they can do, and Planazo finds the one that works. Free on iOS and Android.",
+      'Throw out the idea even without a date. Everyone marks the days they can do, and Planazo finds the one that works. Free, in beta on iOS.',
   },
   es: {
     title: 'Planazo: Planes con amigos que sí pasan',
     description:
-      'Tirá la idea aunque no tengas fecha. Cada uno marca los días que puede y Planazo encuentra el que sirve. Gratis en iOS y Android.',
+      'Tirá la idea aunque no tengas fecha. Cada uno marca los días que puede y Planazo encuentra el que sirve. Gratis, en beta para iOS.',
   },
 } as const;
 

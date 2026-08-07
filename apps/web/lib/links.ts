@@ -1,18 +1,24 @@
 /**
  * Outbound destinations for every CTA on the site.
  *
- * The stores are placeholders until the app ships. Swap these two constants
- * (or set the env vars at build time) and every button on the page follows.
+ * `APP_STORE_URL` is the TestFlight public link for as long as Planazo is in
+ * beta: there is no store listing yet, and a product page that 404s is worse
+ * than an install that works. It matters most on /join, where it is the only
+ * way an invited person can get the app at all, and TestFlight builds do honour
+ * associated domains, so the invite still opens straight into Planazo on the
+ * second tap.
  *
- * Before release, `NEXT_PUBLIC_APP_STORE_URL` wants the TestFlight public link
- * (`https://testflight.apple.com/join/<code>`) rather than a product page that
- * 404s. That matters most on /join, where it is the only way an invited person
- * can get the app at all, and TestFlight builds do honour associated domains,
- * so the invite still opens straight into Planazo on the second tap.
+ * Swap it for the real listing at release. Either constant can also be
+ * overridden by its env var at build time, without a deploy of this file.
+ *
+ * The copy under every CTA says "beta para iOS" because of what is above.
+ * `heroCtaSub`, `JOIN.ctaSub` and `META.description` in `copy.ts` move together
+ * with this constant.
  */
 export const APP_STORE_URL =
-  process.env.NEXT_PUBLIC_APP_STORE_URL ?? 'https://apps.apple.com/app/planazo/id0000000000';
+  process.env.NEXT_PUBLIC_APP_STORE_URL ?? 'https://testflight.apple.com/join/QvZPr4zW';
 
+/** Nothing links here yet: there is no Android build to send anyone to. */
 export const PLAY_STORE_URL =
   process.env.NEXT_PUBLIC_PLAY_STORE_URL ??
   'https://play.google.com/store/apps/details?id=com.planazo.app';
