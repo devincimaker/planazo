@@ -27,9 +27,8 @@ interface Props {
 
 /**
  * The "Admins · N" card: who holds the role, and each one's way out of it.
- * With one admin left, the design dims the control rather than removing it:
- * the row keeps its shape, and the note under the card says why nothing
- * happens.
+ * With one admin left there is no control at all (never a disabled one);
+ * the note under the card says why, and what to do instead.
  */
 export function AdminsCard({ admins, myId, createdBy, viewerIsAdmin, disabled, onDemote }: Props) {
   const lastAdmin = admins.length <= 1;
@@ -54,20 +53,16 @@ export function AdminsCard({ admins, myId, createdBy, viewerIsAdmin, disabled, o
               </ThemedText>
               <ThemedText variant="caption">{adminSub(m.user_id, createdBy)}</ThemedText>
             </View>
-            {viewerIsAdmin ? (
+            {viewerIsAdmin && !lastAdmin ? (
               <Pressable
                 onPress={() => onDemote(m)}
-                disabled={lastAdmin || disabled}
+                disabled={disabled}
                 accessibilityRole="button"
                 accessibilityLabel={
                   m.user_id === myId ? 'Step down as admin' : `Remove ${nameOf(m)} as admin`
                 }
                 testID={`demote-${m.user_id}`}
-                style={({ pressed }) => [
-                  styles.demoteButton,
-                  pressed && styles.rowPressed,
-                  lastAdmin && styles.demoteDimmed,
-                ]}
+                style={({ pressed }) => [styles.demoteButton, pressed && styles.rowPressed]}
               >
                 <MinusRing color={colors.accentText} />
               </Pressable>
@@ -113,9 +108,6 @@ const styles = StyleSheet.create({
     minHeight: MIN_TOUCH_TARGET,
     minWidth: MIN_TOUCH_TARGET,
     borderRadius: radii.row,
-  },
-  demoteDimmed: {
-    opacity: 0.4,
   },
   rowPressed: {
     backgroundColor: colors.surfaceSunken,

@@ -170,16 +170,16 @@ describe('GroupAdminsScreen', () => {
     expect(roleWrite()!.eqs).toContainEqual(['user_id', 'me']);
   });
 
-  // The design dims the control instead of removing it; the note under the
-  // card carries the why, and the way out is promoting someone below.
-  it('the only admin cannot open the step-down sheet, and the note says why', async () => {
+  // Never a disabled control: the only admin gets no minus at all, and the
+  // note under the card carries the why. The way out is promoting someone
+  // below.
+  it('the only admin has no step-down control, and the note says why', async () => {
     await renderAdmins();
 
     const note = await screen.findByTestId('admins-note');
     expect(note).toHaveTextContent('A group needs at least one admin. Make someone else one first.');
 
-    await fireEvent.press(screen.getByTestId('demote-me'));
-    expect(screen.queryByText('Step down as admin?')).toBeNull();
+    expect(screen.queryByTestId('demote-me')).toBeNull();
     expect(roleWrite()).toBeNull();
 
     expect(screen.getByTestId('promote-u2')).toBeTruthy();
