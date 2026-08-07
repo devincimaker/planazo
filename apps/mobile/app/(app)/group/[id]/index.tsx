@@ -13,6 +13,7 @@ import { useQuery } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   flattenNestedOptions,
+  goingLabel,
   isPlanConfirmed,
   isPlanPast,
   planGoingCount,
@@ -93,8 +94,7 @@ export default function GroupDetailScreen() {
           ? `${fmtDay(p.event_date)} · ${fmtTime(p.event_date)}`
           : `${optionCount} date${optionCount === 1 ? '' : 's'} on the table`;
 
-      const meta =
-        going < p.min_people ? `${going} of ${p.min_people} needed` : `${going} going`;
+      const meta = goingLabel(going, p.min_people);
 
       // 19d: three endings, one Past section. A plan that happened keeps its
       // white card and the faces of who was there; the two non-events sink
@@ -110,7 +110,7 @@ export default function GroupDetailScreen() {
           p.cancelled_by === user?.id ? 'you' : p.canceller?.display_name ?? 'the host';
         endingLine = `Called off by ${who}`;
       } else if (past) {
-        const happened = p.status === 'locked' || isPlanConfirmed(planData);
+        const happened = isPlanConfirmed(planData);
         ending = happened ? 'happened' : 'expired';
         if (!happened) endingLine = `Didn't happen · ${going} of ${p.min_people}`;
       }

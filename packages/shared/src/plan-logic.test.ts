@@ -12,8 +12,10 @@ import {
   earliestViableDate,
   bestViableOption,
   isPlanConfirmed,
+  isVoteRunning,
+  goingLabel,
   planGoingCount,
-  planGoingUserIds,
+  planGoingPeople,
   isUserParticipating,
   needsUserResponse,
   planLastDate,
@@ -468,18 +470,49 @@ describe('isPlanConfirmed', () => {
   });
 });
 
-describe('planGoingCount', () => {
-  const threeDates: DateOption[] = [
-    { id: 'date-1', date: '2025-01-15' },
-    { id: 'date-2', date: '2025-01-16' },
-    { id: 'date-3', date: '2025-01-17' },
-  ];
-  const oneEach: Availability[] = [
-    { date_option_id: 'date-1', user_id: 'user-1' },
-    { date_option_id: 'date-2', user_id: 'user-2' },
-    { date_option_id: 'date-3', user_id: 'user-3' },
-  ];
+// Shared by planGoingCount and planGoingPeople below: three dates, three
+// people, and nobody free on the same evening as anybody else.
+const threeDates: DateOption[] = [
+  { id: 'date-1', date: '2025-01-15' },
+  { id: 'date-2', date: '2025-01-16' },
+  { id: 'date-3', date: '2025-01-17' },
+];
+const oneEach: Availability[] = [
+  { date_option_id: 'date-1', user_id: 'user-1' },
+  { date_option_id: 'date-2', user_id: 'user-2' },
+  { date_option_id: 'date-3', user_id: 'user-3' },
+];
 
+describe('isVoteRunning', () => {
+  it('is true only for a flexible plan still open', () => {
+    expect(isVoteRunning({ plan_type: 'flexible', status: 'open' })).toBe(true);
+    expect(isVoteRunning({ plan_type: 'flexible', status: 'locked' })).toBe(false);
+    expect(isVoteRunning({ plan_type: 'flexible', status: 'cancelled' })).toBe(false);
+    expect(isVoteRunning({ plan_type: 'fixed', status: 'open' })).toBe(false);
+    expect(isVoteRunning({ plan_type: 'fixed', status: 'locked' })).toBe(false);
+  });
+
+  it('treats a missing status as no vote running', () => {
+    expect(isVoteRunning({ plan_type: 'flexible' })).toBe(false);
+    expect(isVoteRunning({ plan_type: 'flexible', status: null })).toBe(false);
+  });
+});
+
+describe('goingLabel', () => {
+  it('counts up to the minimum, then says how many are going', () => {
+    expect(goingLabel(0, 3)).toBe('0 of 3 needed');
+    expect(goingLabel(2, 3)).toBe('2 of 3 needed');
+    expect(goingLabel(3, 3)).toBe('3 going');
+    expect(goingLabel(5, 3)).toBe('5 going');
+  });
+
+  it('reads sensibly at the edges', () => {
+    expect(goingLabel(1, 1)).toBe('1 going');
+    expect(goingLabel(0, 0)).toBe('0 going');
+  });
+});
+
+describe('planGoingCount', () => {
   it('counts yes-RSVPs on a fixed plan', () => {
     expect(
       planGoingCount({
@@ -516,15 +549,16 @@ describe('planGoingCount', () => {
   });
 
   it('is 1, not 3, when three people are each free on a different date', () => {
-    expect(
-      planGoingCount({
-        plan_type: 'flexible',
-        status: 'open',
-        min_people: 3,
-        dateOptions: threeDates,
-        availabilities: oneEach,
-      })
-    ).toBe(1);
+    const data = {
+      plan_type: 'flexible' as const,
+      status: 'open',
+      min_people: 3,
+      dateOptions: threeDates,
+      availabilities: oneEach,
+    };
+
+    expect(planGoingCount(data)).toBe(1);
+    expect(isPlanConfirmed(data)).toBe(false);
   });
 
   it('reports the best single date, not the union', () => {
@@ -558,21 +592,7 @@ describe('planGoingCount', () => {
     };
 
     expect(planGoingCount(data)).toBe(3);
-    expect(planGoingCount(data) >= data.min_people).toBe(true);
     expect(isPlanConfirmed(data)).toBe(true);
-  });
-
-  it('stays below the minimum exactly when isPlanConfirmed says no', () => {
-    const data = {
-      plan_type: 'flexible' as const,
-      status: 'open',
-      min_people: 3,
-      dateOptions: threeDates,
-      availabilities: oneEach,
-    };
-
-    expect(planGoingCount(data) < data.min_people).toBe(true);
-    expect(isPlanConfirmed(data)).toBe(false);
   });
 
   it('falls to the yes-count on a cancelled flexible plan', () => {
@@ -613,111 +633,136 @@ describe('planGoingCount', () => {
   });
 });
 
-describe('planGoingUserIds', () => {
-  const threeDates: DateOption[] = [
-    { id: 'date-1', date: '2025-01-15' },
-    { id: 'date-2', date: '2025-01-16' },
-    { id: 'date-3', date: '2025-01-17' },
-  ];
+describe('planGoingPeople', () => {
+  const named = (id: string, name: string) => ({ user_id: id, profile: { display_name: name } });
 
   it('is the union of everyone available while a flexible plan is open', () => {
     expect(
-      planGoingUserIds({
+      planGoingPeople({
         plan_type: 'flexible',
         status: 'open',
         min_people: 3,
         dateOptions: threeDates,
         availabilities: [
-          { date_option_id: 'date-1', user_id: 'user-1' },
-          { date_option_id: 'date-2', user_id: 'user-2' },
-          { date_option_id: 'date-3', user_id: 'user-3' },
+          { date_option_id: 'date-1', ...named('user-1', 'Marta') },
+          { date_option_id: 'date-2', ...named('user-2', 'Aina') },
+          { date_option_id: 'date-3', ...named('user-3', 'Pau') },
         ],
       })
-    ).toEqual(['user-1', 'user-2', 'user-3']);
+    ).toEqual([
+      { id: 'user-1', name: 'Marta' },
+      { id: 'user-2', name: 'Aina' },
+      { id: 'user-3', name: 'Pau' },
+    ]);
   });
 
   it('dedupes someone free on two dates, keeping first-seen order', () => {
     expect(
-      planGoingUserIds({
+      planGoingPeople({
         plan_type: 'flexible',
         status: 'open',
         min_people: 2,
         dateOptions: threeDates,
         availabilities: [
-          { date_option_id: 'date-1', user_id: 'user-2' },
-          { date_option_id: 'date-2', user_id: 'user-1' },
-          { date_option_id: 'date-3', user_id: 'user-2' },
+          { date_option_id: 'date-1', ...named('user-2', 'Aina') },
+          { date_option_id: 'date-2', ...named('user-1', 'Marta') },
+          { date_option_id: 'date-3', ...named('user-2', 'Aina') },
         ],
       })
-    ).toEqual(['user-2', 'user-1']);
+    ).toEqual([
+      { id: 'user-2', name: 'Aina' },
+      { id: 'user-1', name: 'Marta' },
+    ]);
   });
 
   it('ignores rsvps while a flexible plan is open', () => {
     expect(
-      planGoingUserIds({
+      planGoingPeople({
         plan_type: 'flexible',
         status: 'open',
         min_people: 2,
-        rsvps: [{ user_id: 'user-9', response: 'yes' }],
+        rsvps: [{ ...named('user-9', 'Nobody'), response: 'yes' }],
         dateOptions: threeDates,
-        availabilities: [{ date_option_id: 'date-1', user_id: 'user-1' }],
-      })
+        availabilities: [{ date_option_id: 'date-1', ...named('user-1', 'Marta') }],
+      }).map((p) => p.id)
     ).toEqual(['user-1']);
   });
 
   it('is the yes-RSVPs on a fixed plan, excluding no and pending', () => {
     expect(
-      planGoingUserIds({
+      planGoingPeople({
         plan_type: 'fixed',
         status: 'open',
         min_people: 2,
         rsvps: [
-          { user_id: 'user-1', response: 'yes' },
-          { user_id: 'user-2', response: 'no' },
-          { user_id: 'user-3', response: 'pending' },
-          { user_id: 'user-4', response: null },
-          { user_id: 'user-5', response: 'yes' },
+          { ...named('user-1', 'Marta'), response: 'yes' },
+          { ...named('user-2', 'Aina'), response: 'no' },
+          { ...named('user-3', 'Pau'), response: 'pending' },
+          { ...named('user-4', 'Lucia'), response: null },
+          { ...named('user-5', 'Alex'), response: 'yes' },
         ],
       })
-    ).toEqual(['user-1', 'user-5']);
+    ).toEqual([
+      { id: 'user-1', name: 'Marta' },
+      { id: 'user-5', name: 'Alex' },
+    ]);
   });
 
   it('is the yes-RSVPs on a locked flexible plan, not the availability union', () => {
     expect(
-      planGoingUserIds({
+      planGoingPeople({
         plan_type: 'flexible',
         status: 'locked',
         min_people: 2,
         rsvps: [
-          { user_id: 'user-1', response: 'yes' },
-          { user_id: 'user-2', response: 'no' },
+          { ...named('user-1', 'Marta'), response: 'yes' },
+          { ...named('user-2', 'Aina'), response: 'no' },
         ],
         dateOptions: threeDates,
         availabilities: [
-          { date_option_id: 'date-1', user_id: 'user-1' },
-          { date_option_id: 'date-2', user_id: 'user-2' },
-          { date_option_id: 'date-3', user_id: 'user-3' },
+          { date_option_id: 'date-1', ...named('user-1', 'Marta') },
+          { date_option_id: 'date-2', ...named('user-2', 'Aina') },
+          { date_option_id: 'date-3', ...named('user-3', 'Pau') },
         ],
       })
-    ).toEqual(['user-1']);
+    ).toEqual([{ id: 'user-1', name: 'Marta' }]);
+  });
+
+  it('falls back to ? when a row carries no profile', () => {
+    expect(
+      planGoingPeople({
+        plan_type: 'fixed',
+        status: 'open',
+        min_people: 2,
+        rsvps: [
+          { user_id: 'user-1', response: 'yes' },
+          { user_id: 'user-2', response: 'yes', profile: null },
+          { user_id: 'user-3', response: 'yes', profile: { display_name: null } },
+        ],
+      })
+    ).toEqual([
+      { id: 'user-1', name: '?' },
+      { id: 'user-2', name: '?' },
+      { id: 'user-3', name: '?' },
+    ]);
   });
 
   it('skips yes rows with no user_id', () => {
     expect(
-      planGoingUserIds({
+      planGoingPeople({
         plan_type: 'fixed',
         status: 'open',
         min_people: 2,
-        rsvps: [{ response: 'yes' }, { user_id: 'user-1', response: 'yes' }],
+        rsvps: [{ response: 'yes' }, { ...named('user-1', 'Marta'), response: 'yes' }],
       })
-    ).toEqual(['user-1']);
+    ).toEqual([{ id: 'user-1', name: 'Marta' }]);
   });
 
   it('is empty for empty or missing inputs', () => {
-    expect(planGoingUserIds({ plan_type: 'fixed', status: 'open', min_people: 2 })).toEqual([]);
-    expect(planGoingUserIds({ plan_type: 'flexible', status: 'open', min_people: 2 })).toEqual([]);
+    expect(planGoingPeople({ plan_type: 'fixed', status: 'open', min_people: 2 })).toEqual([]);
+    expect(planGoingPeople({ plan_type: 'flexible', status: 'open', min_people: 2 })).toEqual([]);
     expect(
-      planGoingUserIds({
+      planGoingPeople({
         plan_type: 'flexible',
         status: 'open',
         min_people: 2,

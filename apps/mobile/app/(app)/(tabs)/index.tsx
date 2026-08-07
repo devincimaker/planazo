@@ -19,9 +19,10 @@ import {
   isPlanConfirmed,
   isPlanFull,
   isPlanPast,
+  isVoteRunning,
   needsUserResponse,
   planGoingCount,
-  planGoingUserIds,
+  planGoingPeople,
   pollPeopleIn,
   pollVotedPhrase,
   waitlistPosition,
@@ -114,10 +115,10 @@ export default function FeedScreen() {
       const userRsvp = (plan.rsvps ?? []).find((r: any) => r.user_id === user?.id);
       const myDates = availabilities.filter((a) => a.user_id === user?.id).length;
       const countByDate = countAvailabilityByDate(dateOptions, availabilities);
-      // No live vote — either there never was one, or locking ended it. Both
-      // who's in and what you can answer then read the RSVP rows, so the two
-      // must be decided together or they drift apart.
-      const rsvpDriven = plan.plan_type === 'fixed' || plan.status === 'locked';
+      // No live vote — either there never was one, or locking ended it. What
+      // you can answer follows the same line as who counts, so the card's
+      // footer and its numbers can never describe two different plans.
+      const rsvpDriven = !isVoteRunning(planData);
 
       let when: string;
       if (plan.locked_date) {
@@ -129,21 +130,11 @@ export default function FeedScreen() {
       }
 
       // Two different populations, on purpose. The faces are everyone who has
-      // engaged: availability while the vote runs, yes-RSVPs once locked, so
-      // someone who withdraws actually leaves the stack. The number beside
-      // min_people is the best single date, because that is what decides
+      // engaged, so someone who withdraws actually leaves the stack. The number
+      // beside min_people is the best single date, because that is what decides
       // whether the plan is on. Three faces beside "1 of 3 needed" is honest.
       const goingCount = planGoingCount(planData);
-      const nameById = new Map<string, string>();
-      (plan.rsvps ?? []).forEach((r: any) => {
-        if (r.user_id) nameById.set(r.user_id, r.profile?.display_name ?? '?');
-      });
-      (plan.plan_date_options ?? []).forEach((opt: any) =>
-        (opt.date_availability ?? []).forEach((a: any) => {
-          nameById.set(a.user_id, a.profile?.display_name ?? '?');
-        })
-      );
-      const goingNames = planGoingUserIds(planData).map((id) => nameById.get(id) ?? '?');
+      const goingNames = planGoingPeople(planData).map((p) => p.name);
 
       const sortDate =
         plan.locked_date ?? plan.event_date ?? earliestViableDate(countByDate, plan.min_people);

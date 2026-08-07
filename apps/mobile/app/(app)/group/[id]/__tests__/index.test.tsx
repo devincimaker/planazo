@@ -210,19 +210,37 @@ describe('GroupDetailScreen', () => {
    * plan going nowhere, and the row used to call it "3 going" while the plan
    * screen said "3 more and it's on".
    */
-  const spreadThin = (days: number[]) => ({
+  const flexiblePlan = (plan_date_options: unknown[]) => ({
     plan_type: 'flexible',
     status: 'open',
     event_date: null,
     locked_date: null,
     min_people: 3,
     rsvps: [],
-    plan_date_options: days.map((d, i) => ({
-      id: `o${i + 1}`,
-      date: iso(d),
-      date_availability: [{ user_id: `u${i + 1}`, profile: { display_name: `P${i + 1}` } }],
-    })),
+    plan_date_options,
   });
+  const free = (id: string, name: string) => ({ user_id: id, profile: { display_name: name } });
+
+  /** One person per date, so no single evening ever has more than one. */
+  const spreadThin = (days: number[]) =>
+    flexiblePlan(
+      days.map((d, i) => ({
+        id: `o${i + 1}`,
+        date: iso(d),
+        date_availability: [free(`u${i + 1}`, `P${i + 1}`)],
+      }))
+    );
+
+  /** Three free on the lead day, one of them also free on the other. */
+  const threeOnOneDay = (leadDay: number, otherDay: number) =>
+    flexiblePlan([
+      {
+        id: 'o1',
+        date: iso(leadDay),
+        date_availability: [free('u1', 'Aina'), free('u2', 'Pau'), free('u3', 'Jordi')],
+      },
+      { id: 'o2', date: iso(otherDay), date_availability: [free('u1', 'Aina')] },
+    ]);
 
   it('counts the best single date, not everyone free on any date', async () => {
     group.plans = [{ ...spreadThin([3, 4, 5]), id: 'pf', title: 'Vermut algun dia' }];
@@ -246,31 +264,6 @@ describe('GroupDetailScreen', () => {
   });
 
   it('calls a flexible plan on once one date reaches the minimum', async () => {
-    const threeOnOneDay = (leadDay: number, otherDay: number) => ({
-      plan_type: 'flexible',
-      status: 'open',
-      event_date: null,
-      locked_date: null,
-      min_people: 3,
-      rsvps: [],
-      plan_date_options: [
-        {
-          id: 'o1',
-          date: iso(leadDay),
-          date_availability: [
-            { user_id: 'u1', profile: { display_name: 'Aina' } },
-            { user_id: 'u2', profile: { display_name: 'Pau' } },
-            { user_id: 'u3', profile: { display_name: 'Jordi' } },
-          ],
-        },
-        {
-          id: 'o2',
-          date: iso(otherDay),
-          date_availability: [{ user_id: 'u1', profile: { display_name: 'Aina' } }],
-        },
-      ],
-    });
-
     group.plans = [
       { ...threeOnOneDay(3, 4), id: 'pl', title: 'Calçotada' },
       { ...threeOnOneDay(-5, -4), id: 'pp', title: 'Calçotada passada' },

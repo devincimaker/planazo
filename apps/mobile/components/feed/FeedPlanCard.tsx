@@ -1,5 +1,5 @@
 import { View, StyleSheet, Pressable } from 'react-native';
-import { type RsvpResponse } from '@planazo/shared';
+import { goingLabel, type RsvpResponse } from '@planazo/shared';
 import {
   ThemedText,
   Card,
@@ -206,11 +206,7 @@ export function FeedPlanCard({
           <View style={styles.faces}>
             <AvatarStack
               names={item.goingNames}
-              label={
-                item.goingCount < plan.min_people
-                  ? `${item.goingCount} of ${plan.min_people} needed`
-                  : `${item.goingCount} going`
-              }
+              label={goingLabel(item.goingCount, plan.min_people)}
             />
           </View>
         ) : null}
