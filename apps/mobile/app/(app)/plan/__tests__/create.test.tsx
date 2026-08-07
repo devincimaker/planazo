@@ -2,6 +2,7 @@ import { StyleSheet } from 'react-native';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MIN_TOUCH_TARGET } from '../../../../lib/a11y';
+import { DISMISS_MS } from '../../../../lib/navigation';
 import CreatePlanScreen from '../create';
 import { useAuthStore } from '../../../../stores/authStore';
 import { supabase } from '../../../../lib/supabase';
@@ -400,6 +401,34 @@ describe('CreatePlanScreen', () => {
       response: 'yes',
     });
     expect(pollsChain.insert).not.toHaveBeenCalled();
+    // The plan it just made is where it goes, once the sheet is out of the way.
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/(app)/plan/new-plan'));
+  });
+
+  /**
+   * The posting counterpart of the cancel case above. `back()` is a no-op on a
+   * cold `planazo://plan/create`, so the old back-then-push-in-100ms pair left
+   * the sheet standing and pushed the new plan in behind it. A replace arrives
+   * on its own and must not also schedule the push.
+   */
+  it('replaces the sheet with the new plan when there is nothing to go back to', async () => {
+    mockCanGoBack = false;
+    // Asserting the timer was never *armed* beats sleeping past when it would
+    // have fired: same proof, no wall clock. Filtering on DISMISS_MS keeps
+    // react-query's own setTimeout(fn, 0) out of it.
+    const armed = jest.spyOn(globalThis, 'setTimeout');
+    await renderCreate();
+    await screen.findByTestId('group-g1');
+
+    await fireEvent.changeText(screen.getByTestId('title-input'), 'Padel + pizza');
+    await fireEvent.press(screen.getByTestId('cal-day-2026-08-07'));
+    await fireEvent.press(screen.getByTestId('post-cta'));
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/(app)/plan/new-plan'));
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(armed).not.toHaveBeenCalledWith(expect.any(Function), DISMISS_MS);
+    expect(mockPush).not.toHaveBeenCalled();
+    armed.mockRestore();
   });
 
   it('the question section starts collapsed and does not block a plain plan', async () => {

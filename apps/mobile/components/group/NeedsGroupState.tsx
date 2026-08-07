@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useDismissTo } from '../../lib/navigation';
+import { useLeaveFor } from '../../lib/navigation';
 import { EmptyState } from '../ui';
 
 const GROUPS_TAB = '/(app)/(tabs)/groups' as const;
@@ -26,20 +26,15 @@ export const NEEDS_GROUP_COPY = {
  */
 export function useGoToGroups(dismissFirst = false) {
   const router = useRouter();
-  const dismiss = useDismissTo(GROUPS_TAB);
+  // A tab is navigated to, never pushed: pushing one stacks a second copy.
+  const leaveForGroups = useLeaveFor('navigate');
 
   return () => {
     if (!dismissFirst) {
       router.navigate(GROUPS_TAB);
       return;
     }
-    // A dismissal that replaced the route has already arrived at the tab.
-    // One that popped a screen has not, and navigating before the sheet is
-    // gone lands the tab change behind it — the same ordering the new-group
-    // sheet needs after it creates one (group/new.tsx:101).
-    if (dismiss()) {
-      setTimeout(() => router.navigate(GROUPS_TAB), 100);
-    }
+    leaveForGroups(GROUPS_TAB);
   };
 }
 

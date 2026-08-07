@@ -1,7 +1,7 @@
 import { Alert } from 'react-native';
-import { useRouter } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from './supabase';
+import { useLeaveFor } from './navigation';
 import { contentViolation } from './moderation';
 import { submitPollDraft } from './usePlanPoll';
 import { pollDraftTouched, type PollDraft } from './pollDraft';
@@ -40,7 +40,7 @@ const localDate = (iso: string, h = 0, m = 0) => {
  * subscriber to whatever the screen last rendered.
  */
 export function useCreatePlan() {
-  const router = useRouter();
+  const leaveFor = useLeaveFor();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
 
@@ -110,8 +110,7 @@ export function useCreatePlan() {
     onSuccess: (plan, input) => {
       queryClient.invalidateQueries({ queryKey: ['home-plans'] });
       queryClient.invalidateQueries({ queryKey: ['group-plans', input.groupId] });
-      router.back();
-      setTimeout(() => router.push(`/(app)/plan/${plan.id}`), 100);
+      leaveFor(`/(app)/plan/${plan.id}`);
     },
     onError: (error: Error) => Alert.alert('Error', error.message),
   });

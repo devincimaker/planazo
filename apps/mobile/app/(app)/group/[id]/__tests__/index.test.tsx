@@ -5,6 +5,7 @@ import { MIN_TOUCH_TARGET } from '../../../../../lib/a11y';
 import GroupDetailScreen from '../index';
 import { useAuthStore } from '../../../../../stores/authStore';
 import { supabase } from '../../../../../lib/supabase';
+import { iso } from '../../../../../lib/testing/dates';
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
@@ -47,17 +48,6 @@ async function renderDetail() {
       <GroupDetailScreen />
     </QueryClientProvider>
   );
-}
-
-/**
- * ISO timestamp N days from today at the given hour, local time. Module scope
- * so every fixture can reach it: the group screen sorts upcoming plans away
- * from past ones, so a literal date silently changes what a test is asserting
- * the day after it passes.
- */
-function iso(days: number, hour = 19) {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate() + days, hour, 0, 0).toISOString();
 }
 
 beforeEach(() => {

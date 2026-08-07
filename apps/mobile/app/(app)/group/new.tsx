@@ -9,10 +9,11 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../../lib/supabase';
+import { useDismissTo, useLeaveFor } from '../../../lib/navigation';
 import { contentViolation } from '../../../lib/moderation';
 import { uploadGroupPhoto } from '../../../lib/images';
 import { captureError } from '../../../lib/sentry';
@@ -29,7 +30,8 @@ import {
 import { colors, fonts, groupColors, spacing, type } from '../../../theme/tokens';
 
 export default function NewGroupScreen() {
-  const router = useRouter();
+  const leaveFor = useLeaveFor();
+  const cancel = useDismissTo('/(app)/(tabs)');
   const queryClient = useQueryClient();
 
   // Params preseed the sheet for deep-link QA (same pattern as plan/create):
@@ -99,8 +101,7 @@ export default function NewGroupScreen() {
     },
     onSuccess: (group) => {
       queryClient.invalidateQueries({ queryKey: ['groups'] });
-      router.back();
-      setTimeout(() => router.push(`/(app)/group/${group.id}`), 100);
+      leaveFor(`/(app)/group/${group.id}`);
     },
     onError: (error: Error) => Alert.alert('Error', error.message),
   });
@@ -118,7 +119,7 @@ export default function NewGroupScreen() {
     <SafeAreaView style={styles.screen} edges={['top']}>
       <View style={styles.header}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={cancel}
           accessibilityRole="button"
           testID="cancel"
           style={styles.headerAction}

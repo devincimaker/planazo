@@ -6,6 +6,9 @@ import { supabase } from '../../../../lib/supabase';
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
+const mockReplace = jest.fn();
+/** False on a cold deep link: the sheet opens with nothing behind it. */
+let mockCanGoBack = true;
 let mockParams: Record<string, string | undefined> = {};
 
 jest.mock('../../../../lib/supabase', () => ({
@@ -13,7 +16,12 @@ jest.mock('../../../../lib/supabase', () => ({
 }));
 
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, back: mockBack }),
+  useRouter: () => ({
+    push: mockPush,
+    back: mockBack,
+    replace: mockReplace,
+    canGoBack: () => mockCanGoBack,
+  }),
   useLocalSearchParams: () => mockParams,
 }));
 
@@ -72,6 +80,7 @@ async function renderNew() {
 beforeEach(() => {
   jest.clearAllMocks();
   mockParams = {};
+  mockCanGoBack = true;
   primeSupabase();
   primeRpc();
   useAuthStore.setState({
@@ -123,6 +132,32 @@ describe('NewGroupScreen', () => {
       p_group_id: 'g-new',
       p_invitee: 'f2',
     });
+  });
+
+  /**
+   * `planazo://group/new` opens this sheet with nothing behind it (the params
+   * above exist for exactly that), so back() is a no-op there and the old
+   * back-then-push-in-100ms pair left the sheet up with the new group pushed
+   * in behind it. Cancel had the same hole.
+   */
+  it('replaces a deep-linked sheet instead of leaving it standing', async () => {
+    mockCanGoBack = false;
+    await renderNew();
+
+    await fireEvent.changeText(screen.getByTestId('name-input'), 'Cine');
+    await fireEvent.press(screen.getByText('Create group'));
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/(app)/group/g-new'));
+    expect(mockBack).not.toHaveBeenCalled();
+  });
+
+  it('cancels out of a deep-linked sheet that has no screen behind it', async () => {
+    mockCanGoBack = false;
+    await renderNew();
+
+    await fireEvent.press(screen.getByTestId('cancel'));
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockReplace).toHaveBeenCalledWith('/(app)/(tabs)');
   });
 
   it('deselecting via the chip drops the pick', async () => {

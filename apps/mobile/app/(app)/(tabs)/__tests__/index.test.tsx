@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import FeedScreen from '../index';
 import { useAuthStore } from '../../../../stores/authStore';
 import { supabase } from '../../../../lib/supabase';
+import { iso } from '../../../../lib/testing/dates';
 
 const mockPush = jest.fn();
 const mockNavigate = jest.fn();
@@ -33,19 +34,6 @@ function chain(result: unknown) {
   return c;
 }
 
-/** ISO timestamp N days from today at the given hour, local time. */
-function iso(daysFromNow: number, hour = 19) {
-  const now = new Date();
-  return new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate() + daysFromNow,
-    hour,
-    0,
-    0
-  ).toISOString();
-}
-
 const GROUP = { id: 'g1', name: 'Domingueros' };
 
 const fixedOpen = {
@@ -54,9 +42,6 @@ const fixedOpen = {
   plan_type: 'fixed',
   status: 'open',
   min_people: 3,
-  // Relative, like every other date here: the feed drops past plans, so a
-  // literal date turns this fixture invisible the morning after it passes and
-  // takes eleven tests with it.
   event_date: iso(2),
   location: 'Padel Indoor Gràcia',
   groups: GROUP,
@@ -89,9 +74,10 @@ const flexibleOpen = {
   description: 'Last time was humiliating',
   groups: { id: 'g2', name: 'Escapistas' },
   rsvps: [],
+  // An undated flexible plan is past once its *last* option day has gone.
   plan_date_options: [
-    { id: 'd1', date: '2026-08-13', date_availability: [{ user_id: 'u-aina', profile: { display_name: 'Aina' } }] },
-    { id: 'd2', date: '2026-08-14', date_availability: [] },
+    { id: 'd1', date: iso(7), date_availability: [{ user_id: 'u-aina', profile: { display_name: 'Aina' } }] },
+    { id: 'd2', date: iso(8), date_availability: [] },
   ],
 };
 

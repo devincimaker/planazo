@@ -4,6 +4,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import PlanDetailScreen from '../index';
 import { useAuthStore } from '../../../../../stores/authStore';
 import { supabase } from '../../../../../lib/supabase';
+import { fmtDay } from '../../../../../lib/dates';
+import { iso } from '../../../../../lib/testing/dates';
 import { chooseFromSheet, mockActionSheet, sheetOptions } from '../../../../../lib/testing/actionSheet';
 
 jest.mock('../../../../../lib/supabase', () => ({
@@ -116,19 +118,6 @@ function prime({
     return chain({ data: null, error: null });
   });
   mockRpc.mockResolvedValue({ data: {}, error: null });
-}
-
-/** ISO timestamp N days from today at the given hour, local time. */
-function iso(daysFromNow: number, hour = 19) {
-  const now = new Date();
-  return new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate() + daysFromNow,
-    hour,
-    0,
-    0
-  ).toISOString();
 }
 
 async function renderDetail() {
@@ -324,9 +313,11 @@ describe('PlanDetailScreen — fixed plans', () => {
 });
 
 describe('PlanDetailScreen — flexible plans', () => {
+  // The date picker is gated on !isPast, and isPast reads the *last* option
+  // date — so both of these have to stay ahead of today for vote-d1/d2 to exist.
   const options = [
-    { id: 'd1', date: '2026-08-13T12:00:00Z' },
-    { id: 'd2', date: '2026-08-14T12:00:00Z' },
+    { id: 'd1', date: iso(7, 12) },
+    { id: 'd2', date: iso(8, 12) },
   ];
 
   it('tracks the leading date in the headline and sends picked dates', async () => {
@@ -340,7 +331,12 @@ describe('PlanDetailScreen — flexible plans', () => {
     });
     await renderDetail();
 
-    await waitFor(() => expect(screen.getByText('1 more on Thu 13 Aug')).toBeTruthy());
+    // Same formatter the headline is built with (planDerived.ts:93), so this
+    // stays an assertion about *which* date leads rather than about the
+    // calendar the day it was written.
+    await waitFor(() =>
+      expect(screen.getByText(`1 more on ${fmtDay(options[0]!.date)}`)).toBeTruthy()
+    );
     expect(screen.getByText('Leading')).toBeTruthy();
     expect(screen.getByText('Tap the dates you can do')).toBeTruthy();
 
@@ -536,8 +532,8 @@ describe('PlanDetailScreen — flexible plans', () => {
         event_date: null,
       },
       options: [
-        { id: 'd3', date: '2026-08-20T12:00:00Z' },
-        { id: 'd4', date: '2026-08-21T12:00:00Z' },
+        { id: 'd3', date: iso(14, 12) },
+        { id: 'd4', date: iso(15, 12) },
       ],
     });
     mockParamId = 'plan-2';
@@ -596,7 +592,7 @@ describe('PlanDetailScreen — flexible plans', () => {
         ...basePlan,
         plan_type: 'flexible',
         status: 'locked',
-        locked_date: '2026-08-13T20:00:00Z',
+        locked_date: iso(7, 20),
         event_date: null,
         created_by: 'me',
       },

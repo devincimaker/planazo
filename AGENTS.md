@@ -281,18 +281,25 @@ itself.
 
 ### One test run at a time
 
-The mobile jest suite is ~460 tests and takes around three minutes, and it uses
-the whole machine while it does. **Two runs at once starve each other into
-timeouts**, and a timed-out suite reports as `FAIL` with a real-looking test
-name. Chasing those costs more than the run you were impatient about.
+The mobile jest suite is ~500 tests across ~55 suites, and it uses the whole
+machine while it runs. Healthy, that is **seconds**: about 6s locally and about
+40s on a CI runner. **Two runs at once starve each other into timeouts**, and a
+timed-out suite reports as `FAIL` with a real-looking test name. Chasing those
+costs more than the run you were impatient about.
+
+Those numbers are the point of the section, so keep them honest: a run measured
+in minutes is the symptom, never the baseline. Quoting a starved figure as
+normal is what teaches a reader to accept one.
 
 - **Never start a second run while one is in flight**, including "just this one
   file to see the failure". The answer is already in the first run's output.
 - **Don't pipe a gate through `tail` or `grep`** and throw the rest away. The
   failure detail is the whole reason you ran it. Let it print, or redirect the
   full output to a file you can read afterwards.
-- **A suite that took 30s yesterday and 200s today timed out**, it did not
-  break. Check what else is running before believing the failure.
+- **A suite that took 40s yesterday and 217s today timed out**, it did not
+  break. Those are both measured runs of the same green suite, five minutes
+  apart, and the only difference was a second run competing with it. Check what
+  else is running before believing the failure.
 
 ## Verification matches the change
 
