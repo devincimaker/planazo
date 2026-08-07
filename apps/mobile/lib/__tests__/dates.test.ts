@@ -1,4 +1,4 @@
-import { fmtDay, fmtTime } from '../dates';
+import { fmtDay, fmtTime, isoDate, isoOfDate } from '../dates';
 
 /**
  * fmtDay is "the one shape a date takes on cards, rows and notices", so this is
@@ -21,5 +21,27 @@ describe('fmtTime', () => {
   it('is 24-hour and zero-padded', () => {
     expect(fmtTime(new Date(2026, 6, 12, 18, 30).toISOString())).toBe('18:30');
     expect(fmtTime(new Date(2026, 6, 12, 9, 5).toISOString())).toBe('09:05');
+  });
+});
+
+describe('isoDate', () => {
+  it('zero-pads month and day', () => {
+    expect(isoDate(2026, 2, 5)).toBe('2026-03-05');
+  });
+
+  it('leaves two-digit month and day alone', () => {
+    expect(isoDate(2026, 11, 25)).toBe('2026-12-25');
+  });
+
+  it('orders correctly under string compare across a month boundary', () => {
+    // The calendar greys out past days with `iso < today` — this is the
+    // property that makes that comparison safe.
+    expect(isoDate(2026, 8, 30) < isoDate(2026, 9, 1)).toBe(true);
+  });
+});
+
+describe('isoOfDate', () => {
+  it('formats a local Date as YYYY-MM-DD', () => {
+    expect(isoOfDate(new Date(2026, 0, 9))).toBe('2026-01-09');
   });
 });
