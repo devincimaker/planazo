@@ -275,9 +275,11 @@ otp_expiry = 3600
 # for why the code beats the link.
 #
 # LOCAL ONLY. The hosted project keeps its own copy under Authentication →
-# Email Templates → Confirm signup, and nothing syncs the two: editing this
-# means pasting the same HTML there by hand, exactly like enable_confirmations
-# above.
+# Email Templates → Confirm signup, and nothing syncs the two, exactly like
+# enable_confirmations above. Production was brought in step by hand on
+# 2026-08-07, so the two agree today; every later edit here needs pasting there
+# again, or production signup goes back to mailing a link with no code in it
+# while the app sits on a screen asking for six digits.
 [auth.email.template.confirmation]
 subject = "Your Planazo code"
 content_path = "./supabase/templates/confirmation.html"
