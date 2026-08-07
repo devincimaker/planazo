@@ -262,10 +262,13 @@ itself.
 - **Unit/component tests** (jest in `apps/mobile`, vitest in `packages/shared`):
   no database at all. Run them anywhere, always.
 - **Integration tests**: `pnpm test:integration` from any checkout. On a
-  loopback stack a full run is ~2s; against a worktree's branch database ~40s.
+  loopback stack a full run is ~2s; against a worktree's branch database ~55s.
   Tests create their own UUID-namespaced users and groups and delete exactly
   what they created, so concurrent runs from different worktrees never collide
-  and nothing needs resetting between runs.
+  and nothing needs resetting between runs. The suite never calls the
+  rate-limited sign-in endpoint — actors' tokens are minted locally from the
+  stack's JWT secret (PLA-84) — so runs cannot be throttled, from any number
+  of worktrees at once.
 - The suite **refuses to run rather than lie**, with the fix in the message:
   - against a database this checkout doesn't own — only loopback or the
     worktree's own `PLANAZO_BRANCH_REF` are accepted, so production is

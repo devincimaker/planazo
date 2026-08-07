@@ -6,6 +6,14 @@ export interface Stack {
   url: string;
   anonKey: string;
   serviceRoleKey: string;
+  /**
+   * HS256 secret the stack's auth server signs access tokens with. The suite
+   * signs its own (testbed.ts) instead of calling the password-grant endpoint,
+   * whose rate limit on hosted projects is platform-level and unraisable
+   * (PLA-84). Same sensitivity class as serviceRoleKey, which can do strictly
+   * more.
+   */
+  jwtSecret: string;
   /** Direct Postgres URL for the same database, when known. Drift checks only. */
   dbUrl: string | null;
 }
@@ -155,6 +163,7 @@ export function resolveStack(): Stack {
   let url = process.env.SUPABASE_URL;
   let anonKey = process.env.SUPABASE_ANON_KEY;
   let serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  let jwtSecret = process.env.SUPABASE_JWT_SECRET ?? null;
   let dbUrl = process.env.SUPABASE_DB_URL ?? null;
 
   if (!url || !anonKey || !serviceRoleKey) {
@@ -163,6 +172,7 @@ export function resolveStack(): Stack {
       url = env.SUPABASE_URL;
       anonKey = env.SUPABASE_ANON_KEY;
       serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
+      jwtSecret = env.SUPABASE_JWT_SECRET ?? null;
       dbUrl = env.SUPABASE_DB_URL ?? null;
     } else {
       url = anonKey = serviceRoleKey = undefined;
@@ -179,6 +189,7 @@ export function resolveStack(): Stack {
     url = vars.API_URL;
     anonKey = vars.ANON_KEY;
     serviceRoleKey = vars.SERVICE_ROLE_KEY;
+    jwtSecret = vars.JWT_SECRET ?? null;
     dbUrl = vars.DB_URL ?? null;
   }
 
@@ -193,16 +204,31 @@ export function resolveStack(): Stack {
   assertAllowed(url, root);
   assertNoSchemaSkew(root);
 
-  // Loopback targets always have a queryable DB_URL via `supabase status`.
-  if (!dbUrl && isLoopback(url)) {
+  // Loopback targets can answer for their own DB_URL and JWT_SECRET via
+  // `supabase status` — an older .env (written before either key existed)
+  // is not a reason to refuse a run the stack itself can satisfy.
+  if ((!dbUrl || !jwtSecret) && isLoopback(url)) {
     try {
       const out = execSync('supabase status -o env', { encoding: 'utf8' });
-      dbUrl = out.match(/^DB_URL="(.*)"$/m)?.[1] ?? null;
+      dbUrl = dbUrl ?? (out.match(/^DB_URL="(.*)"$/m)?.[1] ?? null);
+      jwtSecret = jwtSecret ?? (out.match(/^JWT_SECRET="(.*)"$/m)?.[1] ?? null);
     } catch {
-      dbUrl = null;
+      // leave whatever we had; the checks below decide
     }
   }
 
-  cached = { url, anonKey, serviceRoleKey, dbUrl };
+  // A hosted branch has no equivalent fallback: the secret only travels through
+  // wt:setup, so a worktree provisioned before PLA-84 refuses with the fix
+  // rather than failing later inside a test file.
+  if (!jwtSecret) {
+    throw new Error(
+      `No SUPABASE_JWT_SECRET found for ${url}.\n` +
+        `The suite signs its own access tokens instead of calling the rate-limited\n` +
+        `auth endpoint, and needs the stack's JWT secret to do it.\n` +
+        `Re-run: pnpm wt:setup --db (rewrites this worktree's .env with the secret)`,
+    );
+  }
+
+  cached = { url, anonKey, serviceRoleKey, jwtSecret, dbUrl };
   return cached;
 }
