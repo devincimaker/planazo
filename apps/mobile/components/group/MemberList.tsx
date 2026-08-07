@@ -26,11 +26,20 @@ function BlockGlyph({ color }: { color: string }) {
   );
 }
 
-/** The "minus in a circle" glyph on the Remove action. */
-function RemoveGlyph({ color }: { color: string }) {
+/**
+ * The "minus in a circle" glyph on the Remove action, exported because the
+ * Admins screen's demote control is the same shape at 20pt. Sized styles are
+ * inline so one drawing serves both.
+ */
+export function RemoveGlyph({ color, size = 17 }: { color: string; size?: number }) {
   return (
-    <View style={[styles.glyphRing, styles.glyphRingCentred, { borderColor: color }]}>
-      <View style={[styles.glyphDash, { backgroundColor: color }]} />
+    <View
+      style={[
+        styles.glyphRingCentred,
+        { width: size, height: size, borderRadius: radii.pill, borderWidth: 1.5, borderColor: color },
+      ]}
+    >
+      <View style={{ width: Math.round(size * 0.45), height: 1.5, backgroundColor: color }} />
     </View>
   );
 }
@@ -44,8 +53,9 @@ function RemoveGlyph({ color }: { color: string }) {
  * on the screen was hiding inside the least likely thing to press. "Member"
  * is gone with it, being only the absence of admin and saying nothing.
  *
- * Promotion needs a real interaction of its own, and has none until PLA-50
- * gives it one.
+ * Promotion got its real interaction in PLA-50: the Admins screen, reached
+ * through the labelled "Admins" row in the "How it runs" card. This badge
+ * stays a badge.
  */
 function adminBadge(m: GroupMemberRow) {
   return m.role === 'admin' ? (
@@ -208,7 +218,9 @@ export function MemberList({
       </Card>
       {others.length > 0 ? (
         <ThemedText variant="caption" style={styles.swipeHint}>
-          Swipe a name for remove and block
+          {/* Non-admins only get Block in the swipe, so the hint must not
+              promise them Remove. */}
+          {isAdmin ? 'Swipe a name for remove and block' : 'Swipe a name to block'}
         </ThemedText>
       ) : null}
     </View>
@@ -321,9 +333,5 @@ const styles = StyleSheet.create({
     width: 16,
     height: 1.5,
     transform: [{ rotate: '-45deg' }],
-  },
-  glyphDash: {
-    width: 8,
-    height: 1.5,
   },
 });

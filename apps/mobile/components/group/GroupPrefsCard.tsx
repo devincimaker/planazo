@@ -13,7 +13,10 @@ interface Props {
   onNotify: (on: boolean) => void;
   notifyPending: boolean;
   isAdmin: boolean;
+  /** "Just you" or "N people run this group" — the Admins row's subtitle. */
+  adminSummary: string;
   onEditProfile: () => void;
+  onAdmins: () => void;
 }
 
 /** "How it runs": the two switches, plus the way in to the group profile. */
@@ -25,7 +28,9 @@ export function GroupPrefsCard({
   onNotify,
   notifyPending,
   isAdmin,
+  adminSummary,
   onEditProfile,
+  onAdmins,
 }: Props) {
   return (
     <View style={settingsStyles.section}>
@@ -49,21 +54,41 @@ export function GroupPrefsCard({
           testID="pref-notify"
         />
         {isAdmin ? (
-          <Pressable
-            style={({ pressed }) => [
-              settingsStyles.prefRow,
-              settingsStyles.divider,
-              pressed && styles.rowPressed,
-            ]}
-            onPress={onEditProfile}
-            accessibilityRole="button"
-            testID="edit-group"
-          >
-            <ThemedText variant="bodyStrong">Edit group profile</ThemedText>
-            <ThemedText variant="body" color={colors.textFaint}>
-              ›
-            </ThemedText>
-          </Pressable>
+          <>
+            <Pressable
+              style={({ pressed }) => [
+                settingsStyles.prefRow,
+                settingsStyles.divider,
+                pressed && styles.rowPressed,
+              ]}
+              onPress={onAdmins}
+              accessibilityRole="button"
+              testID="manage-admins"
+            >
+              <View style={styles.prefBody}>
+                <ThemedText variant="bodyStrong">Admins</ThemedText>
+                <ThemedText variant="caption">{adminSummary}</ThemedText>
+              </View>
+              <ThemedText variant="body" color={colors.textFaint}>
+                ›
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [
+                settingsStyles.prefRow,
+                settingsStyles.divider,
+                pressed && styles.rowPressed,
+              ]}
+              onPress={onEditProfile}
+              accessibilityRole="button"
+              testID="edit-group"
+            >
+              <ThemedText variant="bodyStrong">Edit group profile</ThemedText>
+              <ThemedText variant="body" color={colors.textFaint}>
+                ›
+              </ThemedText>
+            </Pressable>
+          </>
         ) : null}
       </Card>
     </View>
@@ -71,6 +96,10 @@ export function GroupPrefsCard({
 }
 
 const styles = StyleSheet.create({
+  prefBody: {
+    flex: 1,
+    gap: 3,
+  },
   rowPressed: {
     backgroundColor: colors.surfaceSunken,
   },

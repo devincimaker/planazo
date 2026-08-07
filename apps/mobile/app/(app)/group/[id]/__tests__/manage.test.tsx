@@ -148,9 +148,10 @@ describe('ManageGroupScreen', () => {
     expect(screen.getByTestId('admin-me')).toBeTruthy();
   });
 
-  // The badge says who runs the group. It is not a control, and there is no
-  // longer any tap on this screen that changes somebody's role — a status pill
-  // was never going to be discovered as the way to do it (PLA-50).
+  // The badge says who runs the group. It is not a control, and no tap on
+  // this screen changes somebody's role — a status pill was never going to be
+  // discovered as the way to do it. Role changes live on the Admins screen,
+  // behind the "Admins" row in "How it runs" (PLA-50).
   it('the admin badge marks admins only, and nothing on it is pressable', async () => {
     group.group_members[1].role = 'admin';
     await renderManage();
@@ -335,7 +336,7 @@ describe('ManageGroupScreen', () => {
     await waitFor(() => expect(removeCalls().length).toBeGreaterThan(0));
   });
 
-  it('members can block but not remove, and get no rename row', async () => {
+  it('members can block but not remove, and get no rename or admins row', async () => {
     group.group_members[0].role = 'member';
     await renderManage();
 
@@ -344,6 +345,37 @@ describe('ManageGroupScreen', () => {
       { name: 'block', label: 'Block' },
     ]);
     expect(screen.queryByTestId('edit-group')).toBeNull();
+    expect(screen.queryByTestId('manage-admins')).toBeNull();
+  });
+
+  it('the admins row opens the Admins screen, and its subtitle counts admins', async () => {
+    await renderManage();
+
+    // Sole admin: the subtitle speaks to the viewer directly.
+    expect(await screen.findByText('Just you')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('manage-admins'));
+
+    expect(mockPush).toHaveBeenCalledWith('/(app)/group/g1/admins');
+  });
+
+  it('with more admins the subtitle counts heads', async () => {
+    group.group_members[1].role = 'admin';
+    await renderManage();
+
+    expect(await screen.findByText('2 people run this group')).toBeTruthy();
+  });
+
+  // The swipe hint must only promise what the swipe will actually offer:
+  // non-admins get no Remove action.
+  it('the swipe hint matches what the viewer can do', async () => {
+    await renderManage();
+    expect(await screen.findByText('Swipe a name for remove and block')).toBeTruthy();
+  });
+
+  it('a non-admin viewer gets the block-only hint', async () => {
+    group.group_members[0].role = 'member';
+    await renderManage();
+    expect(await screen.findByText('Swipe a name to block')).toBeTruthy();
   });
 
   it('notify toggle goes through the RPC', async () => {
