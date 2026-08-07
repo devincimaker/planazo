@@ -228,6 +228,49 @@ export function isPlanConfirmed(data: PlanConfirmationData): boolean {
 }
 
 /**
+ * How many people count toward the plan happening — the number every surface
+ * renders beside min_people. Yes-RSVPs once the plan is fixed or locked;
+ * while a flexible plan is open, the best single date, because isPlanConfirmed
+ * only confirms when one date reaches the minimum. The union of everyone
+ * available on any date is planGoingUserIds's job, never this one's.
+ *
+ * The branch is `status === 'open'`, not `status !== 'locked'`: a cancelled
+ * flexible plan falls to the yes-count.
+ */
+export function planGoingCount(data: PlanConfirmationData): number {
+  if (data.plan_type === 'flexible' && data.status === 'open') {
+    const countByDate = countAvailabilityByDate(
+      data.dateOptions ?? [],
+      data.availabilities ?? []
+    );
+    return Object.values(countByDate).reduce((max, v) => Math.max(max, v.count), 0);
+  }
+  return getYesCount(data.rsvps);
+}
+
+/**
+ * Who has engaged with the plan, deduped, in first-seen row order — the faces
+ * row. Union of availability while a flexible plan is open (someone free on
+ * any date is interested), yes-RSVPs once fixed or locked.
+ *
+ * Deliberately wider than planGoingCount: a card can honestly show three faces
+ * beside "1 of 3 needed" when no date works for more than one of them.
+ */
+export function planGoingUserIds(data: PlanConfirmationData): string[] {
+  const ids = new Set<string>();
+
+  if (data.plan_type === 'flexible' && data.status === 'open') {
+    (data.availabilities ?? []).forEach((a) => ids.add(a.user_id));
+  } else {
+    (data.rsvps ?? []).forEach((r) => {
+      if (r.response === 'yes' && r.user_id) ids.add(r.user_id);
+    });
+  }
+
+  return [...ids];
+}
+
+/**
  * Whether the user has said yes (fixed) or marked any availability
  * (flexible).
  */

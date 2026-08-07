@@ -12,6 +12,8 @@ import {
   earliestViableDate,
   bestViableOption,
   isPlanConfirmed,
+  planGoingCount,
+  planGoingUserIds,
   isUserParticipating,
   needsUserResponse,
   planLastDate,
@@ -463,6 +465,267 @@ describe('isPlanConfirmed', () => {
     expect(
       isPlanConfirmed({ plan_type: 'flexible', status: 'open', min_people: 2 })
     ).toBe(false);
+  });
+});
+
+describe('planGoingCount', () => {
+  const threeDates: DateOption[] = [
+    { id: 'date-1', date: '2025-01-15' },
+    { id: 'date-2', date: '2025-01-16' },
+    { id: 'date-3', date: '2025-01-17' },
+  ];
+  const oneEach: Availability[] = [
+    { date_option_id: 'date-1', user_id: 'user-1' },
+    { date_option_id: 'date-2', user_id: 'user-2' },
+    { date_option_id: 'date-3', user_id: 'user-3' },
+  ];
+
+  it('counts yes-RSVPs on a fixed plan', () => {
+    expect(
+      planGoingCount({
+        plan_type: 'fixed',
+        status: 'open',
+        min_people: 3,
+        rsvps: [{ response: 'yes' }, { response: 'yes' }, { response: 'no' }],
+      })
+    ).toBe(2);
+  });
+
+  it('is zero for a fixed plan nobody has answered', () => {
+    expect(
+      planGoingCount({
+        plan_type: 'fixed',
+        status: 'open',
+        min_people: 3,
+        rsvps: [{ response: null }, { response: 'no' }],
+      })
+    ).toBe(0);
+  });
+
+  it('counts yes-RSVPs on a locked flexible plan, not the wider availability', () => {
+    expect(
+      planGoingCount({
+        plan_type: 'flexible',
+        status: 'locked',
+        min_people: 3,
+        rsvps: [{ response: 'yes' }, { response: 'no' }],
+        dateOptions: threeDates,
+        availabilities: oneEach,
+      })
+    ).toBe(1);
+  });
+
+  it('is 1, not 3, when three people are each free on a different date', () => {
+    expect(
+      planGoingCount({
+        plan_type: 'flexible',
+        status: 'open',
+        min_people: 3,
+        dateOptions: threeDates,
+        availabilities: oneEach,
+      })
+    ).toBe(1);
+  });
+
+  it('reports the best single date, not the union', () => {
+    expect(
+      planGoingCount({
+        plan_type: 'flexible',
+        status: 'open',
+        min_people: 3,
+        dateOptions: threeDates,
+        availabilities: [
+          { date_option_id: 'date-1', user_id: 'user-1' },
+          { date_option_id: 'date-1', user_id: 'user-2' },
+          { date_option_id: 'date-3', user_id: 'user-3' },
+        ],
+      })
+    ).toBe(2);
+  });
+
+  it('agrees with isPlanConfirmed once one date reaches the minimum', () => {
+    const data = {
+      plan_type: 'flexible' as const,
+      status: 'open',
+      min_people: 3,
+      dateOptions: threeDates,
+      availabilities: [
+        { date_option_id: 'date-2', user_id: 'user-1' },
+        { date_option_id: 'date-2', user_id: 'user-2' },
+        { date_option_id: 'date-2', user_id: 'user-3' },
+        { date_option_id: 'date-3', user_id: 'user-1' },
+      ],
+    };
+
+    expect(planGoingCount(data)).toBe(3);
+    expect(planGoingCount(data) >= data.min_people).toBe(true);
+    expect(isPlanConfirmed(data)).toBe(true);
+  });
+
+  it('stays below the minimum exactly when isPlanConfirmed says no', () => {
+    const data = {
+      plan_type: 'flexible' as const,
+      status: 'open',
+      min_people: 3,
+      dateOptions: threeDates,
+      availabilities: oneEach,
+    };
+
+    expect(planGoingCount(data) < data.min_people).toBe(true);
+    expect(isPlanConfirmed(data)).toBe(false);
+  });
+
+  it('falls to the yes-count on a cancelled flexible plan', () => {
+    expect(
+      planGoingCount({
+        plan_type: 'flexible',
+        status: 'cancelled',
+        min_people: 3,
+        rsvps: [{ response: 'yes' }, { response: 'yes' }],
+        dateOptions: threeDates,
+        availabilities: oneEach,
+      })
+    ).toBe(2);
+  });
+
+  it('is zero for empty or missing inputs', () => {
+    expect(planGoingCount({ plan_type: 'fixed', status: 'open', min_people: 2 })).toBe(0);
+    expect(planGoingCount({ plan_type: 'flexible', status: 'open', min_people: 2 })).toBe(0);
+    expect(
+      planGoingCount({
+        plan_type: 'flexible',
+        status: 'open',
+        min_people: 2,
+        rsvps: [],
+        dateOptions: [],
+        availabilities: [],
+      })
+    ).toBe(0);
+    expect(
+      planGoingCount({
+        plan_type: 'flexible',
+        status: 'open',
+        min_people: 2,
+        dateOptions: threeDates,
+        availabilities: [],
+      })
+    ).toBe(0);
+  });
+});
+
+describe('planGoingUserIds', () => {
+  const threeDates: DateOption[] = [
+    { id: 'date-1', date: '2025-01-15' },
+    { id: 'date-2', date: '2025-01-16' },
+    { id: 'date-3', date: '2025-01-17' },
+  ];
+
+  it('is the union of everyone available while a flexible plan is open', () => {
+    expect(
+      planGoingUserIds({
+        plan_type: 'flexible',
+        status: 'open',
+        min_people: 3,
+        dateOptions: threeDates,
+        availabilities: [
+          { date_option_id: 'date-1', user_id: 'user-1' },
+          { date_option_id: 'date-2', user_id: 'user-2' },
+          { date_option_id: 'date-3', user_id: 'user-3' },
+        ],
+      })
+    ).toEqual(['user-1', 'user-2', 'user-3']);
+  });
+
+  it('dedupes someone free on two dates, keeping first-seen order', () => {
+    expect(
+      planGoingUserIds({
+        plan_type: 'flexible',
+        status: 'open',
+        min_people: 2,
+        dateOptions: threeDates,
+        availabilities: [
+          { date_option_id: 'date-1', user_id: 'user-2' },
+          { date_option_id: 'date-2', user_id: 'user-1' },
+          { date_option_id: 'date-3', user_id: 'user-2' },
+        ],
+      })
+    ).toEqual(['user-2', 'user-1']);
+  });
+
+  it('ignores rsvps while a flexible plan is open', () => {
+    expect(
+      planGoingUserIds({
+        plan_type: 'flexible',
+        status: 'open',
+        min_people: 2,
+        rsvps: [{ user_id: 'user-9', response: 'yes' }],
+        dateOptions: threeDates,
+        availabilities: [{ date_option_id: 'date-1', user_id: 'user-1' }],
+      })
+    ).toEqual(['user-1']);
+  });
+
+  it('is the yes-RSVPs on a fixed plan, excluding no and pending', () => {
+    expect(
+      planGoingUserIds({
+        plan_type: 'fixed',
+        status: 'open',
+        min_people: 2,
+        rsvps: [
+          { user_id: 'user-1', response: 'yes' },
+          { user_id: 'user-2', response: 'no' },
+          { user_id: 'user-3', response: 'pending' },
+          { user_id: 'user-4', response: null },
+          { user_id: 'user-5', response: 'yes' },
+        ],
+      })
+    ).toEqual(['user-1', 'user-5']);
+  });
+
+  it('is the yes-RSVPs on a locked flexible plan, not the availability union', () => {
+    expect(
+      planGoingUserIds({
+        plan_type: 'flexible',
+        status: 'locked',
+        min_people: 2,
+        rsvps: [
+          { user_id: 'user-1', response: 'yes' },
+          { user_id: 'user-2', response: 'no' },
+        ],
+        dateOptions: threeDates,
+        availabilities: [
+          { date_option_id: 'date-1', user_id: 'user-1' },
+          { date_option_id: 'date-2', user_id: 'user-2' },
+          { date_option_id: 'date-3', user_id: 'user-3' },
+        ],
+      })
+    ).toEqual(['user-1']);
+  });
+
+  it('skips yes rows with no user_id', () => {
+    expect(
+      planGoingUserIds({
+        plan_type: 'fixed',
+        status: 'open',
+        min_people: 2,
+        rsvps: [{ response: 'yes' }, { user_id: 'user-1', response: 'yes' }],
+      })
+    ).toEqual(['user-1']);
+  });
+
+  it('is empty for empty or missing inputs', () => {
+    expect(planGoingUserIds({ plan_type: 'fixed', status: 'open', min_people: 2 })).toEqual([]);
+    expect(planGoingUserIds({ plan_type: 'flexible', status: 'open', min_people: 2 })).toEqual([]);
+    expect(
+      planGoingUserIds({
+        plan_type: 'flexible',
+        status: 'open',
+        min_people: 2,
+        rsvps: [],
+        dateOptions: [],
+        availabilities: [],
+      })
+    ).toEqual([]);
   });
 });
 

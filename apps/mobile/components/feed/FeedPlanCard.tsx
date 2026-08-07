@@ -34,7 +34,10 @@ export interface FeedPlan {
   waitPosition: number | null;
   myDates: number;
   when: string;
+  /** Everyone who has engaged — the faces. Wider than goingCount by design. */
   goingNames: string[];
+  /** What min_people is measured against: the best single date, or yes-RSVPs. */
+  goingCount: number;
   dateOptions: { id: string; date: string }[];
   countByDate: Record<string, { count: number; date: string }>;
 }
@@ -204,9 +207,9 @@ export function FeedPlanCard({
             <AvatarStack
               names={item.goingNames}
               label={
-                item.goingNames.length < plan.min_people
-                  ? `${item.goingNames.length} of ${plan.min_people} needed`
-                  : `${item.goingNames.length} going`
+                item.goingCount < plan.min_people
+                  ? `${item.goingCount} of ${plan.min_people} needed`
+                  : `${item.goingCount} going`
               }
             />
           </View>
