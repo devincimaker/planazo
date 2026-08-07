@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { inviteCodeFrom } from '../../lib/inviteCode';
+import { requestedBlurb, requestedTitle } from '../../lib/groupDoor';
 import { MIN_TOUCH_TARGET } from '../../lib/a11y';
 import { GroupTiles } from './GroupTiles';
 import { ThemedText, Button } from '../ui';
@@ -42,10 +43,7 @@ export function GroupsEmptyState() {
       // is no group to open yet. Same words whether this is a first ask or one
       // that was quietly turned down before (PLA-49).
       if (group.status === 'requested') {
-        Alert.alert(
-          `You’ve asked to join ${group.name}`,
-          'An admin has your request. You’ll hear the moment they let you in.'
-        );
+        Alert.alert(requestedTitle(group.name), requestedBlurb());
         return;
       }
       queryClient.invalidateQueries({ queryKey: ['groups'] });

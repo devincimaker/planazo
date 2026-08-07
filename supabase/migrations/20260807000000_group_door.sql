@@ -183,24 +183,17 @@ BEGIN
     RAISE EXCEPTION 'Not authenticated';
   END IF;
 
+  -- Membership answers the nonexistent-group case too: group_members.group_id
+  -- is a foreign key, so a group that is not there has no members either, and
+  -- one message covers both. Deliberately the same message either way — whether
+  -- a group exists is not something this function should confirm.
+  IF NOT public.is_group_member(p_group_id) THEN
+    RAISE EXCEPTION 'Not a member of this group';
+  END IF;
+
   SELECT * INTO v_group FROM public.groups WHERE id = p_group_id;
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'Not a member of this group';
-  END IF;
 
-  IF NOT EXISTS (
-    SELECT 1 FROM public.group_members
-    WHERE group_id = p_group_id AND user_id = v_uid
-  ) THEN
-    -- Deliberately the same message a real non-member gets: whether a group
-    -- exists is not something this function should confirm.
-    RAISE EXCEPTION 'Not a member of this group';
-  END IF;
-
-  IF v_group.who_can_invite = 'admins' AND NOT EXISTS (
-    SELECT 1 FROM public.group_members
-    WHERE group_id = p_group_id AND user_id = v_uid AND role = 'admin'
-  ) THEN
+  IF v_group.who_can_invite = 'admins' AND NOT public.is_group_admin(p_group_id) THEN
     RAISE EXCEPTION 'Only admins can invite to this group';
   END IF;
 
@@ -262,10 +255,7 @@ BEGIN
     RAISE EXCEPTION 'Not authenticated';
   END IF;
 
-  IF NOT EXISTS (
-    SELECT 1 FROM public.group_members
-    WHERE group_id = p_group_id AND user_id = v_uid AND role = 'admin'
-  ) THEN
+  IF NOT public.is_group_admin(p_group_id) THEN
     RAISE EXCEPTION 'Only admins can reset the invite link';
   END IF;
 
@@ -306,10 +296,7 @@ BEGIN
     RAISE EXCEPTION 'Not authenticated';
   END IF;
 
-  IF NOT EXISTS (
-    SELECT 1 FROM public.group_members
-    WHERE group_id = p_group_id AND user_id = v_uid AND role = 'admin'
-  ) THEN
+  IF NOT public.is_group_admin(p_group_id) THEN
     RAISE EXCEPTION 'Only admins can remove members';
   END IF;
 
@@ -398,10 +385,7 @@ BEGIN
     RETURN jsonb_build_object('status', 'not_found');
   END IF;
 
-  IF EXISTS (
-    SELECT 1 FROM public.group_members
-    WHERE group_id = v_group.id AND user_id = v_uid
-  ) THEN
+  IF public.is_group_member(v_group.id) THEN
     RETURN jsonb_build_object(
       'status', 'already_member', 'group_id', v_group.id, 'name', v_group.name
     );
@@ -501,10 +485,7 @@ BEGIN
     RAISE EXCEPTION 'Not authenticated';
   END IF;
 
-  IF NOT EXISTS (
-    SELECT 1 FROM public.group_members
-    WHERE group_id = p_group_id AND user_id = v_uid AND role = 'admin'
-  ) THEN
+  IF NOT public.is_group_admin(p_group_id) THEN
     RAISE EXCEPTION 'Only admins can answer join requests';
   END IF;
 
@@ -572,18 +553,12 @@ BEGIN
   IF v_uid IS NULL THEN
     RAISE EXCEPTION 'Not authenticated';
   END IF;
-  IF NOT EXISTS (
-    SELECT 1 FROM public.group_members
-    WHERE group_id = p_group_id AND user_id = v_uid
-  ) THEN
+  IF NOT public.is_group_member(p_group_id) THEN
     RAISE EXCEPTION 'Only members can invite';
   END IF;
 
   SELECT who_can_invite INTO v_who_can_invite FROM public.groups WHERE id = p_group_id;
-  IF v_who_can_invite = 'admins' AND NOT EXISTS (
-    SELECT 1 FROM public.group_members
-    WHERE group_id = p_group_id AND user_id = v_uid AND role = 'admin'
-  ) THEN
+  IF v_who_can_invite = 'admins' AND NOT public.is_group_admin(p_group_id) THEN
     RAISE EXCEPTION 'Only admins can invite to this group';
   END IF;
 
@@ -704,13 +679,15 @@ BEGIN
     RAISE EXCEPTION 'Not authenticated';
   END IF;
 
-  IF NOT EXISTS (
-    SELECT 1 FROM public.group_members
-    WHERE group_id = p_group_id AND user_id = v_uid AND role = 'admin'
-  ) THEN
+  IF NOT public.is_group_admin(p_group_id) THEN
     RAISE EXCEPTION 'Only admins can change these settings';
   END IF;
 
+  -- The column CHECKs in section 1 are what actually hold these two values to
+  -- their vocabulary, for every writer including a future one that skips this
+  -- function. These two tests only buy a sentence a person can read instead of
+  -- a constraint-violation dump, so if a third value is ever added it is added
+  -- to the CHECK first and these follow.
   IF p_who_can_invite IS NOT NULL AND p_who_can_invite NOT IN ('members', 'admins') THEN
     RAISE EXCEPTION 'who_can_invite must be members or admins';
   END IF;

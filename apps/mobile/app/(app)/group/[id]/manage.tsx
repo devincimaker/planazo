@@ -64,12 +64,15 @@ export default function ManageGroupScreen() {
 
   // Read off the query rather than the sorted rows further down, because the
   // hooks that need it run before the loading guard those rows sit behind.
-  const isAdmin = ((group?.group_members ?? []) as GroupMemberRow[]).some(
-    (m) => m.user_id === user?.id && m.role === 'admin'
+  // One identification of "me", so the Invite button and the door dials can
+  // never disagree about who is looking at them.
+  const me = ((group?.group_members ?? []) as GroupMemberRow[]).find(
+    (m) => m.user_id === user?.id
   );
+  const isAdmin = me?.role === 'admin';
 
   const { requests, respond, answeringId } = useJoinRequests(String(id), isAdmin);
-  const setDoor = useDoorSettings(String(id), invalidate);
+  const setDoor = useDoorSettings(String(id));
 
   // Who this user has shut out (the shield rule: those people no longer see
   // this user's plans). Only ever their own list — RLS on blocked_users makes
@@ -193,7 +196,6 @@ export default function ManageGroupScreen() {
   const members = [...((group.group_members ?? []) as GroupMemberRow[])].sort((a, b) =>
     (a.joined_at ?? '').localeCompare(b.joined_at ?? '')
   );
-  const me = members.find((m) => m.user_id === user?.id);
   // Dropping the pending one is what usePendingRemoval's id is for.
   const others = members.filter(
     (m) => m.user_id !== user?.id && m.user_id !== pendingRemovalId

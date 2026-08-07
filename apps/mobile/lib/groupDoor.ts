@@ -65,3 +65,38 @@ export function joinBlurb(joinMode: string | null | undefined): string {
     ? 'An admin has to let you in. They get your request the moment you send it.'
     : 'Join and you’ll see their plans, and they’ll see yours.';
 }
+
+/**
+ * What a requester is told once the ask is filed.
+ *
+ * Said the same way by the deep-link screen and by the paste-a-code field, and
+ * said the same way whether this is a first ask or one that was quietly turned
+ * down before: a decline is never announced (PLA-49).
+ */
+export const requestedEyebrow = 'You’ve asked to join';
+
+export function requestedTitle(groupName: string): string {
+  return `${requestedEyebrow} ${groupName}`;
+}
+
+export function requestedBlurb(): string {
+  return 'An admin has your request. You’ll hear the moment they let you in.';
+}
+
+/**
+ * Why the invite sheet has no link to show.
+ *
+ * In the app's own voice, because the alternative is rendering
+ * `get_group_invite_code`'s `RAISE EXCEPTION` text: a sentence written for a
+ * developer, outside the em-dash lint and outside every copy test, and one
+ * that a dropped connection turns into a transport error dressed up as an
+ * explanation of the group's door.
+ */
+export function linkUnavailable(
+  whoCanInvite: string | null | undefined,
+  role: GroupRole | null | undefined,
+): string {
+  return canInvite(whoCanInvite, role)
+    ? 'The link isn’t loading right now. Check your connection and try again.'
+    : 'Only admins can hand out a link to this group.';
+}

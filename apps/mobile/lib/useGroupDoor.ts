@@ -60,10 +60,13 @@ export function useJoinRequests(groupId: string, enabled: boolean) {
       });
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_result, { approve }) => {
       queryClient.invalidateQueries({ queryKey: joinRequestsKey(groupId) });
       // Approving seats a member, so the roster the manage screen is showing
-      // is now a row short of the truth.
+      // is now a row short of the truth. Declining moves one invite row and
+      // touches nothing else, so it refetches nothing else: the group detail
+      // query carries every plan, RSVP and date option in the group.
+      if (!approve) return;
       queryClient.invalidateQueries({ queryKey: ['group-manage', groupId] });
       queryClient.invalidateQueries({ queryKey: ['group', groupId] });
     },
@@ -82,8 +85,14 @@ export function useJoinRequests(groupId: string, enabled: boolean) {
  * The two settings themselves. One dial per call, because they are independent
  * switches on one row and `update_group_door` writes only what it is passed —
  * sending both would let a stale copy of one ride along with the other.
+ *
+ * It invalidates its own keys rather than taking the screen's catch-all: the
+ * door decides who sees an Invite button on the group's own screen, and it
+ * decides nothing at all about the groups list.
  */
-export function useDoorSettings(groupId: string, onSettled: () => void) {
+export function useDoorSettings(groupId: string) {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async (door: { whoCanInvite?: WhoCanInvite; joinMode?: JoinMode }) => {
       const { error } = await supabase.rpc('update_group_door', {
@@ -93,7 +102,10 @@ export function useDoorSettings(groupId: string, onSettled: () => void) {
       });
       if (error) throw error;
     },
-    onSuccess: onSettled,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['group-manage', groupId] });
+      queryClient.invalidateQueries({ queryKey: ['group', groupId] });
+    },
     onError: (error: Error) => Alert.alert('Error', error.message),
   });
 }

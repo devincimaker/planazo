@@ -1,11 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../../lib/supabase';
 import { stashPendingJoin } from '../../../lib/pendingJoin';
-import { joinBlurb, joinLabel, joinPendingLabel } from '../../../lib/groupDoor';
+import {
+  joinBlurb,
+  joinLabel,
+  joinPendingLabel,
+  requestedBlurb,
+  requestedEyebrow,
+} from '../../../lib/groupDoor';
 import { useAuthStore } from '../../../stores/authStore';
 import { ThemedText, Button, GroupTile, ErrorState } from '../../../components/ui';
 import { colors, spacing } from '../../../theme/tokens';
@@ -29,10 +35,6 @@ export default function JoinByInviteScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { session } = useAuthStore();
-  // Sent, and now waiting on an admin. Deliberately the same screen whether
-  // this is the first ask or one that was quietly turned down before: a
-  // decline is never announced (PLA-49).
-  const [asked, setAsked] = useState(false);
 
   // Normalised, not validated. What counts as a real code is the database's
   // rule, and it already answers with `not_found`; a second copy of the rule
@@ -81,10 +83,9 @@ export default function JoinByInviteScreen() {
         void preview.refetch();
         return;
       }
-      if (result.status === 'requested') {
-        setAsked(true);
-        return;
-      }
+      // Nothing to do but stop: the mutation's own result is what puts the
+      // screen into its asked state below.
+      if (result.status === 'requested') return;
       // 'already_member' lands in the same place as 'joined'. Being told you
       // were already in a group you just asked to join is a correction nobody
       // needs; the group appearing is the answer.
@@ -94,6 +95,12 @@ export default function JoinByInviteScreen() {
   });
 
   const goToFeed = () => router.replace('/(app)/(tabs)');
+
+  // Sent, and now waiting on an admin. Read off the mutation rather than kept
+  // alongside it, and deliberately the same screen whether this is the first
+  // ask or one that was quietly turned down before: a decline is never
+  // announced (PLA-49).
+  const asked = join.data?.status === 'requested';
 
   if (!signedIn) {
     return <Loading />;
@@ -132,44 +139,29 @@ export default function JoinByInviteScreen() {
     return <Loading />;
   }
 
-  if (asked) {
-    return (
-      <Screen>
-        <View style={styles.card} testID="join-requested">
-          <GroupTile name={preview.data.name} size={72} />
-          <View style={styles.titleBlock}>
-            <ThemedText variant="sectionLabel" color={colors.textMuted}>
-              You’ve asked to join
-            </ThemedText>
-            <ThemedText variant="screenTitle" style={styles.name}>
-              {preview.data.name}
-            </ThemedText>
-          </View>
-          <ThemedText variant="body" color={colors.textSecondary} style={styles.blurb}>
-            An admin has your request. You’ll hear the moment they let you in.
-          </ThemedText>
-        </View>
-        <Button label="Go to my plans" onPress={goToFeed} testID="join-requested-done" />
-      </Screen>
-    );
-  }
-
+  // One card, two things it can say. The layout is identical either side of
+  // the ask, and only the footer changes: a card written out twice drifts the
+  // first time either half is restyled.
   return (
     <Screen>
-      <View style={styles.card} testID="join-preview">
+      <View style={styles.card} testID={asked ? 'join-requested' : 'join-preview'}>
         <GroupTile name={preview.data.name} size={72} />
         <View style={styles.titleBlock}>
           <ThemedText variant="sectionLabel" color={colors.textMuted}>
-            You’ve been invited to
+            {asked ? requestedEyebrow : 'You’ve been invited to'}
           </ThemedText>
           <ThemedText variant="screenTitle" style={styles.name}>
             {preview.data.name}
           </ThemedText>
         </View>
         <ThemedText variant="body" color={colors.textSecondary} style={styles.blurb}>
-          {joinBlurb(preview.data.join_mode)}
+          {asked ? requestedBlurb() : joinBlurb(preview.data.join_mode)}
         </ThemedText>
       </View>
+
+      {asked ? (
+        <Button label="Go to my plans" onPress={goToFeed} testID="join-requested-done" />
+      ) : null}
 
       {join.isError ? (
         <ThemedText
@@ -183,19 +175,21 @@ export default function JoinByInviteScreen() {
         </ThemedText>
       ) : null}
 
-      <View style={styles.actions}>
-        <Button
-          label={
-            join.isPending
-              ? joinPendingLabel(preview.data.join_mode)
-              : joinLabel(preview.data.join_mode, preview.data.name)
-          }
-          disabled={join.isPending}
-          onPress={() => join.mutate()}
-          testID="join-group"
-        />
-        <Button label="Not now" variant="secondary" onPress={goToFeed} testID="join-decline" />
-      </View>
+      {asked ? null : (
+        <View style={styles.actions}>
+          <Button
+            label={
+              join.isPending
+                ? joinPendingLabel(preview.data.join_mode)
+                : joinLabel(preview.data.join_mode, preview.data.name)
+            }
+            disabled={join.isPending}
+            onPress={() => join.mutate()}
+            testID="join-group"
+          />
+          <Button label="Not now" variant="secondary" onPress={goToFeed} testID="join-decline" />
+        </View>
+      )}
     </Screen>
   );
 }

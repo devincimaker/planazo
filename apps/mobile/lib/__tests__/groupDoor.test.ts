@@ -5,6 +5,10 @@ import {
   joinModeOf,
   joinPendingLabel,
   linkBlurb,
+  linkUnavailable,
+  requestedBlurb,
+  requestedEyebrow,
+  requestedTitle,
   whoCanInviteOf,
 } from '../groupDoor';
 
@@ -67,18 +71,56 @@ describe('the copy', () => {
     expect(joinBlurb('approval')).toMatch(/An admin has to let you in/);
   });
 
-  // The house rule: every one of these strings reaches a user.
-  it('uses no em dash anywhere', () => {
-    const all = [
-      linkBlurb('open'),
-      linkBlurb('approval'),
-      joinLabel('open', 'X'),
-      joinLabel('approval', 'X'),
-      joinPendingLabel('open'),
-      joinPendingLabel('approval'),
-      joinBlurb('open'),
-      joinBlurb('approval'),
-    ];
-    expect(all.some((s) => s.includes('—'))).toBe(false);
+  // The deep-link screen shows the eyebrow above the group's name; the paste-a-
+  // code alert has only a title and has to carry both. Same sentence either way,
+  // which is what the shared constant is for.
+  it('says the ask is filed the same way on both surfaces', () => {
+    expect(requestedTitle('Piso Gràcia')).toBe(`${requestedEyebrow} Piso Gràcia`);
+    expect(requestedTitle('Piso Gràcia')).toBe('You’ve asked to join Piso Gràcia');
   });
+
+  // Deliberately a constant answer and not a function of anything: a decline is
+  // never announced (PLA-44), so a turned-down requester who taps the same link
+  // reads exactly what a first-time asker reads.
+  it('tells a requester nothing about which kind of ask this is', () => {
+    expect(requestedBlurb()).toBe('An admin has your request. You’ll hear the moment they let you in.');
+  });
+});
+
+describe('linkUnavailable', () => {
+  it('names the door when the door is the reason', () => {
+    expect(linkUnavailable('admins', 'member')).toBe('Only admins can hand out a link to this group.');
+    expect(linkUnavailable('admins', null)).toMatch(/Only admins/);
+  });
+
+  it('blames the network when the person is allowed a link', () => {
+    for (const [dial, role] of [
+      ['admins', 'admin'],
+      ['members', 'member'],
+      [null, null],
+    ] as const) {
+      expect(linkUnavailable(dial, role)).toMatch(/Check your connection/);
+    }
+  });
+
+});
+
+// The house rule: every one of these strings reaches a user.
+it('uses no em dash anywhere', () => {
+  const all = [
+    linkBlurb('open'),
+    linkBlurb('approval'),
+    joinLabel('open', 'X'),
+    joinLabel('approval', 'X'),
+    joinPendingLabel('open'),
+    joinPendingLabel('approval'),
+    joinBlurb('open'),
+    joinBlurb('approval'),
+    requestedEyebrow,
+    requestedTitle('X'),
+    requestedBlurb(),
+    linkUnavailable('admins', 'member'),
+    linkUnavailable('members', 'member'),
+  ];
+  expect(all.some((s) => s.includes('—'))).toBe(false);
 });

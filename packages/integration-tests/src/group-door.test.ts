@@ -33,14 +33,6 @@ let member1: TestUser; // a plain member
 let stranger: TestUser; // knocks, and is let in
 let outcast: TestUser; // knocks, and is silently declined
 
-/** The code as the service role sees it — the client no longer may. */
-async function codeOf(groupId: string): Promise<string> {
-  const { invite_code } = ok(
-    await bed.service.from('groups').select('invite_code').eq('id', groupId).single(),
-  );
-  return invite_code;
-}
-
 /**
  * A fresh group owned by `founder`, with `who_can_invite` / `join_mode` set.
  *
@@ -109,7 +101,7 @@ describe('the founder is not a standing credential', () => {
   it('a removed founder sees no trace of the group, and the code they held is dead', async () => {
     const group = await doorGroup('Founder repro');
     await bed.join(group.id, admin2, 'admin');
-    const heldCode = await codeOf(group.id);
+    const heldCode = await bed.codeOf(group.id);
 
     ok(await admin2.client.rpc('remove_group_member', {
       p_group_id: group.id,
@@ -132,7 +124,7 @@ describe('invite_code is off the table', () => {
   it('a member cannot select it, filter on it, or order by it', async () => {
     const group = await doorGroup('Column privilege probe');
     await bed.join(group.id, member1);
-    const code = await codeOf(group.id);
+    const code = await bed.codeOf(group.id);
 
     const selected = await member1.client.from('groups').select('invite_code').eq('id', group.id);
     expect(selected.error?.code).toBe('42501');
@@ -159,7 +151,7 @@ describe('invite_code is off the table', () => {
   it('get_group_invite_code hands it back to members and to nobody else', async () => {
     const group = await doorGroup('Code RPC');
     await bed.join(group.id, member1);
-    const code = await codeOf(group.id);
+    const code = await bed.codeOf(group.id);
 
     const [asAdmin, asMember] = await Promise.all([
       founder.client.rpc('get_group_invite_code', { p_group_id: group.id }),
@@ -180,7 +172,7 @@ describe('invite_code is off the table', () => {
         p_invitee: member1.id,
       }),
     );
-    const code = await codeOf(group.id);
+    const code = await bed.codeOf(group.id);
     // The knock, which deliberately does NOT extend the preview: the
     // pending-invitee policies test status = 'pending', and a request is not.
     expect(ok(await join(stranger, code))).toMatchObject({ status: 'requested' });
@@ -215,7 +207,7 @@ describe('rotate_invite_code', () => {
   it('kills the old link, mints a working one, and refuses a non-admin', async () => {
     const group = await doorGroup('Rotation');
     await bed.join(group.id, member1);
-    const oldCode = await codeOf(group.id);
+    const oldCode = await bed.codeOf(group.id);
 
     const denied = await member1.client.rpc('rotate_invite_code', { p_group_id: group.id });
     expect(denied.error?.message).toMatch(/Only admins can reset the invite link/);
@@ -236,7 +228,7 @@ describe('remove_group_member', () => {
   it('takes the membership, the invites they sent, and the code, in one go', async () => {
     const group = await doorGroup('Removal');
     await bed.join(group.id, member1);
-    const oldCode = await codeOf(group.id);
+    const oldCode = await bed.codeOf(group.id);
 
     // A vouch the departing member extended, which should not outlive them.
     ok(
@@ -262,7 +254,7 @@ describe('remove_group_member', () => {
         .eq('user_id', member1.id)),
     ).toEqual([]);
     expect(await inviteRow(group.id, stranger.id)).toBeNull();
-    expect(await codeOf(group.id)).not.toBe(oldCode);
+    expect(await bed.codeOf(group.id)).not.toBe(oldCode);
     expect(ok(await join(member1, oldCode))).toEqual({ status: 'not_found' });
   });
 
@@ -392,14 +384,14 @@ describe('the raw DELETE on group_members is gone', () => {
   it('walking out voluntarily leaves the code alone', async () => {
     const group = await doorGroup('Leave keeps the code');
     await bed.join(group.id, member1);
-    const code = await codeOf(group.id);
+    const code = await bed.codeOf(group.id);
 
     ok(await member1.client.rpc('leave_group', { p_group_id: group.id }));
 
     // Kicked and left are finally different things, and this is the whole
     // difference: someone who walked out was trusted with the code and stays
     // trusted. Pasting their old link back in is a rejoin among friends.
-    expect(await codeOf(group.id)).toBe(code);
+    expect(await bed.codeOf(group.id)).toBe(code);
     expect(ok(await join(member1, code))).toMatchObject({ status: 'joined' });
   });
 });
@@ -423,7 +415,7 @@ describe('create_group defaults', () => {
 describe('approval mode', () => {
   it('files a request instead of a membership, and approving admits', async () => {
     const group = await doorGroup('Doorman', { join_mode: 'approval' });
-    const code = await codeOf(group.id);
+    const code = await bed.codeOf(group.id);
 
     expect(ok(await join(stranger, code))).toEqual({
       status: 'requested',
@@ -490,7 +482,7 @@ describe('approval mode', () => {
 
   it('a decline is silent, final for that link, and files nothing new', async () => {
     const group = await doorGroup('Silent decline', { join_mode: 'approval' });
-    const code = await codeOf(group.id);
+    const code = await bed.codeOf(group.id);
 
     ok(await join(outcast, code));
     ok(await founder.client.rpc('respond_to_join_request', {
@@ -527,7 +519,7 @@ describe('approval mode', () => {
       join_mode: 'approval',
       members: [[member1, 'member']],
     });
-    const code = await codeOf(group.id);
+    const code = await bed.codeOf(group.id);
     ok(await join(stranger, code));
 
     const denied = await member1.client.rpc('respond_to_join_request', {
@@ -555,7 +547,7 @@ describe('approval mode', () => {
 
   it('a pending invitee walks straight in: a member already vouched', async () => {
     const group = await doorGroup('Invite beats the doorman', { join_mode: 'approval' });
-    const code = await codeOf(group.id);
+    const code = await bed.codeOf(group.id);
     ok(
       await founder.client.rpc('invite_to_group', {
         p_group_id: group.id,
@@ -577,7 +569,7 @@ describe('approval mode', () => {
       join_mode: 'approval',
       members: [[member1, 'member']],
     });
-    const code = await codeOf(group.id);
+    const code = await bed.codeOf(group.id);
 
     ok(await join(outcast, code));
     ok(await founder.client.rpc('respond_to_join_request', {
@@ -603,7 +595,7 @@ describe('approval mode', () => {
 
   it('turning approval off admits nobody', async () => {
     const group = await doorGroup('Mode flip', { join_mode: 'approval' });
-    const code = await codeOf(group.id);
+    const code = await bed.codeOf(group.id);
     ok(await join(stranger, code));
 
     ok(await founder.client.rpc('update_group_door', {
@@ -648,7 +640,7 @@ describe('who_can_invite = admins', () => {
       })),
     ).toEqual({ status: 'invited' });
     expect(ok(await founder.client.rpc('get_group_invite_code', { p_group_id: group.id }))).toBe(
-      await codeOf(group.id),
+      await bed.codeOf(group.id),
     );
   });
 });
@@ -691,7 +683,7 @@ describe('where the door meets the shield rule', () => {
   it('hides a knock from an admin the requester blocked, and shows it to one who blocked them', async () => {
     const group = await doorGroup('Shielded knocks', { join_mode: 'approval' });
     await bed.join(group.id, admin2, 'admin');
-    const code = await codeOf(group.id);
+    const code = await bed.codeOf(group.id);
 
     // The requester blocks one admin; the other admin blocks the requester.
     // One arrow each, pointing opposite ways.
@@ -759,7 +751,7 @@ describe('where the door meets the shield rule', () => {
       join_mode: 'approval',
       members: [[member1, 'member']],
     });
-    const code = await codeOf(group.id);
+    const code = await bed.codeOf(group.id);
     ok(await join(stranger, code));
 
     expect(

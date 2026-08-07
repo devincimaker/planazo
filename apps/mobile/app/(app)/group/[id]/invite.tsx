@@ -2,13 +2,14 @@ import { useState } from 'react';
 import { View, ScrollView, StyleSheet, Pressable, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { GroupRole } from '@planazo/shared';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import { supabase } from '../../../../lib/supabase';
 import { useAuthStore } from '../../../../stores/authStore';
 import { useFriends } from '../../../../lib/useFriends';
 import { inviteLinkFor } from '../../../../lib/shareLinks';
-import { linkBlurb } from '../../../../lib/groupDoor';
+import { linkBlurb, linkUnavailable } from '../../../../lib/groupDoor';
 import { MIN_TOUCH_TARGET } from '../../../../lib/a11y';
 import { ThemedText, Avatar, Button } from '../../../../components/ui';
 import { colors, fonts, radii, spacing } from '../../../../theme/tokens';
@@ -29,12 +30,13 @@ export default function InviteToGroupSheet() {
     queryFn: async () => {
       // The code is no longer a column this client may read (PLA-49), so it
       // arrives from the RPC that checks membership and the who_can_invite
-      // dial. Its error is kept rather than thrown: the rest of the sheet,
-      // naming friends you can invite, still works without a link to show.
+      // dial. A refusal is not thrown: the rest of the sheet, naming friends
+      // you can invite, still works without a link to show. What it refused
+      // with is dropped on the floor — the sheet says why in its own words.
       const [groupRes, invitesRes, codeRes] = await Promise.all([
         supabase
           .from('groups')
-          .select('id, name, join_mode, group_members(user_id, role)')
+          .select('id, name, join_mode, who_can_invite, group_members(user_id, role)')
           .eq('id', id)
           .single(),
         supabase
@@ -50,15 +52,15 @@ export default function InviteToGroupSheet() {
         ...(groupRes.data as any),
         pendingInviteeIds: invitesRes.data.map((i: any) => i.invitee_id),
         inviteCode: codeRes.data as string | null,
-        codeError: codeRes.error?.message ?? null,
       };
     },
     enabled: !!id,
   });
 
-  const members = (group?.group_members ?? []) as Array<{ user_id: string; role: string }>;
+  const members = (group?.group_members ?? []) as Array<{ user_id: string; role: GroupRole }>;
   const memberIds = new Set(members.map((m) => m.user_id));
-  const isAdmin = members.some((m) => m.user_id === user?.id && m.role === 'admin');
+  const me = members.find((m) => m.user_id === user?.id);
+  const isAdmin = me?.role === 'admin';
   const invitedIds = new Set(group?.pendingInviteeIds ?? []);
   const invitable = friends.filter((f) => !memberIds.has(f.id));
   const link = group?.inviteCode ? inviteLinkFor(group.inviteCode) : '';
@@ -70,12 +72,18 @@ export default function InviteToGroupSheet() {
 
   const rotate = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.rpc('rotate_invite_code', { p_group_id: id });
+      const { data, error } = await supabase.rpc('rotate_invite_code', { p_group_id: id });
       if (error) throw error;
+      return data as string;
     },
-    onSuccess: () => {
+    // The RPC hands back the code it just minted, so the card can show it at
+    // once. Invalidating instead would re-run all three calls in the queryFn,
+    // and leave the link the admin is about to share blank until they land.
+    onSuccess: (code) => {
       setCopied(false);
-      queryClient.invalidateQueries({ queryKey: ['group-invite-sheet', id] });
+      queryClient.setQueryData(['group-invite-sheet', id], (old: any) =>
+        old ? { ...old, inviteCode: code } : old
+      );
     },
     onError: (error: Error) => Alert.alert('Error', error.message),
   });
@@ -121,9 +129,9 @@ export default function InviteToGroupSheet() {
           </ThemedText>
         </View>
 
-        {group?.codeError ? (
+        {group && !group.inviteCode ? (
           <ThemedText variant="body" color={colors.textSecondary} testID="link-unavailable">
-            {group.codeError}
+            {linkUnavailable(group.who_can_invite, me?.role)}
           </ThemedText>
         ) : (
           <View style={styles.linkCard}>
