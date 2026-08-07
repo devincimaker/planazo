@@ -7,6 +7,9 @@ import {
   isPlanConfirmed,
   isPlanFull,
   isPlanPast,
+  isVoteRunning,
+  planGoingCount,
+  planGoingPeople,
   planLastDate,
   waitlistPosition,
   type DateCount,
@@ -49,12 +52,20 @@ export function derivePlanDetail({
   const isOpen = plan.status === 'open';
   const isLocked = plan.status === 'locked';
   const isCancelled = plan.status === 'cancelled';
-  const isOpenFlexible = isFlexible && isOpen;
+  const planData = {
+    status: plan.status,
+    plan_type: plan.plan_type,
+    min_people: plan.min_people,
+    rsvps,
+    dateOptions,
+    availabilities,
+  };
+  const isOpenFlexible = isVoteRunning(planData);
 
   const yesCount = getYesCount(rsvps);
   const countByDate: Record<string, DateCount> = countAvailabilityByDate(
-    (dateOptions ?? []).map((o) => ({ id: o.id, date: o.date })),
-    (availabilities ?? []).map((a) => ({ date_option_id: a.date_option_id, user_id: a.user_id }))
+    dateOptions ?? [],
+    availabilities ?? []
   );
 
   // Leading option: most availability, ties to the earlier date
@@ -65,15 +76,8 @@ export function derivePlanDetail({
   )[0];
   const leadCount = lead?.[1].count ?? 0;
 
-  const going = isOpenFlexible ? leadCount : yesCount;
-  const confirmed = isPlanConfirmed({
-    status: plan.status,
-    plan_type: plan.plan_type,
-    min_people: plan.min_people,
-    rsvps,
-    dateOptions,
-    availabilities,
-  });
+  const going = planGoingCount(planData);
+  const confirmed = isPlanConfirmed(planData);
   const gap = plan.min_people - going;
 
   // Endings (19a–19c): past = the end of the plan's last possible day has
@@ -116,29 +120,18 @@ export function derivePlanDetail({
   const myPickIds: string[] = myAvail.map((a) => a.date_option_id);
   const userRsvp = (rsvps ?? []).find((r) => r.user_id === userId);
 
-  const goingPeople: { id: string; name: string }[] = [];
-  const seen = new Set<string>();
-  const pushPerson = (uid: string, name: string) => {
-    if (uid === userId || seen.has(uid)) return;
-    seen.add(uid);
-    goingPeople.push({ id: uid, name });
-  };
-  if (isOpenFlexible) {
-    (availabilities ?? []).forEach((a) => pushPerson(a.user_id, a.profile?.display_name ?? '?'));
-  } else {
-    (rsvps ?? [])
-      .filter((r) => r.response === 'yes')
-      .forEach((r) => pushPerson(r.user_id, r.profile?.display_name ?? '?'));
-  }
+  // You are pulled out into your own chip, so the shared list drops you and
+  // everyone else keeps the order the rows came in.
+  const goingPeople = planGoingPeople(planData).filter((p) => p.id !== userId);
   const youIn = isOpenFlexible ? myAvail.length > 0 : userRsvp?.response === 'yes';
 
   const outCount = (rsvps ?? []).filter((r) => r.response === 'no').length;
 
-  // A confirmed no is a name, not just a number (PLA-29). Built exactly like
-  // goingPeople so the two sections read the same way: you are pulled out
-  // into your own chip, everyone else keeps the order the rows came in.
-  // Its own `seen` set — a person cannot hold a yes and a no at once, but
-  // sharing goingPeople's would silently swallow anyone who did.
+  // A confirmed no is a name, not just a number (PLA-29). Shaped exactly like
+  // goingPeople so the two sections read the same way: you are pulled out into
+  // your own chip, everyone else keeps the order the rows came in. It stays
+  // local rather than joining planGoingPeople, because "who said no" is not a
+  // question about whether the plan is on.
   const notGoingPeople: { id: string; name: string }[] = [];
   const seenOut = new Set<string>();
   (rsvps ?? [])

@@ -11,7 +11,14 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { isPlanPast, planLastDate } from '@planazo/shared';
+import {
+  flattenNestedOptions,
+  goingLabel,
+  isPlanConfirmed,
+  isPlanPast,
+  planGoingCount,
+  planLastDate,
+} from '@planazo/shared';
 import { supabase } from '../../../../lib/supabase';
 import { fmtDay, fmtTime } from '../../../../lib/dates';
 import { inviteLinkFor } from '../../../../lib/shareLinks';
@@ -70,32 +77,29 @@ export default function GroupDetailScreen() {
 
   const planRows = useMemo(() => {
     return (group?.plans ?? []).map((p: any) => {
-      let going: number;
-      if (p.plan_type === 'fixed' || p.status === 'locked') {
-        // Locking a flexible plan seeds yes-RSVPs, so rsvps are the truth here
-        going = (p.rsvps ?? []).filter((r: any) => r.response === 'yes').length;
-      } else {
-        const seen = new Set<string>();
-        (p.plan_date_options ?? []).forEach((opt: any) =>
-          (opt.date_availability ?? []).forEach((a: any) => seen.add(a.user_id))
-        );
-        going = seen.size;
-      }
+      // The row already carries plan_type, status, min_people and rsvps; the
+      // options only need flattening out of their nested select shape.
+      const { dateOptions, availabilities } = flattenNestedOptions(p.plan_date_options);
+      const planData = { ...p, dateOptions, availabilities };
 
-      const optionCount = (p.plan_date_options ?? []).length;
+      // Yes-RSVPs once fixed or locked, the best single date while a flexible
+      // plan is open — the same number plan detail renders, never the union of
+      // everyone free on any date (that union is the faces row's business).
+      const going = planGoingCount(planData);
+
+      const optionCount = dateOptions.length;
       const when = p.locked_date
         ? `${fmtDay(p.locked_date)} · ${fmtTime(p.locked_date)}`
         : p.event_date
           ? `${fmtDay(p.event_date)} · ${fmtTime(p.event_date)}`
           : `${optionCount} date${optionCount === 1 ? '' : 's'} on the table`;
 
-      const meta =
-        going < p.min_people ? `${going} of ${p.min_people} needed` : `${going} going`;
+      const meta = goingLabel(going, p.min_people);
 
       // 19d: three endings, one Past section. A plan that happened keeps its
       // white card and the faces of who was there; the two non-events sink
       // into flat stone with one line of explanation.
-      const optionDates = (p.plan_date_options ?? []).map((o: any) => o.date);
+      const optionDates = dateOptions.map((o) => o.date);
       const cancelled = p.status === 'cancelled';
       const past = cancelled || isPlanPast(p, optionDates);
       let ending: 'cancelled' | 'expired' | 'happened' | null = null;
@@ -106,7 +110,7 @@ export default function GroupDetailScreen() {
           p.cancelled_by === user?.id ? 'you' : p.canceller?.display_name ?? 'the host';
         endingLine = `Called off by ${who}`;
       } else if (past) {
-        const happened = p.status === 'locked' || going >= p.min_people;
+        const happened = isPlanConfirmed(planData);
         ending = happened ? 'happened' : 'expired';
         if (!happened) endingLine = `Didn't happen · ${going} of ${p.min_people}`;
       }

@@ -19,7 +19,10 @@ import {
   isPlanConfirmed,
   isPlanFull,
   isPlanPast,
+  isVoteRunning,
   needsUserResponse,
+  planGoingCount,
+  planGoingPeople,
   pollPeopleIn,
   pollVotedPhrase,
   waitlistPosition,
@@ -112,10 +115,10 @@ export default function FeedScreen() {
       const userRsvp = (plan.rsvps ?? []).find((r: any) => r.user_id === user?.id);
       const myDates = availabilities.filter((a) => a.user_id === user?.id).length;
       const countByDate = countAvailabilityByDate(dateOptions, availabilities);
-      // No live vote — either there never was one, or locking ended it. Both
-      // who's in and what you can answer then read the RSVP rows, so the two
-      // must be decided together or they drift apart.
-      const rsvpDriven = plan.plan_type === 'fixed' || plan.status === 'locked';
+      // No live vote — either there never was one, or locking ended it. What
+      // you can answer follows the same line as who counts, so the card's
+      // footer and its numbers can never describe two different plans.
+      const rsvpDriven = !isVoteRunning(planData);
 
       let when: string;
       if (plan.locked_date) {
@@ -126,23 +129,12 @@ export default function FeedScreen() {
         when = `${dateOptions.length} date${dateOptions.length === 1 ? '' : 's'} on the table`;
       }
 
-      // Who's in comes from the vote only while the vote is running. Once
-      // locked, the RSVP rows are the attendance — same rule as plan detail —
-      // so someone who withdraws actually leaves the stack.
-      let goingNames: string[];
-      if (rsvpDriven) {
-        goingNames = (plan.rsvps ?? [])
-          .filter((r: any) => r.response === 'yes')
-          .map((r: any) => r.profile?.display_name ?? '?');
-      } else {
-        const seen = new Map<string, string>();
-        (plan.plan_date_options ?? []).forEach((opt: any) =>
-          (opt.date_availability ?? []).forEach((a: any) => {
-            seen.set(a.user_id, a.profile?.display_name ?? '?');
-          })
-        );
-        goingNames = [...seen.values()];
-      }
+      // Two different populations, on purpose. The faces are everyone who has
+      // engaged, so someone who withdraws actually leaves the stack. The number
+      // beside min_people is the best single date, because that is what decides
+      // whether the plan is on. Three faces beside "1 of 3 needed" is honest.
+      const goingCount = planGoingCount(planData);
+      const goingNames = planGoingPeople(planData).map((p) => p.name);
 
       const sortDate =
         plan.locked_date ?? plan.event_date ?? earliestViableDate(countByDate, plan.min_people);
@@ -204,6 +196,7 @@ export default function FeedScreen() {
         myDates,
         when,
         goingNames,
+        goingCount,
         dateOptions,
         countByDate,
         sortKey: sortDate ? new Date(sortDate).getTime() : Number.MAX_SAFE_INTEGER,
